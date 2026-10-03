@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:net';
 import test from 'node:test';
 import {
   MigrationCommandError,
   WORKERS,
   migrationCommandEnvironment,
+  probeDatabaseTcp,
   resolveDatabaseHost,
   redactMigrationOutput,
   runPrismaCommand,
@@ -177,6 +179,80 @@ test('fails closed when DNS returns no database host addresses', async () => {
     { code: 'DATABASE_DNS_NO_ADDRESSES', stage: 'database_dns_lookup' },
   );
   assert.equal(events.at(-1).causeCode, 'DATABASE_DNS_NO_ADDRESSES');
+});
+
+test('confirms the PostgreSQL TCP port is reachable before running Prisma', async (t) => {
+  const server = createServer((socket) => socket.on('error', () => {}));
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(
+    () =>
+      new Promise((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      }),
+  );
+
+  const events = [];
+  const endpoint = {
+    host: 'db.internal',
+    port: server.address().port,
+    database: 'funtino_test',
+    schema: 'wallet',
+    addresses: [{ address: '127.0.0.1', family: 4 }],
+  };
+  const result = await probeDatabaseTcp('wallet', endpoint, {
+    writeEvent: (event, fields) => events.push({ event, ...fields }),
+  });
+
+  assert.deepEqual(result.connectedAddresses, endpoint.addresses);
+  assert.deepEqual(
+    events.map(({ event }) => event),
+    ['service.database.tcp_connect.started', 'service.database.tcp_connect.completed'],
+  );
+  assert.doesNotMatch(JSON.stringify(events), /password|postgresql:\/\//);
+});
+
+test('reports per-address TCP failures without starting Prisma', async () => {
+  const events = [];
+  const endpoint = {
+    host: 'db.internal',
+    port: 5432,
+    database: 'funtino_test',
+    schema: 'wallet',
+    addresses: [{ address: '10.20.30.40', family: 4 }],
+  };
+  const error = Object.assign(new Error('private connection detail'), { code: 'ETIMEDOUT' });
+
+  await assert.rejects(
+    probeDatabaseTcp('wallet', endpoint, {
+      connectToAddress: async () => {
+        throw error;
+      },
+      writeEvent: (event, fields) => events.push({ event, ...fields }),
+    }),
+    (failure) => {
+      assert.equal(failure.code, 'DATABASE_TCP_CONNECT_FAILED');
+      assert.equal(failure.stage, 'database_tcp_connect');
+      assert.match(failure.message, /db\.internal.*5432/);
+      assert.doesNotMatch(failure.message, /private connection detail|postgresql:\/\//);
+      return true;
+    },
+  );
+
+  assert.deepEqual(events.at(-1), {
+    event: 'service.database.tcp_connect.failed',
+    service: 'wallet',
+    host: 'db.internal',
+    port: 5432,
+    database: 'funtino_test',
+    schema: 'wallet',
+    addresses: endpoint.addresses,
+    timeoutMs: 5_000,
+    failures: [{ address: '10.20.30.40', family: 4, causeCode: 'ETIMEDOUT' }],
+    elapsedMs: events.at(-1).elapsedMs,
+  });
 });
 
 test('redacts database URLs and configured secrets but preserves Prisma and PostgreSQL codes', () => {

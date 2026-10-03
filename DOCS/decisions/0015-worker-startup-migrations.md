@@ -1,6 +1,6 @@
 # ADR-0015: اجرای امن migration در آغاز پنج Worker
 
-- وضعیت: پذیرفته‌شده
+- وضعیت: پذیرفته‌شده؛ جزئیات preflight شبکه در ADR-0017 تکمیل شده است
 - تاریخ: 2026-10-03
 - دامنه: Docker runtime پنج Worker شامل Identity Access، Organization & Branch، Customer & Household، Wallet و Analytics
 - مجوز تصمیم: درخواست صریح مالک محصول برای رفع خطای migration و اجرای خودکار پیش از شروع Worker
@@ -14,7 +14,7 @@
 Docker هر یک از پنج Worker پیش از اجرای برنامه، runner ریشه‌ی monorepo را برای همان سرویس اجرا می‌کند. runner به ترتیب:
 
 1. نام Worker و هر دو URL دیتابیس را اعتبارسنجی می‌کند؛ هر دو باید PostgreSQL، دارای نام دیتابیس و `schema` دقیق سرویس باشند و به یک دیتابیس اشاره کنند. host دو URL می‌تواند متفاوت باشد تا runtime از pooler و migration از اتصال مستقیم استفاده کند.
-2. hostname متغیر migration را با DNS resolver محیط و مهلت ۵ ثانیه بررسی می‌کند. hostname، پورت، دیتابیس، schema و IPهای resolve‌شده بدون URL یا credential ثبت می‌شوند؛ این بررسی فقط DNS را تأیید می‌کند و اثبات اتصال TCP یا احراز هویت PostgreSQL نیست.
+2. hostname متغیر migration را با DNS resolver محیط و مهلت ۵ ثانیه بررسی می‌کند؛ سپس به IPهای resolve‌شده روی پورت تنظیم‌شده TCP وصل می‌شود. hostname، پورت، دیتابیس، schema، IPها و کد خطای اتصال بدون URL یا credential ثبت می‌شوند. preflight اتصال TCP را تأیید می‌کند، نه احراز هویت PostgreSQL یا مجوز DDL. جزئیات تشخیصی و علت این گسترش در ADR-0017 آمده است.
 3. bootstrap با Prisma schema مستقل `prisma/bootstrap.prisma` از همان database و با `schema=public` (schema پیش‌فرض PostgreSQL که پیشاپیش وجود دارد) وصل می‌شود و با `CREATE SCHEMA IF NOT EXISTS` فقط schema مالک را می‌سازد. این فایل bootstrap عمداً فهرست multi-schema دیتامدل Worker را بار نمی‌کند.
 4. با `prisma migrate deploy` و Prisma schema اصلی، فقط migrationهای نسخه‌دار و pending را روی schema اختصاصی Worker اعمال می‌کند. اگر URL مقدار `application_name` نداشته باشد، runner برای هر Worker/phase نام `funtino-<worker>-<phase>` می‌گذارد تا نشست‌های متصل در `pg_stat_activity` قابل تشخیص باشند.
 5. تنها پس از موفقیت همه‌ی مراحل، برنامه را با همان environment و user غیر root اجرا می‌کند.
@@ -36,7 +36,7 @@ Docker هر یک از پنج Worker پیش از اجرای برنامه، runner
 ## شکست، تکرار و هم‌زمانی
 
 - خطای اتصال، نبود دسترسی DDL، schema اشتباه، migration خراب یا تاریخچه‌ی migration ناسازگار موجب توقف fail-closed می‌شود. خروجی Prisma شامل کد Prisma و در صورت ارائه، SQLSTATE PostgreSQL است؛ secretها redacted می‌شوند.
-- خطای DNS با `DATABASE_DNS_LOOKUP_FAILED` یا `DATABASE_DNS_NO_ADDRESSES` پیش از اجرای Prisma گزارش می‌شود. موفقیت DNS فقط resolve شدن hostname را ثابت می‌کند؛ در timeout بعدی باید دسترسی پورت و لاگ PostgreSQL بررسی شود.
+- خطای DNS با `DATABASE_DNS_LOOKUP_FAILED` یا `DATABASE_DNS_NO_ADDRESSES` و خطای اتصال پورت با `DATABASE_TCP_CONNECT_FAILED` پیش از اجرای Prisma گزارش می‌شود. موفقیت TCP فقط بازبودن مسیر تا پورت را ثابت می‌کند؛ احراز هویت و مجوز DDL همچنان به Prisma واگذار می‌شود.
 - برای خطاهایی مانند migration شکست‌خورده‌ی ثبت‌شده (`P3009`)، runner وضعیت را خودکار resolve یا پاک نمی‌کند. ابتدا log کامل همان مرحله و وضعیت دیتابیس باید بررسی و یک ترمیم کنترل‌شده طراحی شود.
 - `prisma migrate deploy` از advisory lock خود Prisma استفاده می‌کند. در rollout هم‌زمان چند replica، هر replica migration را درخواست می‌کند؛ lock باید تغییرها را serialize کند، اما timeout قفل باعث fail-closed شدن replica می‌شود. برای release اولیه یک replica توصیه می‌شود و startup طولانی در سلامت Docker با start-period برابر ۱۸۰ ثانیه پوشش داده می‌شود.
 - تغییرات schema همچنان باید backward-compatible و expand/contract باشند. startup migration rollback خودکار DDL انجام نمی‌دهد؛ rollback نسخه‌ی app فقط در صورتی امن است که schema جدید با app قبلی سازگار باشد. backup و آزمون restore مستقل لازم است.
@@ -46,6 +46,7 @@ Docker هر یک از پنج Worker پیش از اجرای برنامه، runner
 - فرمان آماده‌سازی schema باید حداکثر ۳۰ ثانیه و `migrate deploy` حداکثر ۱۲۰ ثانیه تمام شود؛ اتصال Prisma CLI با `connect_timeout=5` محدود است و فرمان bootstrap با `socket_timeout=20` از انتظار نامحدود روی یک statement جلوگیری می‌کند. bootstrap فقط schema URL را موقتاً به `public` تغییر می‌دهد؛ host/database/credential ثابت می‌مانند. سپس `migrate deploy` از Prisma schema اصلی و schema اختصاصی Worker استفاده می‌کند.
 - runner زمان مجاز، PID subprocess، مدت انتظار و علت timeout را log می‌کند؛ در timeout کل process group ابتدا با SIGTERM و سپس SIGKILL متوقف می‌شود. برنامه تا موفقیت migration اجرا نمی‌شود. کد Prisma/SQLSTATE اصلی حفظ می‌شود و timeout مستقل با `MIGRATION_COMMAND_TIMEOUT` ثبت خواهد شد.
 - eventهای `service.database.dns_lookup.*` endpoint واقعی خوانده‌شده از environment همان Worker را ثبت می‌کنند. موفقیت DNS به معنی دسترسی TCP، login موفق یا مجوز DDL نیست. در صورت برقراری نشست PostgreSQL، `application_name` نیز Worker و phase را مشخص می‌کند.
+- preflight کوتاه TCP با eventهای `service.database.tcp_connect.*` نتیجه‌ی دسترسی به پورت را پیش از اجرای Prisma ثبت می‌کند؛ این اتصال احراز هویت نمی‌شود و ردیف ماندگاری در `pg_stat_activity` ایجاد نمی‌کند.
 - timeout نشانه‌ی علت نهایی دیتابیس نیست؛ پس از آن باید `causeCode` و خروجی redacted همان تلاش بررسی شود. هیچ schema lock، migration history یا داده‌ای به‌طور خودکار reset/resolve نمی‌شود.
 
 ## خارج از دامنه و پیامد
@@ -58,6 +59,7 @@ Docker هر یک از پنج Worker پیش از اجرای برنامه، runner
 ## اسناد وابسته
 
 - [ADR-0004: Docker و deployment repositoryها](0004-runflare-docker-pnpm-deployments.md)
+- [ADR-0017: پیش‌بررسی TCP اتصال دیتابیس Worker](0017-worker-database-tcp-preflight.md)
 - [Runflare Docker Deployment Runbook](../RunflareDockerDeploymentRunbook.md)
 - [Runflare Repository and Deployment](../RunflareRepositoryAndDeployment.md)
 - [Commit, Push and Deployment Workflow](../CommitPushAndDeploymentWorkflow.md)

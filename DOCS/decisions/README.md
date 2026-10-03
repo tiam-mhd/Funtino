@@ -32,3 +32,4 @@
 - [ADR-0014: MFA در هر ورود مدیر سامانه و پایان نشست بیکار — پذیرفته‌شده](0014-admin-login-mfa-and-idle-timeout.md)
 - [ADR-0015: اجرای امن migration در آغاز پنج Worker](0015-worker-startup-migrations.md)
 - [ADR-0016: بسته‌بندی دوگانه‌ی runtime برای frontend و backend](0016-grouped-frontend-backend-runtime-deployments.md)
+- [ADR-0017: پیش‌بررسی TCP اتصال دیتابیس Worker](0017-worker-database-tcp-preflight.md)

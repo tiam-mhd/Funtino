@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { lookup } from 'node:dns/promises';
+import { createConnection } from 'node:net';
 import { createInterface } from 'node:readline';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,6 +61,7 @@ const MIGRATION_STEPS = [
 
 const DATABASE_CONNECT_TIMEOUT_SECONDS = 5;
 const DATABASE_DNS_LOOKUP_TIMEOUT_MS = DATABASE_CONNECT_TIMEOUT_SECONDS * 1000;
+const DATABASE_TCP_CONNECT_TIMEOUT_MS = DATABASE_CONNECT_TIMEOUT_SECONDS * 1000;
 const BOOTSTRAP_DATABASE_SCHEMA = 'public';
 const MIGRATION_PROGRESS_INTERVAL_MS = 15_000;
 
@@ -234,6 +236,92 @@ export async function resolveDatabaseHost(service, options = {}) {
   };
   writeEvent('service.database.dns_lookup.completed', result);
   return result;
+}
+
+export async function probeDatabaseTcp(service, endpoint, options = {}) {
+  const writeEvent = options.writeEvent ?? logEvent;
+  const connectToAddress = options.connectToAddress ?? connectTcpAddress;
+  const timeoutMs = options.timeoutMs ?? DATABASE_TCP_CONNECT_TIMEOUT_MS;
+  const startedAt = Date.now();
+  const endpointFields = {
+    service,
+    host: endpoint.host,
+    port: endpoint.port,
+    database: endpoint.database,
+    schema: endpoint.schema,
+    addresses: endpoint.addresses,
+    timeoutMs,
+  };
+
+  writeEvent('service.database.tcp_connect.started', endpointFields);
+
+  const attempts = await Promise.all(
+    endpoint.addresses.map(async ({ address, family }) => {
+      try {
+        await connectToAddress({ address, family }, endpoint.port, timeoutMs);
+        return { address, family, connected: true };
+      } catch (error) {
+        return {
+          address,
+          family,
+          connected: false,
+          causeCode: error?.code ?? 'DATABASE_TCP_CONNECT_FAILED',
+        };
+      }
+    }),
+  );
+  const connectedAddresses = attempts
+    .filter(({ connected }) => connected)
+    .map(({ address, family }) => ({ address, family }));
+
+  if (connectedAddresses.length === 0) {
+    const failures = attempts.map(({ address, family, causeCode }) => ({
+      address,
+      family,
+      causeCode,
+    }));
+    writeEvent('service.database.tcp_connect.failed', {
+      ...endpointFields,
+      failures,
+      elapsedMs: Date.now() - startedAt,
+    });
+    throw new WorkerStartupError(
+      'DATABASE_TCP_CONNECT_FAILED',
+      'database_tcp_connect',
+      `Could not open a TCP connection to PostgreSQL host ${endpoint.host} on port ${endpoint.port}.`,
+    );
+  }
+
+  const result = {
+    ...endpointFields,
+    connectedAddresses,
+    elapsedMs: Date.now() - startedAt,
+  };
+  writeEvent('service.database.tcp_connect.completed', result);
+  return result;
+}
+
+function connectTcpAddress({ address, family }, port, timeoutMs) {
+  return new Promise((resolveConnection, rejectConnection) => {
+    const socket = createConnection({ host: address, family, port });
+    let settled = false;
+    const timeoutHandle = setTimeout(() => {
+      const error = new Error('TCP connection attempt exceeded its deadline.');
+      error.code = 'ETIMEDOUT';
+      finish(rejectConnection, error);
+    }, timeoutMs);
+
+    const finish = (settle, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      socket.destroy();
+      settle(value);
+    };
+
+    socket.once('connect', () => finish(resolveConnection));
+    socket.once('error', (error) => finish(rejectConnection, error));
+  });
 }
 
 function withPromiseTimeout(operation, timeoutMs, timeoutCode) {
@@ -576,7 +664,8 @@ async function main() {
     logEvent('service.startup.started', { service });
     if (bootstrapOnly) {
       validateMigrationEnvironment(service, process.env);
-      await resolveDatabaseHost(service);
+      const endpoint = await resolveDatabaseHost(service);
+      await probeDatabaseTcp(service, endpoint);
       await runStartupMigrations(service, { bootstrapOnly: true });
       logEvent('service.schema_bootstrap.completed', { service });
       return;
@@ -585,7 +674,8 @@ async function main() {
       service,
       env: process.env,
       migrate: async () => {
-        await resolveDatabaseHost(service);
+        const endpoint = await resolveDatabaseHost(service);
+        await probeDatabaseTcp(service, endpoint);
         await runStartupMigrations(service);
       },
       startApplication: () => launchApplication(applicationArgs),
