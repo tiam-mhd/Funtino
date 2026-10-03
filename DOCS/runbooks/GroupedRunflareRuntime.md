@@ -101,7 +101,7 @@ Runflare network settings می‌تواند چند network را برای یک س
 
 | Process | رفتار startup |
 |---|---|
-| Identity & Access | runner ADR-0015: validate، create owner schema، migrate deploy، سپس app |
+| Identity & Access | runner ADR-0015: validate، اتصال bootstrap به `public`، create owner schema، migrate deploy روی schema اختصاصی، سپس app |
 | Organization & Branch | runner ADR-0015 |
 | Customer & Household | runner ADR-0015 |
 | Wallet | runner ADR-0015 |
@@ -111,7 +111,7 @@ Runflare network settings می‌تواند چند network را برای یک س
 | Device Integration | بدون migration در startup؛ job مالک جدا |
 | Notifications | migration ندارد |
 
-Runner فعلی فقط همان پنج Worker را قبول می‌کند و stage شکست را با log ساخت‌یافته گزارش می‌دهد. migration برای هر schema با credential migration مالک انجام می‌شود. در rollout نخست replica را یکی نگه دار تا رفتار startup و زمان migration روشن شود. برای API Gateway و Device Integration job/command یک‌باره‌ی release اجرا کن و compatibility/rollback آن را ثبت کن.
+Runner فعلی فقط همان پنج Worker را قبول می‌کند و stage شکست را با log ساخت‌یافته گزارش می‌دهد. برای رفع وابستگی bootstrap به schema هنوز ساخته‌نشده، `prisma/bootstrap.prisma` فقط به `public` موجود وصل می‌شود و SQL نام schema مالک را صریح می‌سازد؛ بعد `prisma/schema.prisma` اصلی و URL دارای `schema=<owner>` برای migrationهای نسخه‌دار استفاده می‌شوند. دستور دستی `prisma:schema` همان runner را در حالت `--bootstrap-only` فراخوانی می‌کند تا منطق URL bootstrap یکسان بماند. هر Worker URL دیتابیس/credential migration مالک خودش را به کار می‌برد. در rollout نخست replica را یکی نگه دار تا رفتار startup و زمان migration روشن شود. برای API Gateway و Device Integration job/command یک‌باره‌ی release اجرا کن و compatibility/rollback آن را ثبت کن.
 
 ## ۷. Cutover
 

@@ -11,7 +11,7 @@
     "typecheck": "pnpm prisma:generate && tsc --noEmit -p tsconfig.json",
     "test": "pnpm prisma:generate && pnpm --filter @funtino/event-contracts build && pnpm --filter @funtino/backend-core build && tsx --test tests/authorization.spec.ts tests/access-policy-service.spec.ts tests/access-management.spec.ts tests/service-token.spec.ts tests/access-mutation-journal.spec.ts tests/access-outbox-relay.spec.ts tests/mfa-crypto.spec.ts tests/mfa.service.spec.ts tests/organization-scope-owner.client.spec.ts tests/health.controller.spec.ts tests/management-write-gate.spec.ts tests/bootstrap-membership.spec.ts tests/access-bootstrap.spec.ts tests/startup-failure.spec.ts && node --test ../../scripts/worker-startup.spec.mjs",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
-    "prisma:schema": "prisma db execute --schema prisma/schema.prisma --file prisma/bootstrap.sql",
+    "prisma:schema": "node ../../scripts/worker-startup.mjs --bootstrap-only identity-access",
     "prisma:bootstrap": "pnpm prisma:migrate",
     "prisma:migrate": "pnpm prisma:schema && prisma migrate deploy --schema prisma/schema.prisma",
     "prisma:migrate:status": "prisma migrate status --schema prisma/schema.prisma",

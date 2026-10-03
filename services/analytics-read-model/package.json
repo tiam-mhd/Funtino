@@ -11,7 +11,7 @@
     "typecheck": "pnpm prisma:generate && tsc --noEmit -p tsconfig.json",
     "test": "pnpm prisma:generate && pnpm --filter @funtino/event-contracts build && pnpm --filter @funtino/backend-core build && tsx --test tests/unit/analytics-event.spec.ts tests/unit/analytics-projection.spec.ts tests/unit/operations-report.spec.ts tests/unit/report-query.spec.ts tests/startup-failure.spec.ts && node --test ../../scripts/worker-startup.spec.mjs",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
-    "prisma:schema": "prisma db execute --schema prisma/schema.prisma --file prisma/bootstrap.sql",
+    "prisma:schema": "node ../../scripts/worker-startup.mjs --bootstrap-only analytics-read-model",
     "prisma:bootstrap": "pnpm prisma:migrate",
     "prisma:migrate": "pnpm prisma:schema && prisma migrate deploy --schema prisma/schema.prisma",
     "prisma:migrate:status": "prisma migrate status --schema prisma/schema.prisma",

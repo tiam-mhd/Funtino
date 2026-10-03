@@ -14,8 +14,8 @@
 Docker هر یک از پنج Worker پیش از اجرای برنامه، runner ریشه‌ی monorepo را برای همان سرویس اجرا می‌کند. runner به ترتیب:
 
 1. نام Worker و هر دو URL دیتابیس را اعتبارسنجی می‌کند؛ هر دو باید PostgreSQL، دارای نام دیتابیس و `schema` دقیق سرویس باشند و به یک دیتابیس اشاره کنند. host دو URL می‌تواند متفاوت باشد تا runtime از pooler و migration از اتصال مستقیم استفاده کند.
-2. با `prisma db execute` و `CREATE SCHEMA IF NOT EXISTS` فقط schema مالک را آماده می‌کند.
-3. با `prisma migrate deploy` فقط migrationهای نسخه‌دار و pending را اعمال می‌کند.
+2. bootstrap با Prisma schema مستقل `prisma/bootstrap.prisma` از همان database و با `schema=public` (schema پیش‌فرض PostgreSQL که پیشاپیش وجود دارد) وصل می‌شود و با `CREATE SCHEMA IF NOT EXISTS` فقط schema مالک را می‌سازد. این فایل bootstrap عمداً فهرست multi-schema دیتامدل Worker را بار نمی‌کند.
+3. با `prisma migrate deploy` و Prisma schema اصلی، فقط migrationهای نسخه‌دار و pending را روی schema اختصاصی Worker اعمال می‌کند.
 4. تنها پس از موفقیت هر دو مرحله، برنامه را با همان environment و user غیر root اجرا می‌کند.
 
 در هر خطا، container با exit code ناموفق خارج می‌شود و اپلیکیشن شروع نمی‌شود. خروجی خام Prisma/PostgreSQL به log می‌رود؛ URLها و secretهای شناخته‌شده پیش از log redacted می‌شوند. eventهای آغاز/پایان/شکست و نام مرحله ثبت می‌شوند. هیچ‌گاه از `db push`، `migrate reset`، `migrate dev`، حذف migration history یا `migrate resolve` خودکار استفاده نمی‌شود. اجرای مجدد پس از موفقیت امن است: schema با `IF NOT EXISTS` آماده می‌شود و Prisma migrationهای اعمال‌شده را از روی `_prisma_migrations` دوباره اجرا نمی‌کند.
@@ -41,7 +41,7 @@ Docker هر یک از پنج Worker پیش از اجرای برنامه، runner
 
 ### مهلت اجرا و عیب‌یابی توقف فرمان
 
-- فرمان آماده‌سازی schema باید حداکثر ۳۰ ثانیه و `migrate deploy` حداکثر ۱۲۰ ثانیه تمام شود؛ اتصال Prisma CLI با `connect_timeout=5` محدود است و فرمان bootstrap با `socket_timeout=20` از انتظار نامحدود روی یک statement جلوگیری می‌کند. این پارامترها فقط در environment موقت subprocess تنظیم می‌شوند و host/database/schema/credential را عوض نمی‌کنند.
+- فرمان آماده‌سازی schema باید حداکثر ۳۰ ثانیه و `migrate deploy` حداکثر ۱۲۰ ثانیه تمام شود؛ اتصال Prisma CLI با `connect_timeout=5` محدود است و فرمان bootstrap با `socket_timeout=20` از انتظار نامحدود روی یک statement جلوگیری می‌کند. bootstrap فقط schema URL را موقتاً به `public` تغییر می‌دهد؛ host/database/credential ثابت می‌مانند. سپس `migrate deploy` از Prisma schema اصلی و schema اختصاصی Worker استفاده می‌کند.
 - runner زمان مجاز، PID subprocess، مدت انتظار و علت timeout را log می‌کند؛ در timeout کل process group ابتدا با SIGTERM و سپس SIGKILL متوقف می‌شود. برنامه تا موفقیت migration اجرا نمی‌شود. کد Prisma/SQLSTATE اصلی حفظ می‌شود و timeout مستقل با `MIGRATION_COMMAND_TIMEOUT` ثبت خواهد شد.
 - timeout نشانه‌ی علت نهایی دیتابیس نیست؛ پس از آن باید `causeCode` و خروجی redacted همان تلاش بررسی شود. هیچ schema lock، migration history یا داده‌ای به‌طور خودکار reset/resolve نمی‌شود.
 

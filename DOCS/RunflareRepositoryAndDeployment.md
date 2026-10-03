@@ -56,7 +56,7 @@ Environment هر child از system environment محدود و allow-list همان
 
 PostgreSQL، RabbitMQ و Redis همچنان itemهای مستقل‌اند. schema، credential، queue ownership و migration هر سرویس جدا می‌ماند.
 
-طبق ADR-0015، فقط Identity & Access، Organization & Branch، Customer & Household، Wallet و Analytics Read Model migrationهای pending را با runner fail-closed پیش از شروع app اجرا می‌کنند. این مسیر به API Gateway، Realtime، Device و Notifications تعمیم داده نمی‌شود.
+طبق ADR-0015، فقط Identity & Access، Organization & Branch، Customer & Household، Wallet و Analytics Read Model migrationهای pending را با runner fail-closed پیش از شروع app اجرا می‌کنند. مرحله‌ی ساخت schema با `prisma/bootstrap.prisma` و URL موقت `schema=public` اجرا می‌شود؛ سپس schema اصلی Prisma و URL `schema=<owner>` migrationهای همان Worker را اعمال می‌کنند. این مسیر به API Gateway، Realtime، Device و Notifications تعمیم داده نمی‌شود.
 
 Migrationهای خارج از این پنج Worker با job/فرمان نسخه‌دار مستقل و پیش از rollout app اجرا می‌شوند. deployment bundle به‌صورت ضمنی database migration نمی‌کند. ترتیب additive/expand-contract و rollback schema باید در release ثبت شود.
 

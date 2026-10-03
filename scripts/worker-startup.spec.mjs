@@ -56,11 +56,12 @@ test('fails closed if runtime and migration URLs target different databases or s
   });
 });
 
-test('bounds Prisma connection and bootstrap query time without changing the database target', () => {
+test('uses the existing public schema for bootstrap without changing the database target', () => {
   const env = environmentFor('wallet');
   env.WALLET_MIGRATION_DATABASE_URL += '&connect_timeout=0&application_name=funtino-test';
 
   const commandEnv = migrationCommandEnvironment('wallet', env, {
+    phase: 'create_schema',
     socketTimeoutSeconds: 30,
   });
   const original = new URL(env.WALLET_MIGRATION_DATABASE_URL);
@@ -70,11 +71,37 @@ test('bounds Prisma connection and bootstrap query time without changing the dat
   assert.equal(bounded.hostname, original.hostname);
   assert.equal(bounded.port, original.port);
   assert.equal(bounded.pathname, original.pathname);
-  assert.equal(bounded.searchParams.get('schema'), 'wallet');
+  assert.equal(bounded.searchParams.get('schema'), 'public');
   assert.equal(bounded.searchParams.get('application_name'), 'funtino-test');
   assert.equal(bounded.searchParams.get('connect_timeout'), '5');
   assert.equal(bounded.searchParams.get('socket_timeout'), '30');
   assert.equal(bounded.password, original.password);
+
+  const migrationEnv = migrationCommandEnvironment('wallet', env, {
+    phase: 'apply_pending_migrations',
+  });
+  const migrationUrl = new URL(migrationEnv.WALLET_MIGRATION_DATABASE_URL);
+  assert.equal(migrationUrl.searchParams.get('schema'), 'wallet');
+  assert.equal(migrationUrl.searchParams.get('connect_timeout'), '5');
+  assert.equal(migrationUrl.searchParams.has('socket_timeout'), false);
+});
+
+test('configures public as the bootstrap schema for every startup-migrated worker', () => {
+  for (const service of Object.keys(WORKERS)) {
+    const env = environmentFor(service);
+    const { migrationUrlKey } = WORKERS[service];
+    const original = new URL(env[migrationUrlKey]);
+    const bootstrap = new URL(
+      migrationCommandEnvironment(service, env, { phase: 'create_schema' })[migrationUrlKey],
+    );
+
+    assert.equal(bootstrap.searchParams.get('schema'), 'public');
+    assert.equal(bootstrap.hostname, original.hostname);
+    assert.equal(bootstrap.port, original.port);
+    assert.equal(bootstrap.pathname, original.pathname);
+    assert.equal(bootstrap.username, original.username);
+    assert.equal(bootstrap.password, original.password);
+  }
 });
 
 test('redacts database URLs and configured secrets but preserves Prisma and PostgreSQL codes', () => {
@@ -117,7 +144,7 @@ test('runs only idempotent schema bootstrap and pending versioned migrations, in
     'db',
     'execute',
     '--schema',
-    'prisma/schema.prisma',
+    'prisma/bootstrap.prisma',
     '--file',
     'prisma/bootstrap.sql',
   ]);
@@ -131,16 +158,44 @@ test('runs only idempotent schema bootstrap and pending versioned migrations, in
   ]);
   assert.equal(calls[0].options.timeoutMs, 30_000);
   assert.equal(
+    new URL(calls[0].options.env.WALLET_MIGRATION_DATABASE_URL).searchParams.get('schema'),
+    'public',
+  );
+  assert.equal(
     calls[0].options.env.WALLET_MIGRATION_DATABASE_URL.includes('socket_timeout=20'),
     true,
   );
   assert.equal(calls[1].options.timeoutMs, 120_000);
+  assert.equal(
+    new URL(calls[1].options.env.WALLET_MIGRATION_DATABASE_URL).searchParams.get('schema'),
+    'wallet',
+  );
   assert.equal(
     calls[1].options.env.WALLET_MIGRATION_DATABASE_URL.includes('socket_timeout'),
     false,
   );
   assert.ok(calls.flatMap(({ args }) => args).every((arg) => arg !== 'reset' && arg !== 'push'));
   assert.equal(events.filter(({ event }) => event === 'service.migration.completed').length, 4);
+});
+
+test('bootstrap-only command prepares the owner schema without running migrations', async () => {
+  const calls = [];
+  await runStartupMigrations('wallet', {
+    env: environmentFor('wallet'),
+    bootstrapOnly: true,
+    runCommand: async (args, options) => {
+      calls.push({ args, options });
+      return { exitCode: 0, signal: null };
+    },
+    writeEvent: () => {},
+  });
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].args.includes('prisma/bootstrap.prisma'));
+  assert.equal(
+    new URL(calls[0].options.env.WALLET_MIGRATION_DATABASE_URL).searchParams.get('schema'),
+    'public',
+  );
 });
 
 test('stops before the second migration or application start when the first command fails', async () => {

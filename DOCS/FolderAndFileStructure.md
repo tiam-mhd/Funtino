@@ -194,7 +194,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 
 هر service فولدرهای استاندارد خود را دارد و نباید با import داخلی از service دیگر وابسته شود.
 
-در `services/organization-branch/`، schema و migration مالک فقط زیر `prisma/` همان سرویس است؛ API خصوصی در `src/interfaces/http/`، use caseها در `src/application/`، relay در `src/infrastructure/messaging/outbox/` و CLI انتقال در `src/bootstrap/` قرار می‌گیرد. قراردادها در `contracts/openapi/` و `contracts/events/` نسخه‌بندی می‌شوند؛ Gateway فقط client داخلی مصرف می‌کند و نباید Prisma client این سرویس را import کند.
+در هر Worker دارای startup migration طبق ADR-0015، `prisma/schema.prisma` و migrationهای نسخه‌دار زیر `prisma/` همان سرویس باقی می‌مانند؛ `prisma/bootstrap.prisma` فقط برای اتصال به schema موجود `public` هنگام اجرای `CREATE SCHEMA` است و دیتامدل/لیست schemaهای Worker را جایگزین نمی‌کند. در `services/organization-branch/`، API خصوصی در `src/interfaces/http/`، use caseها در `src/application/`، relay در `src/infrastructure/messaging/outbox/` و CLI انتقال در `src/bootstrap/` قرار می‌گیرد. قراردادها در `contracts/openapi/` و `contracts/events/` نسخه‌بندی می‌شوند؛ Gateway فقط client داخلی مصرف می‌کند و نباید Prisma client این سرویس را import کند.
 
 ## ۴. packageهای مشترک
 

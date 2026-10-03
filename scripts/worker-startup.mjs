@@ -44,7 +44,7 @@ const MIGRATION_STEPS = [
       'db',
       'execute',
       '--schema',
-      'prisma/schema.prisma',
+      'prisma/bootstrap.prisma',
       '--file',
       'prisma/bootstrap.sql',
     ],
@@ -58,6 +58,7 @@ const MIGRATION_STEPS = [
 ];
 
 const DATABASE_CONNECT_TIMEOUT_SECONDS = 5;
+const BOOTSTRAP_DATABASE_SCHEMA = 'public';
 const MIGRATION_PROGRESS_INTERVAL_MS = 15_000;
 
 export class WorkerStartupError extends Error {
@@ -138,6 +139,11 @@ export function migrationCommandEnvironment(service, env = process.env, step) {
     config.schema,
     env[config.migrationUrlKey],
   );
+  // Bootstrap uses a separate minimal Prisma schema and the existing public
+  // schema while creating the worker-owned schema.
+  if (step.phase === 'create_schema') {
+    migrationUrl.searchParams.set('schema', BOOTSTRAP_DATABASE_SCHEMA);
+  }
   migrationUrl.searchParams.set('connect_timeout', String(DATABASE_CONNECT_TIMEOUT_SECONDS));
   if (step.socketTimeoutSeconds) {
     migrationUrl.searchParams.set('socket_timeout', String(step.socketTimeoutSeconds));
@@ -225,8 +231,9 @@ export async function runStartupMigrations(service, options = {}) {
   const runCommand = options.runCommand ?? runPrismaCommand;
   const writeEvent = options.writeEvent ?? logEvent;
   const env = options.env ?? process.env;
+  const steps = options.bootstrapOnly ? MIGRATION_STEPS.slice(0, 1) : MIGRATION_STEPS;
 
-  for (const step of MIGRATION_STEPS) {
+  for (const step of steps) {
     const { phase, args, timeoutMs } = step;
     const commandEnv = migrationCommandEnvironment(service, env, step);
     writeEvent('service.migration.started', { service, phase, timeoutMs });
@@ -453,7 +460,10 @@ function launchApplication(args) {
 }
 
 async function main() {
-  const [service, ...applicationArgs] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const bootstrapOnly = args[0] === '--bootstrap-only';
+  const service = bootstrapOnly ? args[1] : args[0];
+  const applicationArgs = bootstrapOnly ? [] : args.slice(1);
   if (!getWorkerConfig(service)) {
     reportFailure(
       'unknown',
@@ -467,6 +477,12 @@ async function main() {
   try {
     process.chdir(resolve(REPOSITORY_ROOT, 'services', service));
     logEvent('service.startup.started', { service });
+    if (bootstrapOnly) {
+      validateMigrationEnvironment(service, process.env);
+      await runStartupMigrations(service, { bootstrapOnly: true });
+      logEvent('service.schema_bootstrap.completed', { service });
+      return;
+    }
     await startBehindMigrationGate({
       service,
       env: process.env,
