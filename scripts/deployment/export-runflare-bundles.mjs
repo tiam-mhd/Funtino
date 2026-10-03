@@ -142,7 +142,8 @@ async function copyTree(sourceDirectory, destinationDirectory, relativeDirectory
 
   for (const entry of entries) {
     assertNotProtectedPath(entry.name);
-    if (entry.name === '.git') {
+    // Exclude Turbo's transient cache from runtime snapshots.
+    if (entry.name === '.git' || entry.name === '.turbo') {
       continue;
     }
 
