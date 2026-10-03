@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/common/envelope.v1.json",
+  "title": "Funtino event envelope v1",
+  "type": "object",
+  "required": [
+    "eventId",
+    "eventType",
+    "eventVersion",
+    "occurredAt",
+    "sourceId",
+    "aggregateId",
+    "correlationId",
+    "payload"
+  ],
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "eventType": { "type": "string", "minLength": 1 },
+    "eventVersion": { "const": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "organizationId": { "type": ["string", "null"], "format": "uuid" },
+    "branchId": { "type": ["string", "null"], "format": "uuid" },
+    "sourceId": { "type": "string", "minLength": 1 },
+    "aggregateId": { "type": "string", "minLength": 1 },
+    "correlationId": { "type": "string", "format": "uuid" },
+    "causationId": { "type": ["string", "null"], "format": "uuid" },
+    "payload": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": false
+}

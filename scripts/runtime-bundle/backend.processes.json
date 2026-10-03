@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "bundle": "backend",
+  "shutdownTimeoutMs": 15000,
+  "health": {
+    "host": "127.0.0.1",
+    "connectionTimeoutMs": 1500
+  },
+  "commonEnv": ["NODE_ENV", "APP_VERSION"],
+  "processes": [
+    {
+      "name": "api-gateway",
+      "cwd": "apps/api-gateway",
+      "args": ["dist/main.js"],
+      "port": 4000,
+      "portEnv": "API_PORT",
+      "env": [
+        "API_METRICS_TOKEN",
+        "CORS_ORIGINS",
+        "API_BASE_URL",
+        "STORAGE_MODE",
+        "DATABASE_URL",
+        "RABBITMQ_URL",
+        "REDIS_URL",
+        "PROMETHEUS_INTERNAL_URL",
+        "SESSION_COOKIE_DOMAIN",
+        "EXPOSE_DEV_OTP",
+        "PARSGREEN_API_TOKEN",
+        "PARSGREEN_AUTH_HEADER",
+        "PARSGREEN_OTP_URL",
+        "PARSGREEN_OTP_TEMPLATE_ID",
+        "PARSGREEN_ADD_NAME",
+        "PARSGREEN_REQUEST_TIMEOUT_MS",
+        "IDENTITY_ACCESS_URL",
+        "IDENTITY_ACCESS_SERVICE_TOKEN",
+        "ORGANIZATION_BRANCH_URL",
+        "ORGANIZATION_BRANCH_INTERNAL_URL",
+        "ORGANIZATION_BRANCH_GATEWAY_TOKEN",
+        "DEVICE_INTEGRATION_URL",
+        "DEVICE_INTEGRATION_GATEWAY_TOKEN",
+        "DEVICE_INTEGRATION_ORGANIZATION_BRANCH_TOKEN",
+        "WALLET_URL",
+        "WALLET_GATEWAY_TOKEN",
+        "CUSTOMER_HOUSEHOLD_URL",
+        "CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN",
+        "ANALYTICS_READ_MODEL_URL",
+        "ANALYTICS_API_GATEWAY_TOKEN"
+      ]
+    },
+    {
+      "name": "realtime-gateway",
+      "cwd": "apps/realtime-gateway",
+      "args": ["dist/main.js"],
+      "port": 4010,
+      "portEnv": "REALTIME_PORT",
+      "env": ["REALTIME_METRICS_TOKEN", "CORS_ORIGINS", "API_BASE_URL", "RABBITMQ_URL"]
+    },
+    {
+      "name": "device-integration",
+      "cwd": "services/device-integration",
+      "args": ["dist/main.js"],
+      "port": 4020,
+      "portEnv": "DEVICE_PORT",
+      "env": [
+        "DEVICE_INTEGRATION_METRICS_TOKEN",
+        "DEVICE_INTEGRATION_DATABASE_URL",
+        "DEVICE_INTEGRATION_GATEWAY_TOKEN",
+        "DEVICE_WEBHOOK_SECRET",
+        "ORGANIZATION_BRANCH_INTERNAL_URL",
+        "DEVICE_INTEGRATION_ORGANIZATION_BRANCH_TOKEN",
+        "RABBITMQ_URL",
+        "DEVICE_HEALTH_STALE_AFTER_SECONDS",
+        "DEVICE_HEALTH_OFFLINE_AFTER_SECONDS"
+      ]
+    },
+    {
+      "name": "notifications",
+      "cwd": "services/notifications",
+      "args": ["dist/main.js"],
+      "port": 4030,
+      "portEnv": "NOTIFICATIONS_PORT",
+      "env": ["NOTIFICATIONS_METRICS_TOKEN", "RABBITMQ_URL"]
+    },
+    {
+      "name": "identity-access",
+      "cwd": ".",
+      "args": ["scripts/worker-startup.mjs", "identity-access"],
+      "port": 4040,
+      "portEnv": "IDENTITY_ACCESS_PORT",
+      "env": [
+        "IDENTITY_ACCESS_DATABASE_URL",
+        "IDENTITY_ACCESS_MIGRATION_DATABASE_URL",
+        "RABBITMQ_URL",
+        "ORGANIZATION_BRANCH_URL",
+        "IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED",
+        "IDENTITY_ACCESS_SERVICE_TOKEN",
+        "IDENTITY_ACCESS_METRICS_TOKEN",
+        "ORGANIZATION_BRANCH_IDENTITY_ACCESS_TOKEN",
+        "IDENTITY_ACCESS_MFA_ACTIVE_KEY_VERSION",
+        "IDENTITY_ACCESS_MFA_ENCRYPTION_KEYS",
+        "IDENTITY_ACCESS_LOOKUP_ACTIVE_KEY_VERSION",
+        "IDENTITY_ACCESS_LOOKUP_HMAC_KEYS"
+      ]
+    },
+    {
+      "name": "organization-branch",
+      "cwd": ".",
+      "args": ["scripts/worker-startup.mjs", "organization-branch"],
+      "port": 4050,
+      "portEnv": "ORGANIZATION_BRANCH_PORT",
+      "env": [
+        "ORGANIZATION_BRANCH_DATABASE_URL",
+        "ORGANIZATION_BRANCH_MIGRATION_DATABASE_URL",
+        "RABBITMQ_URL",
+        "ORGANIZATION_BRANCH_METRICS_TOKEN",
+        "ORGANIZATION_BRANCH_GATEWAY_TOKEN",
+        "ORGANIZATION_BRANCH_IDENTITY_ACCESS_TOKEN",
+        "ORGANIZATION_BRANCH_DEVICE_INTEGRATION_TOKEN",
+        "ORGANIZATION_BRANCH_WALLET_TOKEN"
+      ]
+    },
+    {
+      "name": "analytics-read-model",
+      "cwd": ".",
+      "args": ["scripts/worker-startup.mjs", "analytics-read-model"],
+      "port": 4060,
+      "portEnv": "ANALYTICS_PORT",
+      "env": [
+        "ANALYTICS_DATABASE_URL",
+        "ANALYTICS_MIGRATION_DATABASE_URL",
+        "RABBITMQ_URL",
+        "DEVICE_HEALTH_STALE_AFTER_SECONDS",
+        "DEVICE_HEALTH_OFFLINE_AFTER_SECONDS",
+        "ANALYTICS_METRICS_TOKEN",
+        "ANALYTICS_API_GATEWAY_TOKEN"
+      ]
+    },
+    {
+      "name": "wallet",
+      "cwd": ".",
+      "args": ["scripts/worker-startup.mjs", "wallet"],
+      "port": 4070,
+      "portEnv": "WALLET_PORT",
+      "env": [
+        "WALLET_DATABASE_URL",
+        "WALLET_MIGRATION_DATABASE_URL",
+        "RABBITMQ_URL",
+        "WALLET_ORGANIZATION_BRANCH_INTERNAL_URL",
+        "WALLET_CUSTOMER_HOUSEHOLD_INTERNAL_URL",
+        "WALLET_METRICS_TOKEN",
+        "WALLET_GATEWAY_TOKEN",
+        "WALLET_ORGANIZATION_BRANCH_TOKEN",
+        "WALLET_CUSTOMER_HOUSEHOLD_TOKEN"
+      ]
+    },
+    {
+      "name": "customer-household",
+      "cwd": ".",
+      "args": ["scripts/worker-startup.mjs", "customer-household"],
+      "port": 4080,
+      "portEnv": "CUSTOMER_HOUSEHOLD_PORT",
+      "env": [
+        "CUSTOMER_HOUSEHOLD_DATABASE_URL",
+        "CUSTOMER_HOUSEHOLD_MIGRATION_DATABASE_URL",
+        "RABBITMQ_URL",
+        "CUSTOMER_HOUSEHOLD_METRICS_TOKEN",
+        "CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN",
+        "CUSTOMER_HOUSEHOLD_WALLET_TOKEN"
+      ]
+    }
+  ]
+}

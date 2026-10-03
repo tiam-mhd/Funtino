@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/organization-branch/payloads.v1.json",
+  "$defs": {
+    "organization": {
+      "type": "object",
+      "required": ["id", "name", "slug", "timezone", "status", "version"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "slug": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "status": { "$ref": "#/$defs/status" },
+        "version": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "branch": {
+      "type": "object",
+      "required": [
+        "id",
+        "organizationId",
+        "name",
+        "slug",
+        "address",
+        "city",
+        "timezone",
+        "status",
+        "openingHours",
+        "version"
+      ],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "organizationId": { "type": "string", "format": "uuid" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "slug": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "address": { "type": "string", "maxLength": 500 },
+        "city": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "status": { "$ref": "#/$defs/status" },
+        "openingHours": {
+          "type": "object",
+          "propertyNames": {
+            "enum": ["saturday", "sunday", "monday", "tuesday", "wednesday", "thursday", "friday"]
+          },
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "required": ["open", "close"],
+                "properties": {
+                  "open": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+                  "close": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "version": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "status": { "type": "string", "enum": ["active", "suspended", "archived"] },
+    "organizationStatusChanged": {
+      "type": "object",
+      "required": ["organizationId", "previousStatus", "status", "version"],
+      "properties": {
+        "organizationId": { "type": "string", "format": "uuid" },
+        "previousStatus": { "$ref": "#/$defs/status" },
+        "status": { "$ref": "#/$defs/status" },
+        "version": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "branchStatusChanged": {
+      "type": "object",
+      "required": ["branchId", "organizationId", "previousStatus", "status", "version"],
+      "properties": {
+        "branchId": { "type": "string", "format": "uuid" },
+        "organizationId": { "type": "string", "format": "uuid" },
+        "previousStatus": { "$ref": "#/$defs/status" },
+        "status": { "$ref": "#/$defs/status" },
+        "version": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

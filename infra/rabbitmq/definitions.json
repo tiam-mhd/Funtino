@@ -1,0 +1,22 @@
+{
+  "rabbit_version": "4.0",
+  "users": [],
+  "vhosts": [],
+  "permissions": [],
+  "parameters": [],
+  "policies": [
+    {
+      "vhost": "/",
+      "name": "funtino-events-dlx",
+      "pattern": "^funtino\\.events\\.v1$",
+      "apply-to": "queues",
+      "definition": {
+        "dead-letter-exchange": "funtino.events.dlx"
+      },
+      "priority": 10
+    }
+  ],
+  "queues": [],
+  "exchanges": [],
+  "bindings": []
+}

@@ -1,0 +1,1751 @@
+openapi: 3.1.0
+info:
+  title: Funtino Identity & Access Internal API
+  version: 0.1.0
+  description: >-
+    Private service-to-service contract. Never expose this API to browsers or the public
+    internet. The Gateway authenticates the end user and supplies the actor context. IAM alone
+    decides actor permissions; production tenant mutations additionally validate the canonical
+    active organization/branch through the private Organization & Branch owner API. Only
+    operations marked x-funtino-availability: implemented are currently exposed; the remaining
+    operations are the approved target contract and must not be called until implemented.
+servers:
+  - url: http://identity-access:4040
+security:
+  - serviceToken: []
+paths:
+  /health/live:
+    get:
+      x-funtino-availability: implemented
+      operationId: identityAccessHealthLive
+      security: []
+      responses:
+        '200':
+          description: Service process is alive.
+  /health/ready:
+    get:
+      x-funtino-availability: implemented
+      operationId: identityAccessHealthReady
+      security: []
+      responses:
+        '200':
+          description: Database and cryptographic readiness plus separate administrative-write and tenant-scope gates.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityAccessReadiness'
+        '503':
+          description: Readiness prerequisites are unavailable.
+  /internal/v1/permissions:
+    get:
+      x-funtino-availability: implemented
+      operationId: listPermissionCatalog
+      responses:
+        '200':
+          description: Versioned permission catalog.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionCatalogResponse'
+        '401':
+          description: Invalid service credential.
+        '503':
+          description: Service authentication is not configured.
+  /internal/v1/mfa/status:
+    get:
+      x-funtino-availability: implemented
+      operationId: getActorMfaStatus
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: MFA status for the authenticated active staff user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaStatus'
+        '401':
+          description: Missing or invalid trusted actor/session context.
+        '403':
+          description: Actor has no active staff membership.
+  /internal/v1/mfa/enrollment/start:
+    post:
+      x-funtino-availability: implemented
+      operationId: startActorMfaEnrollment
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Pending TOTP credential; secret is sensitive, transient and never logged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaEnrollmentStart'
+        '409':
+          description: MFA is already enabled.
+  /internal/v1/mfa/enrollment/confirm:
+    post:
+      x-funtino-availability: implemented
+      operationId: confirmActorMfaEnrollment
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpCode'
+      responses:
+        '200':
+          description: Activated credential and ten one-time recovery codes, shown once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaRecoveryCodes'
+        '401':
+          description: Code is invalid, expired or already used.
+        '429':
+          description: Verification is temporarily locked.
+  /internal/v1/mfa/step-up/verify:
+    post:
+      x-funtino-availability: implemented
+      operationId: verifyActorMfaStepUp
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaProof'
+      responses:
+        '200':
+          description: Fresh proof to be bound by Gateway to the identified server-side session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaStepUp'
+        '401':
+          description: Code is invalid or already used.
+        '429':
+          description: Verification is temporarily locked.
+  /internal/v1/mfa/recovery-codes/regenerate:
+    post:
+      x-funtino-availability: implemented
+      operationId: regenerateActorMfaRecoveryCodes
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaProof'
+      responses:
+        '200':
+          description: Old codes revoked; ten new codes and a new factor version returned once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaRecoveryCodes'
+        '401':
+          description: Code is invalid or already used.
+        '429':
+          description: Verification is temporarily locked.
+  /internal/v1/mfa/disable:
+    post:
+      x-funtino-availability: implemented
+      operationId: disableActorMfa
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaProof'
+      responses:
+        '200':
+          description: MFA disabled and its version advanced, invalidating earlier step-up evidence.
+        '401':
+          description: Code is invalid or already used.
+        '429':
+          description: Verification is temporarily locked.
+  /internal/v1/authorization/evaluate:
+    post:
+      x-funtino-availability: implemented
+      operationId: evaluateAuthorization
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationRequest'
+      responses:
+        '200':
+          description: >-
+            Policy decision. Denials are normal decisions, not transport errors. The stable
+            reason allows a caller to distinguish a missing permission from the sole
+            requirement for MFA step-up; it does not grant access by itself.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationResponse'
+        '401':
+          description: Invalid service credential.
+        '503':
+          description: Policy source unavailable; callers must fail closed.
+  /internal/v1/roles:
+    get:
+      x-funtino-availability: implemented
+      operationId: listScopedRoles
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Roles visible to the authenticated actor in the requested scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RolesResponse'
+        '403':
+          description: Actor cannot read roles in this scope.
+        '401':
+          description: Invalid service credential or missing actor context.
+        '503':
+          description: Policy database is unavailable; caller must fail closed.
+    post:
+      x-funtino-availability: implemented
+      operationId: createScopedRole
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreate'
+      responses:
+        '201':
+          description: Role created and policy version advanced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '403':
+          description: Actor lacks permission or delegation authority.
+        '409':
+          description: Duplicate role name or stale policy version.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/roles/templates:
+    get:
+      x-funtino-availability: implemented
+      operationId: listScopedRoleTemplates
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+      responses:
+        '200':
+          description: Least-privilege templates applicable to the authorized scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleTemplatesResponse'
+        '403':
+          description: Actor cannot read role templates in this scope.
+        '503':
+          description: Policy database is unavailable; caller must fail closed.
+  /internal/v1/roles/{roleId}:
+    patch:
+      x-funtino-availability: implemented
+      operationId: updateScopedRole
+      parameters:
+        - $ref: '#/components/parameters/RoleId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpdate'
+      responses:
+        '200':
+          description: Role updated; permissions and policy version are current.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '403':
+          description: Actor lacks permission or delegation authority.
+        '404':
+          description: Role not found in actor scope.
+        '409':
+          description: Concurrent update or immutable system role.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/staff/invitations:
+    get:
+      x-funtino-availability: implemented
+      operationId: listScopedStaffInvitations
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Pending invitations created in the authorized scope; numbers are masked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScopedInvitationsResponse'
+        '403':
+          description: Actor cannot read pending invitations in this scope.
+        '503':
+          description: Policy database is unavailable; caller must fail closed.
+    post:
+      x-funtino-availability: implemented
+      operationId: createStaffInvitation
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffInvitationCreate'
+      responses:
+        '202':
+          description: Pending invitation recorded. It becomes active only after OTP identity verification and acceptance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationMutationResponse'
+        '403':
+          description: Actor cannot invite staff or delegate the selected role.
+        '409':
+          description: Active membership or invitation already exists.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/staff/invitations/pending:
+    post:
+      x-funtino-availability: implemented
+      operationId: listPendingStaffInvitationsForVerifiedUser
+      description: Gateway must derive phoneE164 from the authenticated OTP identity and forward the trusted server-side session context. Never accept this lookup from an unauthenticated browser.
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifiedPhone'
+      responses:
+        '200':
+          description: Pending invitations matching the verified account phone; phone is never returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingInvitationsResponse'
+        '401':
+          description: Trusted actor/session context is missing or invalid.
+        '503':
+          description: Invitation lookup keys or persistence are unavailable.
+  /internal/v1/staff/invitations/{invitationId}/accept:
+    post:
+      x-funtino-availability: implemented
+      operationId: acceptStaffInvitation
+      description: Activates membership only after explicit acceptance by the OTP-verified account matching the invitation phone.
+      parameters:
+        - $ref: '#/components/parameters/InvitationId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifiedPhone'
+      responses:
+        '200':
+          description: Invitation accepted and membership activated atomically.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedInvitationResponse'
+        '401':
+          description: Invitation phone does not match the verified account.
+        '404':
+          description: Invitation not found for the verified account.
+        '409':
+          description: Invitation expired, role changed, or membership already exists.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/staff/invitations/{invitationId}/revoke:
+    post:
+      x-funtino-availability: implemented
+      operationId: revokeStaffInvitation
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Pending invitation revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationRevocationResponse'
+        '403':
+          description: Actor cannot revoke invitations in this scope.
+        '404':
+          description: Invitation not found in the caller's scope.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/staff/memberships/current:
+    get:
+      x-funtino-availability: implemented
+      operationId: listCurrentUserMemberships
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+      responses:
+        '200':
+          description: Current actor's memberships with scope-safe role summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentMembershipsResponse'
+        '401':
+          description: Invalid service credential or missing actor context.
+        '503':
+          description: Policy database is unavailable.
+  /internal/v1/staff:
+    get:
+      x-funtino-availability: implemented
+      operationId: listScopedStaff
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 512
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Minimal staff records and masked phone numbers in authorized scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffListResponse'
+        '403':
+          description: Actor cannot read staff in this scope.
+        '503':
+          description: Policy database is unavailable; caller must fail closed.
+  /internal/v1/staff/{membershipId}:
+    patch:
+      x-funtino-availability: implemented
+      operationId: updateStaffMembershipRole
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffMembershipUpdate'
+      responses:
+        '200':
+          description: Membership role updated with a new policy version.
+        '403':
+          description: Actor cannot assign the selected role or scope.
+        '404':
+          description: Membership not found in the caller's scope.
+        '409':
+          description: Stale version or last-administrator invariant violation.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/staff/{membershipId}/suspend:
+    post:
+      x-funtino-availability: implemented
+      operationId: suspendStaffMembership
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Membership suspended and denied immediately.
+        '403':
+          description: Actor cannot suspend this membership.
+        '409':
+          description: Last-administrator invariant violation.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/staff/{membershipId}/reactivate:
+    post:
+      x-funtino-availability: implemented
+      operationId: reactivateStaffMembership
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Membership reactivated after policy validation.
+        '403':
+          description: Actor cannot reactivate this membership.
+        '404':
+          description: Membership not found in the caller's scope.
+        '409':
+          description: Membership lifecycle transition would violate the last-administrator invariant.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/staff/{membershipId}/revoke:
+    post:
+      x-funtino-availability: implemented
+      operationId: revokeStaffMembership
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Staff membership revoked; authorization is denied immediately.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipMutationResponse'
+        '403':
+          description: Actor cannot revoke this membership.
+        '404':
+          description: Membership not found in the caller's scope.
+        '409':
+          description: Lifecycle transition or last-administrator invariant violation.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/memberships/{membershipId}/permission-overrides:
+    get:
+      x-funtino-availability: implemented
+      operationId: listMembershipPermissionOverrides
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Authorized membership overrides.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionOverrideListResponse'
+        '403':
+          description: Actor cannot read overrides for this membership.
+        '503':
+          description: Policy database is unavailable; caller must fail closed.
+    put:
+      x-funtino-availability: implemented
+      operationId: grantMembershipPermissionOverride
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionOverrideCreate'
+      responses:
+        '201':
+          description: Membership-scoped override created; policy version advanced.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionOverrideResponse'
+        '403':
+          description: Actor cannot grant this permission or scope.
+        '409':
+          description: Conflicting override or policy update.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/memberships/{membershipId}/permission-overrides/{overrideId}:
+    delete:
+      x-funtino-availability: implemented
+      operationId: revokeMembershipPermissionOverride
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - name: overrideId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Override revoked; revocation is effective on the next authorization decision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionOverrideMutationResponse'
+        '403':
+          description: Actor cannot manage this membership.
+        '404':
+          description: Override not found in membership scope.
+        '503':
+          description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+  /internal/v1/audit:
+    get:
+      x-funtino-availability: implemented
+      operationId: listScopedAccessAudit
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Append-only access audit events visible in the authorized scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessAuditListResponse'
+        '403':
+          description: Actor cannot read audit events in this scope.
+        '503':
+          description: Policy database is unavailable; caller must fail closed.
+components:
+  securitySchemes:
+    serviceToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+  parameters:
+    ActorUserId:
+      name: x-funtino-actor-user-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CorrelationId:
+      name: x-correlation-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionId:
+      name: x-funtino-session-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MfaVerifiedAt:
+      name: x-funtino-mfa-verified-at
+      in: header
+      required: false
+      description: Trusted step-up timestamp forwarded only from the server-side Gateway session; valid for at most five minutes.
+      schema:
+        type: string
+        format: date-time
+    MfaFactorVersion:
+      name: x-funtino-mfa-factor-version
+      in: header
+      required: false
+      description: Version of the active MFA factor recorded in the server-side session.
+      schema:
+        type: integer
+        minimum: 1
+    MfaMethod:
+      name: x-funtino-mfa-method
+      in: header
+      required: false
+      schema:
+        type: string
+        enum: [totp, recovery]
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+    IfMatchVersion:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+    OrganizationId:
+      name: organizationId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    ScopeType:
+      name: scopeType
+      in: query
+      required: false
+      description: Required for global scope; otherwise inferred from organizationId and branchId when omitted.
+      schema:
+        type: string
+        enum: [global, organization, branch]
+    BranchId:
+      name: branchId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    RoleId:
+      name: roleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MembershipId:
+      name: membershipId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    AccessScope:
+      oneOf:
+        - type: object
+          required: [type]
+          properties:
+            type:
+              const: global
+        - type: object
+          required: [type, organizationId]
+          properties:
+            type:
+              const: organization
+            organizationId:
+              type: string
+              format: uuid
+        - type: object
+          required: [type, organizationId, branchId]
+          properties:
+            type:
+              const: branch
+            organizationId:
+              type: string
+              format: uuid
+            branchId:
+              type: string
+              format: uuid
+    PermissionDefinition:
+      type: object
+      required: [key, scopes, delegable, stepUp]
+      properties:
+        key:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [global, organization, branch]
+        delegable:
+          type: boolean
+        stepUp:
+          type: boolean
+    PermissionCatalogResponse:
+      type: object
+      required: [catalogVersion, data]
+      properties:
+        catalogVersion:
+          type: integer
+          minimum: 1
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionDefinition'
+    IdentityAccessReadiness:
+      type: object
+      required:
+        - status
+        - service
+        - catalogVersion
+        - policyVersion
+        - administrativeWrites
+        - scopedTenantWritesEnabled
+        - scopedTenantWriteBlockReason
+        - scopeValidation
+        - outbox
+      properties:
+        status:
+          const: ready
+        service:
+          const: identity-access
+        catalogVersion:
+          type: integer
+          minimum: 1
+        policyVersion:
+          type: integer
+          minimum: 1
+        administrativeWrites:
+          type: object
+          required: [enabled, mode, blockReason]
+          properties:
+            enabled:
+              type: boolean
+            mode:
+              type: string
+              enum:
+                - explicit-production-opt-in
+                - closed-by-default
+                - nonproduction-enabled
+                - explicit-runtime-opt-in
+                - environment-gate-closed
+                - unknown-environment-closed
+            blockReason:
+              type: string
+              enum: [administrative_writes_disabled]
+              nullable: true
+        scopedTenantWritesEnabled:
+          type: boolean
+        scopedTenantWriteBlockReason:
+          type: string
+          enum:
+            - administrative_writes_disabled
+            - organization_branch_scope_owner_not_configured
+          nullable: true
+        scopeValidation:
+          type: object
+          required: [configured, mode, failClosed]
+          properties:
+            configured:
+              type: boolean
+            mode:
+              type: string
+              enum: [owner-api-on-every-tenant-mutation, nonproduction-opaque-scopes]
+            failClosed:
+              const: true
+        outbox:
+          type: object
+          required: [pending, deadLettered, publisherConfigured]
+          properties:
+            pending:
+              type: integer
+              minimum: 0
+            deadLettered:
+              type: integer
+              minimum: 0
+            publisherConfigured:
+              type: boolean
+    AuthorizationRequest:
+      type: object
+      required: [permission, scope]
+      properties:
+        permission:
+          type: string
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        resource:
+          type: object
+          required: [type, id]
+          properties:
+            type:
+              type: string
+            id:
+              type: string
+        mfa:
+          $ref: '#/components/schemas/MfaAuthorizationEvidence'
+    AuthorizationResponse:
+      type: object
+      required: [allowed, reason, policyVersion, catalogVersion]
+      properties:
+        allowed:
+          type: boolean
+        reason:
+          type: string
+          enum:
+            - role_permission
+            - user_allow_override
+            - user_deny_override
+            - permission_unknown
+            - policy_version_invalid
+            - evaluation_time_invalid
+            - membership_inactive
+            - actor_mismatch
+            - role_inactive
+            - scope_invalid
+            - permission_not_granted
+            - step_up_required
+            - step_up_policy_unconfigured
+        policyVersion:
+          type: integer
+          minimum: 1
+        catalogVersion:
+          type: integer
+          minimum: 1
+    MfaAuthorizationEvidence:
+      type: object
+      required: [verifiedAt, factorVersion, method]
+      additionalProperties: false
+      properties:
+        verifiedAt:
+          type: string
+          format: date-time
+        factorVersion:
+          type: integer
+          minimum: 1
+        method:
+          type: string
+          enum: [totp, recovery]
+    MfaProof:
+      type: object
+      required: [method, code]
+      additionalProperties: false
+      properties:
+        method:
+          type: string
+          enum: [totp, recovery]
+        code:
+          type: string
+          minLength: 6
+          maxLength: 35
+    TotpCode:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+    MfaStatus:
+      type: object
+      required: [enabled, enrollmentPending, recoveryCodesRemaining]
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        enrollmentPending:
+          type: boolean
+        recoveryCodesRemaining:
+          type: integer
+          minimum: 0
+          maximum: 10
+    MfaEnrollmentStart:
+      type: object
+      required: [secret, otpauthUri, expiresAt]
+      additionalProperties: false
+      properties:
+        secret:
+          type: string
+        otpauthUri:
+          type: string
+          pattern: '^otpauth://totp/'
+        expiresAt:
+          type: string
+          format: date-time
+    MfaRecoveryCodes:
+      type: object
+      required: [recoveryCodes, factorVersion, method, verifiedAt, validUntil]
+      additionalProperties: false
+      properties:
+        recoveryCodes:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items:
+            type: string
+        factorVersion:
+          type: integer
+          minimum: 1
+        method:
+          type: string
+          enum: [totp, recovery]
+        verifiedAt:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+    MfaStepUp:
+      type: object
+      required: [method, factorVersion, verifiedAt, validUntil]
+      additionalProperties: false
+      properties:
+        method:
+          type: string
+          enum: [totp, recovery]
+        factorVersion:
+          type: integer
+          minimum: 1
+        verifiedAt:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+        catalogVersion:
+          type: integer
+          minimum: 1
+    RoleSummary:
+      type: object
+      required: [id, name, scope, permissionKeys, systemManaged, status, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        permissionKeys:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        systemManaged:
+          type: boolean
+        status:
+          type: string
+          enum: [active, disabled]
+        version:
+          type: integer
+          minimum: 1
+    RoleTemplate:
+      type: object
+      required: [key, name, scopeType, permissionKeys]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        scopeType:
+          type: string
+          enum: [global, organization, branch]
+        permissionKeys:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+    RoleTemplatesResponse:
+      type: object
+      required: [policyVersion, catalogVersion, data]
+      properties:
+        policyVersion:
+          type: integer
+          minimum: 1
+        catalogVersion:
+          type: integer
+          minimum: 1
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleTemplate'
+    RoleCreate:
+      type: object
+      additionalProperties: false
+      required: [name, scope, permissionKeys, reason]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        permissionKeys:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    RoleUpdate:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      minProperties: 2
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        permissionKeys:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        status:
+          type: string
+          enum: [active, disabled]
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    StaffInvitationCreate:
+      type: object
+      additionalProperties: false
+      required: [phoneE164, scope, roleId, reason]
+      properties:
+        phoneE164:
+          type: string
+          pattern: '^[+][1-9][0-9]{7,14}$'
+          writeOnly: true
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        roleId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    VerifiedPhone:
+      type: object
+      required: [phoneE164]
+      additionalProperties: false
+      properties:
+        phoneE164:
+          type: string
+          pattern: '^[+][1-9][0-9]{7,14}$'
+          writeOnly: true
+    ScopedInvitationsResponse:
+      type: object
+      required: [data, nextCursor, policyVersion]
+      properties:
+        data:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/StaffInvitationSummary'
+              - type: object
+                required: [isExpired, roleChanged]
+                properties:
+                  isExpired:
+                    type: boolean
+                  roleChanged:
+                    type: boolean
+        nextCursor:
+          type: string
+          format: uuid
+          nullable: true
+        policyVersion:
+          type: integer
+          minimum: 1
+    StaffInvitationSummary:
+      type: object
+      required: [id, membershipId, status, maskedPhone, scope, role, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        membershipId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, accepted, revoked, expired]
+        maskedPhone:
+          type: string
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        role:
+          $ref: '#/components/schemas/RoleSummary'
+        expiresAt:
+          type: string
+          format: date-time
+    InvitationMutationResponse:
+      type: object
+      required: [data, policyVersion]
+      properties:
+        data:
+          $ref: '#/components/schemas/StaffInvitationSummary'
+        policyVersion:
+          type: integer
+          minimum: 1
+    PendingInvitationsResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [id, scope, role, maskedPhone, expiresAt, roleChanged]
+            properties:
+              id:
+                type: string
+                format: uuid
+              scope:
+                $ref: '#/components/schemas/AccessScope'
+              role:
+                $ref: '#/components/schemas/RoleSummary'
+              maskedPhone:
+                type: string
+              expiresAt:
+                type: string
+                format: date-time
+              roleChanged:
+                type: boolean
+    AcceptedInvitationResponse:
+      type: object
+      required: [data, policyVersion]
+      properties:
+        data:
+          type: object
+          required: [membershipId, status, scope, role]
+          properties:
+            membershipId:
+              type: string
+              format: uuid
+            status:
+              type: string
+              const: active
+            scope:
+              $ref: '#/components/schemas/AccessScope'
+            role:
+              $ref: '#/components/schemas/RoleSummary'
+        policyVersion:
+          type: integer
+          minimum: 1
+    InvitationRevocationResponse:
+      type: object
+      required: [data, policyVersion]
+      properties:
+        data:
+          type: object
+          required: [id, membershipId, status]
+          properties:
+            id:
+              type: string
+              format: uuid
+            membershipId:
+              type: string
+              format: uuid
+            status:
+              type: string
+              const: revoked
+        policyVersion:
+          type: integer
+          minimum: 1
+    PermissionOverrideCreate:
+      type: object
+      additionalProperties: false
+      required: [permission, effect, scope, reason]
+      properties:
+        permission:
+          type: string
+          minLength: 1
+          maxLength: 120
+        effect:
+          type: string
+          enum: [allow, deny]
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        resource:
+          type: object
+          required: [type, id]
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              minLength: 1
+              maxLength: 80
+            id:
+              type: string
+              minLength: 1
+              maxLength: 160
+        expiresAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    RolesResponse:
+      type: object
+      required: [status, data, nextCursor]
+      properties:
+        status:
+          const: success
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleSummary'
+        nextCursor:
+          type: string
+          format: uuid
+          nullable: true
+    RoleResponse:
+      type: object
+      required: [data, policyVersion]
+      properties:
+        data:
+          $ref: '#/components/schemas/RoleSummary'
+        policyVersion:
+          type: integer
+          minimum: 1
+    StaffMembershipUpdate:
+      type: object
+      additionalProperties: false
+      required: [roleId, reason]
+      properties:
+        roleId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    CurrentMembershipsResponse:
+      type: object
+      required: [data, policyVersion, catalogVersion]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffMembershipSummary'
+        policyVersion:
+          type: integer
+          minimum: 1
+        catalogVersion:
+          type: integer
+          minimum: 1
+    StaffMembershipSummary:
+      type: object
+      required: [id, status, scope, role, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, active, suspended, revoked]
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        role:
+          $ref: '#/components/schemas/RoleSummary'
+        version:
+          type: integer
+          minimum: 1
+    StaffListResponse:
+      type: object
+      required: [data, nextCursor, policyVersion]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [membershipId, userId, status, scope, role, version]
+            properties:
+              membershipId:
+                type: string
+                format: uuid
+              userId:
+                type: string
+                format: uuid
+              maskedPhone:
+                type: string
+                nullable: true
+              status:
+                type: string
+                enum: [pending, active, suspended, revoked]
+              scope:
+                $ref: '#/components/schemas/AccessScope'
+              role:
+                $ref: '#/components/schemas/RoleSummary'
+              version:
+                type: integer
+                minimum: 1
+        nextCursor:
+          type: string
+          nullable: true
+        policyVersion:
+          type: integer
+          minimum: 1
+    MembershipMutationResponse:
+      type: object
+      required: [data, policyVersion]
+      properties:
+        data:
+          type: object
+          required: [membershipId, userId, status, scope, role, version]
+          properties:
+            membershipId:
+              type: string
+              format: uuid
+            userId:
+              type: string
+              format: uuid
+            status:
+              type: string
+              enum: [pending, active, suspended, revoked]
+            scope:
+              $ref: '#/components/schemas/AccessScope'
+            role:
+              $ref: '#/components/schemas/RoleSummary'
+            version:
+              type: integer
+              minimum: 1
+        policyVersion:
+          type: integer
+          minimum: 1
+    ReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    PermissionOverrideSummary:
+      type: object
+      required:
+        [
+          kind,
+          id,
+          membershipId,
+          permissionKey,
+          effect,
+          scope,
+          startsAt,
+          expiresAt,
+          revokedAt,
+          reason,
+        ]
+      properties:
+        kind:
+          type: string
+          const: permission_override
+        id:
+          type: string
+          format: uuid
+        membershipId:
+          type: string
+          format: uuid
+        permissionKey:
+          type: string
+        effect:
+          type: string
+          enum: [allow, deny]
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        resource:
+          type: object
+          required: [type, id]
+          properties:
+            type:
+              type: string
+            id:
+              type: string
+        startsAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+    PermissionOverrideListResponse:
+      type: object
+      required: [data, policyVersion]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionOverrideSummary'
+        policyVersion:
+          type: integer
+          minimum: 1
+    PermissionOverrideResponse:
+      type: object
+      required: [data, policyVersion]
+      properties:
+        data:
+          $ref: '#/components/schemas/PermissionOverrideSummary'
+        policyVersion:
+          type: integer
+          minimum: 1
+    PermissionOverrideMutationResponse:
+      $ref: '#/components/schemas/PermissionOverrideResponse'
+    AccessAuditListResponse:
+      type: object
+      required: [data, nextCursor, policyVersion]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required:
+              [
+                id,
+                actorType,
+                actorUserId,
+                actorLabel,
+                action,
+                targetType,
+                targetId,
+                scope,
+                reason,
+                beforeState,
+                afterState,
+                policyVersion,
+                correlationId,
+                outcome,
+                createdAt,
+              ]
+            properties:
+              id:
+                type: string
+                format: uuid
+              actorType:
+                type: string
+                enum: [user, system]
+              actorUserId:
+                type: string
+                format: uuid
+                nullable: true
+              actorLabel:
+                type: string
+                nullable: true
+              action:
+                type: string
+              targetType:
+                type: string
+              targetId:
+                type: string
+              scope:
+                $ref: '#/components/schemas/AccessScope'
+              reason:
+                type: string
+              beforeState:
+                type: object
+                nullable: true
+                additionalProperties: true
+              afterState:
+                type: object
+                nullable: true
+                additionalProperties: true
+              policyVersion:
+                type: integer
+                minimum: 1
+                nullable: true
+              correlationId:
+                type: string
+                format: uuid
+              outcome:
+                type: string
+                enum: [succeeded, denied, failed]
+              createdAt:
+                type: string
+                format: date-time
+        nextCursor:
+          type: string
+          maxLength: 128
+          nullable: true
+        policyVersion:
+          type: integer
+          minimum: 1

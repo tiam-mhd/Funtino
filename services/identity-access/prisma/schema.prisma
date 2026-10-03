@@ -1,0 +1,301 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("IDENTITY_ACCESS_DATABASE_URL")
+  directUrl = env("IDENTITY_ACCESS_MIGRATION_DATABASE_URL")
+}
+
+enum AccessScopeType {
+  global
+  organization
+  branch
+
+  @@map("access_scope_type")
+}
+
+enum AccessRoleStatus {
+  active
+  disabled
+
+  @@map("access_role_status")
+}
+
+enum StaffMembershipStatus {
+  pending
+  active
+  suspended
+  revoked
+
+  @@map("staff_membership_status")
+}
+
+enum StaffInvitationStatus {
+  pending
+  accepted
+  revoked
+  expired
+
+  @@map("staff_invitation_status")
+}
+
+enum PermissionOverrideEffect {
+  allow
+  deny
+
+  @@map("permission_override_effect")
+}
+
+enum AccessAuditOutcome {
+  succeeded
+  denied
+  failed
+
+  @@map("access_audit_outcome")
+}
+
+enum AccessAuditActorType {
+  user
+  system
+
+  @@map("access_audit_actor_type")
+}
+
+enum MfaCredentialStatus {
+  pending
+  active
+  disabled
+
+  @@map("mfa_credential_status")
+}
+
+enum MfaAuditOutcome {
+  succeeded
+  denied
+  failed
+
+  @@map("mfa_audit_outcome")
+}
+
+model AccessRole {
+  id             String            @id @default(uuid()) @db.Uuid
+  name           String            @db.VarChar(80)
+  scopeType      AccessScopeType   @map("scope_type")
+  organizationId String?           @map("organization_id") @db.Uuid
+  branchId       String?           @map("branch_id") @db.Uuid
+  status         AccessRoleStatus  @default(active)
+  systemManaged  Boolean           @default(false) @map("system_managed")
+  version        Int               @default(1)
+  permissions    RolePermission[]
+  memberships    StaffMembership[]
+  invitations    StaffInvitation[]
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([organizationId, branchId, status])
+  @@map("access_roles")
+}
+
+model RolePermission {
+  roleId        String     @map("role_id") @db.Uuid
+  permissionKey String     @map("permission_key") @db.VarChar(120)
+  role          AccessRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([roleId, permissionKey])
+  @@map("role_permissions")
+}
+
+model StaffMembership {
+  id             String                @id @default(uuid()) @db.Uuid
+  userId         String                @map("user_id") @db.Uuid
+  scopeType      AccessScopeType       @map("scope_type")
+  organizationId String?               @map("organization_id") @db.Uuid
+  branchId       String?               @map("branch_id") @db.Uuid
+  roleId         String                @map("role_id") @db.Uuid
+  status         StaffMembershipStatus @default(pending)
+  version        Int                   @default(1)
+  role           AccessRole            @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  overrides      PermissionOverride[]
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([userId, status])
+  @@index([organizationId, branchId, status])
+  @@map("staff_memberships")
+}
+
+model StaffInvitation {
+  id                       String                @id @default(uuid()) @db.Uuid
+  membershipId             String                @unique @map("membership_id") @db.Uuid
+  phoneLookupHash          String                @map("phone_lookup_hash") @db.Char(64)
+  phoneLookupHashKeyVersion String               @map("phone_lookup_hash_key_version") @db.VarChar(32)
+  maskedPhone              String                @map("masked_phone") @db.VarChar(32)
+  scopeType                AccessScopeType       @map("scope_type")
+  organizationId           String?               @map("organization_id") @db.Uuid
+  branchId                 String?               @map("branch_id") @db.Uuid
+  roleId                   String                @map("role_id") @db.Uuid
+  roleVersion              Int                   @map("role_version")
+  status                   StaffInvitationStatus @default(pending)
+  expiresAt                DateTime              @map("expires_at") @db.Timestamptz(6)
+  acceptedAt               DateTime?             @map("accepted_at") @db.Timestamptz(6)
+  revokedAt                DateTime?             @map("revoked_at") @db.Timestamptz(6)
+  createdByUserId          String                @map("created_by_user_id") @db.Uuid
+  role                     AccessRole            @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  createdAt                DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([phoneLookupHashKeyVersion, phoneLookupHash, status, expiresAt])
+  @@index([organizationId, branchId, status, expiresAt])
+  @@map("staff_invitations")
+}
+
+model PermissionOverride {
+  id              String                   @id @default(uuid()) @db.Uuid
+  membershipId    String                   @map("membership_id") @db.Uuid
+  permissionKey   String                   @map("permission_key") @db.VarChar(120)
+  effect          PermissionOverrideEffect
+  scopeType       AccessScopeType          @map("scope_type")
+  organizationId  String?                  @map("organization_id") @db.Uuid
+  branchId        String?                  @map("branch_id") @db.Uuid
+  resourceType    String?                  @map("resource_type") @db.VarChar(80)
+  resourceId      String?                  @map("resource_id") @db.VarChar(160)
+  startsAt        DateTime                 @default(now()) @map("starts_at") @db.Timestamptz(6)
+  expiresAt       DateTime?                @map("expires_at") @db.Timestamptz(6)
+  revokedAt       DateTime?                @map("revoked_at") @db.Timestamptz(6)
+  createdByUserId String                   @map("created_by_user_id") @db.Uuid
+  reason          String                   @db.VarChar(500)
+  membership      StaffMembership          @relation(fields: [membershipId], references: [id], onDelete: Restrict)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([membershipId, revokedAt, permissionKey])
+  @@map("permission_overrides")
+}
+
+model AccessAuditLog {
+  id             String             @id @default(uuid()) @db.Uuid
+  actorType      AccessAuditActorType @default(user) @map("actor_type")
+  actorUserId    String?            @map("actor_user_id") @db.Uuid
+  actorLabel     String?            @map("actor_label") @db.VarChar(100)
+  action         String             @db.VarChar(120)
+  targetType     String             @map("target_type") @db.VarChar(80)
+  targetId       String             @map("target_id") @db.VarChar(160)
+  scopeType      AccessScopeType    @map("scope_type")
+  organizationId String?            @map("organization_id") @db.Uuid
+  branchId       String?            @map("branch_id") @db.Uuid
+  reason         String             @db.VarChar(500)
+  beforeState    Json?              @map("before_state")
+  afterState     Json?              @map("after_state")
+  policyVersion  Int?               @map("policy_version")
+  correlationId  String             @map("correlation_id") @db.Uuid
+  outcome        AccessAuditOutcome @default(succeeded)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  outboxEvent    OutboxEvent?
+
+  @@index([actorUserId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([organizationId, branchId, createdAt])
+  @@map("access_audit_logs")
+}
+
+model AccessIdempotencyRecord {
+  id                       String   @id @default(uuid()) @db.Uuid
+  actorUserId              String   @map("actor_user_id") @db.Uuid
+  operation                String   @db.VarChar(120)
+  key                      String   @db.VarChar(128)
+  requestHash              String   @map("request_hash") @db.Char(64)
+  requestHashKeyVersion    String   @map("request_hash_key_version") @db.VarChar(32)
+  responseStatus           Int?     @map("response_status")
+  responseBody             Json?    @map("response_body")
+  createdAt                DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt              DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  @@unique([actorUserId, operation, key])
+  @@index([createdAt])
+  @@map("access_idempotency_records")
+}
+
+model OutboxEvent {
+  id             String         @id @db.Uuid
+  auditLogId     String         @unique @map("audit_log_id") @db.Uuid
+  eventType      String         @map("event_type") @db.VarChar(160)
+  eventVersion   Int            @map("event_version")
+  aggregateId    String         @map("aggregate_id") @db.VarChar(160)
+  envelope       Json
+  attempts       Int            @default(0)
+  availableAt    DateTime       @default(now()) @map("available_at") @db.Timestamptz(6)
+  leaseToken     String?        @map("lease_token") @db.Uuid
+  leaseExpiresAt DateTime?      @map("lease_expires_at") @db.Timestamptz(6)
+  publishedAt    DateTime?      @map("published_at") @db.Timestamptz(6)
+  deadLetteredAt DateTime?      @map("dead_lettered_at") @db.Timestamptz(6)
+  lastErrorCode  String?        @map("last_error_code") @db.VarChar(80)
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  auditLog       AccessAuditLog @relation(fields: [auditLogId], references: [id], onDelete: Restrict)
+
+  @@index([publishedAt, deadLetteredAt, availableAt, createdAt])
+  @@map("outbox_events")
+}
+
+model PolicyState {
+  id        Int      @id @default(1)
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("policy_state")
+}
+
+model MfaCredential {
+  userId                 String             @id @map("user_id") @db.Uuid
+  status                 MfaCredentialStatus @default(pending)
+  secretCiphertext       Bytes              @map("secret_ciphertext")
+  secretNonce            Bytes              @map("secret_nonce")
+  secretAuthTag          Bytes              @map("secret_auth_tag")
+  encryptionKeyVersion   String             @map("encryption_key_version") @db.VarChar(32)
+  pendingExpiresAt       DateTime?          @map("pending_expires_at") @db.Timestamptz(6)
+  enabledAt              DateTime?          @map("enabled_at") @db.Timestamptz(6)
+  lastAcceptedStep       BigInt?             @map("last_accepted_step")
+  failedAttempts         Int                @default(0) @map("failed_attempts")
+  lockedUntil            DateTime?          @map("locked_until") @db.Timestamptz(6)
+  version                Int                @default(1)
+  recoveryCodes          MfaRecoveryCode[]
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, lockedUntil])
+  @@map("mfa_credentials")
+}
+
+model MfaRecoveryCode {
+  id                String        @id @default(uuid()) @db.Uuid
+  userId            String        @map("user_id") @db.Uuid
+  credentialVersion Int           @map("credential_version")
+  codeHash          String        @map("code_hash") @db.Char(64)
+  consumedAt        DateTime?     @map("consumed_at") @db.Timestamptz(6)
+  revokedAt         DateTime?     @map("revoked_at") @db.Timestamptz(6)
+  createdAt         DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  credential        MfaCredential @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([userId, codeHash])
+  @@index([userId, credentialVersion, consumedAt, revokedAt])
+  @@map("mfa_recovery_codes")
+}
+
+model MfaAuditLog {
+  id            String         @id @default(uuid()) @db.Uuid
+  actorUserId   String         @map("actor_user_id") @db.Uuid
+  sessionId     String         @map("session_id") @db.Uuid
+  action        String         @db.VarChar(120)
+  reason        String         @db.VarChar(160)
+  outcome       MfaAuditOutcome
+  beforeState   Json?          @map("before_state")
+  afterState    Json?          @map("after_state")
+  details       Json?
+  correlationId String         @map("correlation_id") @db.Uuid
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([actorUserId, createdAt])
+  @@index([sessionId, createdAt])
+  @@map("mfa_audit_logs")
+}

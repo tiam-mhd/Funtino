@@ -1,0 +1,6 @@
+[
+  {
+    "targets": ["host.docker.internal:4060"],
+    "labels": { "__scheme__": "http", "service": "analytics-read-model", "environment": "local" }
+  }
+]

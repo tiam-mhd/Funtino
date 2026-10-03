@@ -1,0 +1,160 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "../generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("WALLET_DATABASE_URL")
+  directUrl = env("WALLET_MIGRATION_DATABASE_URL")
+  schemas   = ["wallet"]
+}
+
+enum CardInventoryStatus {
+  in_stock
+  assigned
+  blocked
+  retired
+
+  @@map("card_inventory_status")
+  @@schema("wallet")
+}
+
+enum CardVerificationStatus {
+  unknown
+  verified
+  rejected
+
+  @@map("card_verification_status")
+  @@schema("wallet")
+}
+
+enum CardInventoryAction {
+  registered
+  status_changed
+
+  @@map("card_inventory_action")
+  @@schema("wallet")
+}
+
+enum CardAssignmentAction {
+  assigned
+  transferred
+  cancelled
+
+  @@map("card_assignment_action")
+  @@schema("wallet")
+}
+
+model CardInventory {
+  id                 String                 @id @default(uuid()) @db.Uuid
+  organizationId     String                 @map("organization_id") @db.Uuid
+  branchId           String                 @map("branch_id") @db.Uuid
+  externalCardId     String                 @unique(map: "wallet_card_inventory_external_id_key") @map("external_card_id") @db.VarChar(160)
+  status             CardInventoryStatus    @default(in_stock)
+  verificationStatus CardVerificationStatus @default(unknown) @map("verification_status")
+  version            Int                    @default(1)
+  createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+  history            CardInventoryHistory[]
+  assignments        CardAssignment[]
+  assignmentHistory  CardAssignmentHistory[]
+
+  @@index([organizationId, branchId, id], map: "wallet_card_inventory_scope_id_idx")
+  @@index([organizationId, branchId, status, id], map: "wallet_card_inventory_scope_status_id_idx")
+  @@map("card_inventory")
+  @@schema("wallet")
+}
+
+model CardAssignment {
+  id             String        @id @default(uuid()) @db.Uuid
+  cardId         String        @unique(map: "wallet_active_assignment_card_key") @map("card_id") @db.Uuid
+  organizationId String        @map("organization_id") @db.Uuid
+  branchId       String        @map("branch_id") @db.Uuid
+  householdId    String        @map("household_id") @db.Uuid
+  assignedAt     DateTime      @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  card           CardInventory @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@unique([householdId, branchId], map: "wallet_active_assignment_household_branch_key")
+  @@index([organizationId, branchId, id], map: "wallet_active_assignment_scope_id_idx")
+  @@index([householdId, branchId], map: "wallet_active_assignment_household_idx")
+  @@map("active_card_assignments")
+  @@schema("wallet")
+}
+
+model CardAssignmentHistory {
+  id                 String               @id @db.Uuid
+  assignmentId       String               @map("assignment_id") @db.Uuid
+  cardId             String               @map("card_id") @db.Uuid
+  organizationId     String               @map("organization_id") @db.Uuid
+  branchId           String               @map("branch_id") @db.Uuid
+  householdId        String               @map("household_id") @db.Uuid
+  previousHouseholdId String?              @map("previous_household_id") @db.Uuid
+  action             CardAssignmentAction
+  actorUserId        String               @map("actor_user_id") @db.Uuid
+  callerService      String               @map("caller_service") @db.VarChar(80)
+  correlationId      String               @map("correlation_id") @db.Uuid
+  reason             String               @db.VarChar(500)
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  card               CardInventory        @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@index([cardId, createdAt, id], map: "wallet_assignment_history_card_created_idx")
+  @@index([householdId, branchId, createdAt], map: "wallet_assignment_history_household_created_idx")
+  @@index([actorUserId, createdAt, id], map: "wallet_assignment_history_actor_created_idx")
+  @@index([correlationId], map: "wallet_assignment_history_correlation_idx")
+  @@map("card_assignment_history")
+  @@schema("wallet")
+}
+
+model CardInventoryHistory {
+  id            String              @id @db.Uuid
+  cardId        String              @map("card_id") @db.Uuid
+  action        CardInventoryAction
+  actorUserId   String              @map("actor_user_id") @db.Uuid
+  callerService String              @map("caller_service") @db.VarChar(80)
+  correlationId String              @map("correlation_id") @db.Uuid
+  reason        String              @db.VarChar(500)
+  before        Json?
+  after         Json
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  card          CardInventory       @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@index([cardId, createdAt, id], map: "wallet_card_history_card_created_idx")
+  @@index([actorUserId, createdAt, id], map: "wallet_card_history_actor_created_idx")
+  @@index([correlationId], map: "wallet_card_history_correlation_idx")
+  @@map("card_inventory_history")
+  @@schema("wallet")
+}
+
+model IdempotencyCommand {
+  callerService String   @map("caller_service") @db.VarChar(80)
+  key           String   @db.Uuid
+  requestHash   String   @map("request_hash") @db.Char(64)
+  response      Json
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([callerService, key])
+  @@index([createdAt], map: "wallet_idempotency_created_idx")
+  @@map("idempotency_commands")
+  @@schema("wallet")
+}
+
+model OutboxEvent {
+  id             String    @id @db.Uuid
+  eventType      String    @map("event_type") @db.VarChar(160)
+  aggregateId    String    @map("aggregate_id") @db.Uuid
+  envelope       Json
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  availableAt    DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  attempts       Int       @default(0)
+  leaseToken     String?   @map("lease_token") @db.Uuid
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz(6)
+  deadLetteredAt DateTime? @map("dead_lettered_at") @db.Timestamptz(6)
+  lastErrorCode  String?   @map("last_error_code") @db.VarChar(80)
+
+  @@index([publishedAt, deadLetteredAt, availableAt, createdAt], map: "wallet_outbox_delivery_idx")
+  @@map("outbox_events")
+  @@schema("wallet")
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/device/health-observed.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "device.health-observed.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["deviceId", "observationId", "reportedState", "observedAt", "isLatest"],
+          "properties": {
+            "deviceId": { "type": "string", "format": "uuid" },
+            "observationId": { "type": "string", "format": "uuid" },
+            "reportedState": { "enum": ["online", "degraded", "offline"] },
+            "observedAt": { "type": "string", "format": "date-time" },
+            "isLatest": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

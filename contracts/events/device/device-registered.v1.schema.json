@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/device/device-registered.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "device.device-registered.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["deviceId", "deviceType", "displayName", "status", "version"],
+          "properties": {
+            "deviceId": { "type": "string", "format": "uuid" },
+            "deviceType": { "enum": ["rfid_reader", "terminal", "access_gate", "other"] },
+            "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+            "status": { "const": "active" },
+            "version": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

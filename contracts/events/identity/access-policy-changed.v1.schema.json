@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/identity/access-policy-changed.v1.json",
+  "title": "Identity access policy changed event v1",
+  "allOf": [
+    { "$ref": "../common/envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "identity.access-policy-changed.v1" },
+        "payload": { "$ref": "./access-policy-changed.payload.v1.schema.json" }
+      }
+    }
+  ]
+}

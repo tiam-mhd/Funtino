@@ -1,0 +1,6 @@
+[
+  {
+    "targets": ["host.docker.internal:4020"],
+    "labels": { "__scheme__": "http", "service": "device-integration", "environment": "local" }
+  }
+]

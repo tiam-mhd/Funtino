@@ -1,0 +1,159 @@
+asyncapi: 3.0.0
+info:
+  title: Funtino Domain Events
+  version: 0.1.0
+  description: Durable RabbitMQ event contracts used by workers and realtime projections.
+defaultContentType: application/json
+servers:
+  localRabbit:
+    host: localhost:5672
+    protocol: amqp
+channels:
+  domainEvents:
+    address: funtino.events.v1
+    messages:
+      userRegistered:
+        $ref: '#/components/messages/UserRegistered'
+      householdCreated:
+        $ref: '#/components/messages/HouseholdCreated'
+      householdMemberCreated:
+        $ref: '#/components/messages/HouseholdMemberCreated'
+      cardLinked:
+        $ref: '#/components/messages/CardLinked'
+      deviceTransactionImported:
+        $ref: '#/components/messages/DeviceTransactionImported'
+      deviceRegistered:
+        $ref: '#/components/messages/DeviceRegistered'
+      deviceUpdated:
+        $ref: '#/components/messages/DeviceUpdated'
+      deviceHealthObserved:
+        $ref: '#/components/messages/DeviceHealthObserved'
+      paymentConfirmed:
+        $ref: '#/components/messages/PaymentConfirmed'
+      walletCredited:
+        $ref: '#/components/messages/WalletCredited'
+      walletCardRegistered:
+        $ref: '#/components/messages/WalletCardRegistered'
+      walletCardStatusChanged:
+        $ref: '#/components/messages/WalletCardStatusChanged'
+      walletCardAssignmentChanged:
+        $ref: '#/components/messages/WalletCardAssignmentChanged'
+      missionCompleted:
+        $ref: '#/components/messages/MissionCompleted'
+      notificationRequested:
+        $ref: '#/components/messages/NotificationRequested'
+      notificationSent:
+        $ref: '#/components/messages/NotificationSent'
+      identityPolicyChanged:
+        $ref: '#/components/messages/IdentityPolicyChanged'
+      organizationCreated:
+        $ref: '#/components/messages/OrganizationCreated'
+      organizationUpdated:
+        $ref: '#/components/messages/OrganizationUpdated'
+      organizationStatusChanged:
+        $ref: '#/components/messages/OrganizationStatusChanged'
+      branchCreated:
+        $ref: '#/components/messages/BranchCreated'
+      branchUpdated:
+        $ref: '#/components/messages/BranchUpdated'
+      branchStatusChanged:
+        $ref: '#/components/messages/BranchStatusChanged'
+operations:
+  consumeDomainEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/domainEvents'
+components:
+  messages:
+    UserRegistered:
+      name: UserRegistered
+      payload:
+        $ref: '../events/common/envelope.schema.json'
+    HouseholdCreated:
+      name: HouseholdCreated
+      payload:
+        $ref: '../events/common/envelope.schema.json'
+    HouseholdMemberCreated:
+      name: HouseholdMemberCreated
+      payload:
+        $ref: '../events/customer/household-member-created.v1.schema.json'
+    CardLinked:
+      name: CardLinked
+      payload:
+        $ref: '../events/common/envelope.schema.json'
+    DeviceTransactionImported:
+      name: DeviceTransactionImported
+      payload:
+        $ref: '../events/common/envelope.schema.json'
+    DeviceRegistered:
+      name: DeviceRegistered
+      payload:
+        $ref: '../events/device/device-registered.v1.schema.json'
+    DeviceUpdated:
+      name: DeviceUpdated
+      payload:
+        $ref: '../events/device/device-updated.v1.schema.json'
+    DeviceHealthObserved:
+      name: DeviceHealthObserved
+      payload:
+        $ref: '../events/device/health-observed.v1.schema.json'
+    PaymentConfirmed:
+      name: PaymentConfirmed
+      payload:
+        $ref: '../events/common/envelope.schema.json'
+    WalletCredited:
+      name: WalletCredited
+      payload:
+        $ref: '../events/common/envelope.schema.json'
+    WalletCardRegistered:
+      name: WalletCardRegistered
+      payload:
+        $ref: '../events/wallet/card-registered.v1.schema.json'
+    WalletCardStatusChanged:
+      name: WalletCardStatusChanged
+      payload:
+        $ref: '../events/wallet/card-status-changed.v1.schema.json'
+    WalletCardAssignmentChanged:
+      name: WalletCardAssignmentChanged
+      payload:
+        $ref: '../events/wallet/card-assignment-changed.v1.schema.json'
+    MissionCompleted:
+      name: MissionCompleted
+      payload:
+        $ref: '../events/common/envelope.schema.json'
+    NotificationRequested:
+      name: NotificationRequested
+      payload:
+        $ref: '../events/common/envelope.schema.json'
+    NotificationSent:
+      name: NotificationSent
+      payload:
+        $ref: '../events/common/envelope.schema.json'
+    IdentityPolicyChanged:
+      name: IdentityPolicyChanged
+      payload:
+        $ref: '../events/identity/access-policy-changed.v1.schema.json'
+    OrganizationCreated:
+      name: OrganizationCreated
+      payload:
+        $ref: '../events/organization-branch/organization-created.v1.schema.json'
+    OrganizationUpdated:
+      name: OrganizationUpdated
+      payload:
+        $ref: '../events/organization-branch/organization-updated.v1.schema.json'
+    OrganizationStatusChanged:
+      name: OrganizationStatusChanged
+      payload:
+        $ref: '../events/organization-branch/organization-status-changed.v1.schema.json'
+    BranchCreated:
+      name: BranchCreated
+      payload:
+        $ref: '../events/organization-branch/branch-created.v1.schema.json'
+    BranchUpdated:
+      name: BranchUpdated
+      payload:
+        $ref: '../events/organization-branch/branch-updated.v1.schema.json'
+    BranchStatusChanged:
+      name: BranchStatusChanged
+      payload:
+        $ref: '../events/organization-branch/branch-status-changed.v1.schema.json'

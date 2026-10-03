@@ -1,0 +1,289 @@
+openapi: 3.1.0
+info:
+  title: Funtino Analytics Read Model (internal)
+  version: 0.1.0
+  description: >-
+    Private, aggregate-only reporting API. It accepts calls only from API Gateway over the
+    private service network and never exposes customer, household, card, payment, address,
+    or other personal data.
+servers:
+  - url: http://analytics-read-model:4060
+security:
+  - analyticsServiceToken: []
+paths:
+  /health/live:
+    get:
+      operationId: analyticsLive
+      security: []
+      responses:
+        '200': { description: Process is alive. }
+  /health/ready:
+    get:
+      operationId: analyticsReady
+      security: []
+      responses:
+        '200': { description: Projection storage and required production consumer are ready. }
+        '503': { description: Projection database or required consumer is unavailable. }
+  /internal/v1/reports:
+    get:
+      operationId: readOperationsReport
+      description: Returns a bounded, scope-filtered snapshot and daily metrics. Gateway must enforce report.read, exact IAM scope, and live owner status before calling.
+      parameters:
+        - name: scopeType
+          in: query
+          required: true
+          schema: { type: string, enum: [organization, branch] }
+        - name: organizationId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: branchId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/CallingService'
+      responses:
+        '200':
+          description: Aggregated report with projection generation and coverage metadata.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsReport' }
+        '400': { description: Scope/date filter is invalid or exceeds 366 UTC days. }
+        '401': { description: Caller identity or token is invalid. }
+        '503': { description: Projection database, schema, or configured policy is unavailable. }
+  /internal/v1/reports/export:
+    post:
+      operationId: exportOperationsReportRows
+      description: >-
+        Returns aggregate daily rows only. Gateway must enforce report.export, exact scope,
+        trusted origin, active owner status and fresh MFA step-up. The actor and correlation
+        headers must be derived from the authenticated Gateway request; Analytics records an
+        append-only export audit transactionally before returning data.
+      parameters:
+        - $ref: '#/components/parameters/CallingService'
+        - name: X-Funtino-Actor-User-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Correlation-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportFilter' }
+      responses:
+        '200':
+          description: Audited daily aggregate rows, maximum 366.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportExport' }
+        '400': { description: Scope/date filter or audit context is invalid. }
+        '401': { description: Caller identity or token is invalid. }
+        '503': { description: Report query or durable export audit is unavailable. }
+components:
+  securitySchemes:
+    analyticsServiceToken:
+      type: apiKey
+      in: header
+      name: X-Funtino-Service-Token
+      description: Runtime secret shared only with API Gateway; minimum 32 random characters.
+  parameters:
+    CallingService:
+      name: X-Funtino-Service-Id
+      in: header
+      required: true
+      schema: { type: string, const: api-gateway }
+  schemas:
+    ReportFilter:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [scopeType, organizationId, from, to]
+          properties:
+            scopeType: { type: string, const: organization }
+            organizationId: { type: string, format: uuid }
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        - type: object
+          additionalProperties: false
+          required: [scopeType, organizationId, branchId, from, to]
+          properties:
+            scopeType: { type: string, const: branch }
+            organizationId: { type: string, format: uuid }
+            branchId: { type: string, format: uuid }
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+    DailyMetric:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          date,
+          branchesCreated,
+          branchStatusChanges,
+          devicesRegistered,
+          deviceUpdates,
+          healthOnline,
+          healthDegraded,
+          healthOffline,
+        ]
+      properties:
+        date: { type: string, format: date }
+        branchesCreated: { type: integer, minimum: 0 }
+        branchStatusChanges: { type: integer, minimum: 0 }
+        devicesRegistered: { type: integer, minimum: 0 }
+        deviceUpdates: { type: integer, minimum: 0 }
+        healthOnline: { type: integer, minimum: 0 }
+        healthDegraded: { type: integer, minimum: 0 }
+        healthOffline: { type: integer, minimum: 0 }
+    ResourceCounts:
+      type: object
+      additionalProperties: false
+      required: [active, suspended, archived, unknown]
+      properties:
+        active: { type: integer, minimum: 0 }
+        suspended: { type: integer, minimum: 0 }
+        archived: { type: integer, minimum: 0 }
+        unknown: { type: integer, minimum: 0 }
+    HealthCounts:
+      type: object
+      additionalProperties: false
+      required: [online, degraded, offline, stale, unknown]
+      properties:
+        online: { type: integer, minimum: 0 }
+        degraded: { type: integer, minimum: 0 }
+        offline: { type: integer, minimum: 0 }
+        stale: { type: integer, minimum: 0 }
+        unknown: { type: integer, minimum: 0 }
+    BranchRow:
+      type: object
+      additionalProperties: false
+      required:
+        [branchId, branchName, status, devicesTotal, online, degraded, offline, stale, unknown]
+      properties:
+        branchId: { type: string, format: uuid }
+        branchName: { type: [string, 'null'] }
+        status: { type: string, enum: [active, suspended, archived] }
+        devicesTotal: { type: integer, minimum: 0 }
+        online: { type: integer, minimum: 0 }
+        degraded: { type: integer, minimum: 0 }
+        offline: { type: integer, minimum: 0 }
+        stale: { type: integer, minimum: 0 }
+        unknown: { type: integer, minimum: 0 }
+    OperationsReport:
+      type: object
+      additionalProperties: false
+      required: [scope, period, snapshot, daily, totals, projection]
+      properties:
+        scope:
+          type: object
+          additionalProperties: false
+          required: [scopeType, organizationId, branchId]
+          properties:
+            scopeType: { type: string, enum: [organization, branch] }
+            organizationId: { type: string, format: uuid }
+            branchId: { type: [string, 'null'], format: uuid }
+        period:
+          type: object
+          additionalProperties: false
+          required: [from, to, timezone, days]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+            timezone: { type: string, const: UTC }
+            days: { type: integer, minimum: 1, maximum: 366 }
+        snapshot:
+          type: object
+          additionalProperties: false
+          required: [organizations, branches, devices, branchBreakdown, branchBreakdownTruncated]
+          properties:
+            organizations: { $ref: '#/components/schemas/ResourceCounts' }
+            branches: { $ref: '#/components/schemas/ResourceCounts' }
+            devices:
+              type: object
+              additionalProperties: false
+              required: [total, active, suspended, retired, unknownLifecycle, health]
+              properties:
+                total: { type: integer, minimum: 0 }
+                active: { type: integer, minimum: 0 }
+                suspended: { type: integer, minimum: 0 }
+                retired: { type: integer, minimum: 0 }
+                unknownLifecycle: { type: integer, minimum: 0 }
+                health: { $ref: '#/components/schemas/HealthCounts' }
+            branchBreakdown:
+              type: array
+              maxItems: 500
+              items: { $ref: '#/components/schemas/BranchRow' }
+            branchBreakdownTruncated: { type: boolean }
+        daily:
+          type: array
+          minItems: 1
+          maxItems: 366
+          items: { $ref: '#/components/schemas/DailyMetric' }
+        totals:
+          type: object
+          additionalProperties: false
+          required:
+            [
+              branchesCreated,
+              branchStatusChanges,
+              devicesRegistered,
+              deviceUpdates,
+              healthOnline,
+              healthDegraded,
+              healthOffline,
+            ]
+          properties:
+            branchesCreated: { type: integer, minimum: 0 }
+            branchStatusChanges: { type: integer, minimum: 0 }
+            devicesRegistered: { type: integer, minimum: 0 }
+            deviceUpdates: { type: integer, minimum: 0 }
+            healthOnline: { type: integer, minimum: 0 }
+            healthDegraded: { type: integer, minimum: 0 }
+            healthOffline: { type: integer, minimum: 0 }
+        projection:
+          type: object
+          additionalProperties: false
+          required: [generationId, coverageStartedAt, lastEventAt, lastProcessedAt, asOf]
+          properties:
+            generationId: { type: string, format: uuid }
+            coverageStartedAt: { type: [string, 'null'], format: date-time }
+            lastEventAt: { type: [string, 'null'], format: date-time }
+            lastProcessedAt: { type: [string, 'null'], format: date-time }
+            asOf: { type: string, format: date-time }
+    ReportExport:
+      type: object
+      additionalProperties: false
+      required: [period, daily]
+      properties:
+        period:
+          type: object
+          additionalProperties: false
+          required: [from, to, timezone, days]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+            timezone: { type: string, const: UTC }
+            days: { type: integer, minimum: 1, maximum: 366 }
+        daily:
+          type: array
+          minItems: 1
+          maxItems: 366
+          items: { $ref: '#/components/schemas/DailyMetric' }

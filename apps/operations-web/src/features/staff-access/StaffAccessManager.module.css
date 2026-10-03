@@ -1,0 +1,521 @@
+.manager {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.managerHeader,
+.sectionHeading,
+.memberHeader,
+.invitationHeading,
+.overrideHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.managerHeader h2,
+.sectionHeading h3,
+.inviteFormPanel h3,
+.inlineForm h3,
+.overrideForm h3,
+.mfaPanel h3 {
+  margin: 4px 0 7px;
+  color: var(--ft-ink);
+  font-size: clamp(17px, 2.6vw, 22px);
+  line-height: 1.5;
+}
+
+.managerHeader > div:first-child {
+  max-width: 760px;
+}
+
+.managerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--ft-teal-dark);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.explainer,
+.invitationCard time,
+.memberIdentity span,
+.overrideCard p,
+.overrideCard small,
+.mfaExpiry {
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--ft-line);
+  padding-bottom: 12px;
+}
+
+.rosterLayout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.45fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.inviteFormPanel,
+.rosterSection,
+.scopedInvitations,
+.inbox,
+.mfaPanel {
+  min-width: 0;
+  padding: clamp(16px, 3vw, 24px);
+  box-shadow: none;
+}
+
+.rosterSection,
+.scopedInvitations {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--ft-line);
+  border-radius: 20px;
+  background: #fff;
+}
+
+.form,
+.inlineForm,
+.overrideForm,
+.memberControls {
+  display: grid;
+  gap: 12px;
+}
+
+.form {
+  margin-top: 16px;
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--ft-ink);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.7;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid #d9dce8;
+  border-radius: 12px;
+  padding: 9px 11px;
+  outline: none;
+  color: var(--ft-ink);
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.field textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible,
+.checkField input:focus-visible {
+  border-color: var(--ft-teal-dark);
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.field input:disabled,
+.field select:disabled,
+.field textarea:disabled {
+  color: var(--ft-muted);
+  background: #f6f7fa;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.5fr) repeat(2, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.memberList,
+.overrideList {
+  display: grid;
+  gap: 10px;
+}
+
+.memberCard,
+.invitationCard,
+.overrideCard {
+  min-width: 0;
+  padding: 15px;
+  box-shadow: none;
+}
+
+.memberHeader,
+.invitationHeading {
+  align-items: center;
+}
+
+.memberIdentity,
+.invitationHeading > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.memberIdentity strong,
+.invitationHeading strong {
+  overflow-wrap: anywhere;
+  color: var(--ft-ink);
+  font-size: 13px;
+}
+
+.memberIdentity span,
+.invitationHeading span {
+  overflow-wrap: anywhere;
+  color: var(--ft-muted);
+  font-size: 10px;
+}
+
+.statusBadge,
+.denyTag,
+.allowTag {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  border-radius: 999px;
+  padding: 5px 9px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.status_active,
+.allowTag {
+  color: #176a4a;
+  background: #e4f7ee;
+}
+
+.status_pending {
+  color: #865a13;
+  background: #fff3d8;
+}
+
+.status_suspended,
+.status_revoked,
+.denyTag {
+  color: #9b3444;
+  background: #fff0f2;
+}
+
+.memberDetails,
+.overridePanel,
+.revokeInvitation {
+  margin-top: 12px;
+  border-top: 1px solid var(--ft-line);
+  padding-top: 11px;
+}
+
+.memberDetails > summary,
+.overridePanel > summary,
+.revokeInvitation > summary {
+  width: fit-content;
+  color: var(--ft-teal-dark);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.memberDetails > summary:focus-visible,
+.overridePanel > summary:focus-visible,
+.revokeInvitation > summary:focus-visible {
+  border-radius: 4px;
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.memberControls {
+  margin-top: 14px;
+}
+
+.inlineForm,
+.overrideForm {
+  border: 1px solid var(--ft-line);
+  border-radius: 14px;
+  padding: 14px;
+  background: #fcfcfe;
+}
+
+.inlineForm h3,
+.overrideForm h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.overridePanel {
+  padding-bottom: 4px;
+}
+
+.overridePanel > .explainer {
+  margin-top: 10px;
+}
+
+.overrideList {
+  margin: 13px 0;
+}
+
+.overrideCard {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--ft-line);
+  border-radius: 13px;
+  background: #fff;
+}
+
+.overrideHeading {
+  align-items: center;
+  color: var(--ft-ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.revokeOverride {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 9px;
+  margin-top: 8px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.invitationCard {
+  display: grid;
+  gap: 9px;
+  border: 1px solid var(--ft-line);
+}
+
+.warning,
+.notice,
+.error {
+  margin: 0;
+  border-radius: 11px;
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+.warning {
+  border: 1px solid rgb(203 143 39 / 25%);
+  color: #805519;
+  background: #fff8eb;
+}
+
+.notice {
+  border: 1px solid rgb(34 126 87 / 20%);
+  color: #176a4a;
+  background: #effaf4;
+}
+
+.error {
+  border: 1px solid rgb(216 91 105 / 22%);
+  color: #a23c4b;
+  background: #fff5f6;
+}
+
+.errorBlock {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.empty,
+.emptyState {
+  color: var(--ft-muted);
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+.emptyState {
+  padding: 16px;
+  box-shadow: none;
+}
+
+.loadMore {
+  justify-self: center;
+}
+
+.mfaPanel {
+  display: grid;
+  gap: 12px;
+  border-color: rgb(120 80 223 / 20%);
+  background: #fcfbff;
+}
+
+.mfaPanel h3 {
+  font-size: 16px;
+}
+
+.secretCode {
+  display: block;
+  overflow-wrap: anywhere;
+  border: 1px dashed #a9a2cb;
+  border-radius: 12px;
+  padding: 14px;
+  color: #31265e;
+  background: #f7f4ff;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-align: center;
+  user-select: all;
+}
+
+.recoveryCodes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 22px;
+  margin: 0;
+  border: 1px solid var(--ft-line);
+  border-radius: 12px;
+  padding: 14px 30px;
+  color: var(--ft-ink);
+  background: #fff;
+}
+
+.recoveryCodes code {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.checkField {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--ft-ink);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.checkField input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--ft-teal-dark);
+}
+
+.inbox {
+  display: grid;
+  gap: 13px;
+  box-shadow: none;
+}
+
+.inbox .sectionHeading h2 {
+  margin: 4px 0;
+  color: var(--ft-ink);
+  font-size: 17px;
+}
+
+.loadingState {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  color: var(--ft-muted);
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 2px solid #dff5f2;
+  border-top-color: var(--ft-teal-dark);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 900px) {
+  .rosterLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .managerHeader,
+  .sectionHeading,
+  .memberHeader,
+  .invitationHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .managerActions {
+    justify-content: flex-start;
+  }
+
+  .filters,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .revokeOverride {
+    grid-template-columns: 1fr;
+  }
+
+  .recoveryCodes {
+    grid-template-columns: 1fr;
+  }
+
+  .tabs :global(.ft-button) {
+    flex: 1 1 100%;
+  }
+
+  .memberCard,
+  .invitationCard {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+}

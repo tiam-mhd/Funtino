@@ -1,0 +1,134 @@
+name: Quality gates
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Contracts, monitoring config, lint, types, tests and production builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level=high
+      - name: Validate Prometheus rules and Alertmanager configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          secret_dir="$(mktemp -d)"
+          trap 'rm -rf "$secret_dir"' EXIT
+          for name in api_gateway_metrics_token realtime_metrics_token device_integration_metrics_token wallet_metrics_token notifications_metrics_token identity_access_metrics_token organization_branch_metrics_token analytics_metrics_token; do
+            printf 'ci-only-placeholder-token\n' > "$secret_dir/$name"
+          done
+          printf 'https://alerts.example.invalid/ci-only\n' > "$secret_dir/operations_alert_webhook_url"
+          docker run --rm \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/infra/monitoring/prometheus,dst=/etc/prometheus,readonly" \
+            --mount "type=bind,src=$secret_dir,dst=/run/secrets,readonly" \
+            prom/prometheus:v3.14.0 promtool check config /etc/prometheus/prometheus.yml
+          docker run --rm \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/infra/monitoring/alertmanager/alertmanager.yml,dst=/etc/alertmanager/alertmanager.yml,readonly" \
+            --mount "type=bind,src=$secret_dir,dst=/run/secrets,readonly" \
+            prom/alertmanager:v0.34.1 amtool check-config /etc/alertmanager/alertmanager.yml
+      - run: pnpm quality:ci
+
+  migration-and-restore:
+    name: Repeated migrations and backup/restore on disposable PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: funtino
+          POSTGRES_PASSWORD: funtino
+          POSTGRES_DB: funtino
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U funtino -d funtino"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=public
+      DATABASE_MIGRATION_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=public
+      IDENTITY_ACCESS_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=identity_access
+      IDENTITY_ACCESS_MIGRATION_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=identity_access
+      ORGANIZATION_BRANCH_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=organization_branch
+      ORGANIZATION_BRANCH_MIGRATION_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=organization_branch
+      DEVICE_INTEGRATION_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=device_integration
+      DEVICE_INTEGRATION_MIGRATION_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=device_integration
+      WALLET_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=wallet
+      WALLET_MIGRATION_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=wallet
+      ANALYTICS_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=analytics_read_model
+      ANALYTICS_MIGRATION_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino?schema=analytics_read_model
+      PGPASSWORD: funtino
+      SOURCE_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino
+      RESTORE_DATABASE_URL: postgresql://funtino:funtino@127.0.0.1:5432/funtino_restore_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply every owner migration twice
+        shell: bash
+        run: |
+          set -euo pipefail
+          for service in \
+            @funtino/organization-branch \
+            @funtino/identity-access \
+            @funtino/device-integration \
+            @funtino/wallet \
+            @funtino/api-gateway \
+            @funtino/analytics-read-model
+          do
+            pnpm --filter "$service" prisma:migrate
+            pnpm --filter "$service" prisma:migrate
+          done
+      - name: Restore archive into an isolated empty database
+        run: |
+          createdb --template=template0 --host=127.0.0.1 --port=5432 --username=funtino funtino_restore_ci
+          pnpm database:restore-smoke
+
+  accessibility:
+    name: Browser accessibility audit (Edge)
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      EDGE_EXECUTABLE: C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm test:e2e:a11y

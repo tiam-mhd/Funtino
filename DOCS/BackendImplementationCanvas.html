@@ -1,0 +1,1143 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Funtino Backend Canvas</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0d1022;
+        --panel: rgba(26, 30, 58, 0.78);
+        --panel-strong: #1d2244;
+        --line: rgba(174, 185, 255, 0.18);
+        --text: #f4f5ff;
+        --muted: #aeb5d8;
+        --teal: #4ce0cf;
+        --purple: #9b7cff;
+        --orange: #ffb454;
+        --red: #ff718c;
+        --green: #72e6a3;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        min-height: 100%;
+        background: var(--bg);
+      }
+      body {
+        min-width: 320px;
+        margin: 0;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 85% 0%, rgba(112, 80, 255, 0.28), transparent 30rem),
+          radial-gradient(circle at 8% 50%, rgba(38, 212, 194, 0.13), transparent 28rem), var(--bg);
+        font-family: Tahoma, 'Segoe UI', sans-serif;
+        line-height: 1.8;
+      }
+
+      button {
+        font: inherit;
+      }
+      .shell {
+        width: min(1220px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 32px 0 64px;
+      }
+      .topbar {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 24px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+      }
+      .brand-mark {
+        display: grid;
+        width: 48px;
+        height: 48px;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 17px;
+        background: linear-gradient(135deg, var(--teal), var(--purple));
+        box-shadow: 0 10px 28px rgba(76, 224, 207, 0.2);
+        font-size: 24px;
+      }
+      .eyebrow {
+        color: var(--teal);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+      h1 {
+        margin-bottom: 5px;
+        font-size: clamp(24px, 4vw, 40px);
+        line-height: 1.3;
+        letter-spacing: -0.05em;
+      }
+      h2 {
+        margin-bottom: 5px;
+        font-size: 22px;
+        letter-spacing: -0.04em;
+      }
+      h3 {
+        margin-bottom: 4px;
+        font-size: 14px;
+      }
+      .subtitle {
+        max-width: 680px;
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid rgba(114, 230, 163, 0.28);
+        border-radius: 999px;
+        padding: 7px 12px;
+        color: var(--green);
+        background: rgba(114, 230, 163, 0.1);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .status i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: currentColor;
+        box-shadow: 0 0 0 5px rgba(114, 230, 163, 0.1);
+      }
+      .hero {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 30px;
+        padding: clamp(24px, 5vw, 48px);
+        background: linear-gradient(135deg, rgba(40, 47, 96, 0.85), rgba(19, 24, 49, 0.9));
+        box-shadow: var(--shadow);
+      }
+      .hero::after {
+        position: absolute;
+        left: -50px;
+        bottom: -100px;
+        width: 260px;
+        height: 260px;
+        border: 1px solid rgba(76, 224, 207, 0.25);
+        border-radius: 50%;
+        box-shadow:
+          0 0 0 30px rgba(76, 224, 207, 0.05),
+          0 0 0 60px rgba(76, 224, 207, 0.04);
+        content: '';
+      }
+      .hero-content {
+        position: relative;
+        z-index: 1;
+        max-width: 770px;
+      }
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 9px;
+        margin-top: 22px;
+      }
+      .btn {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 9px 14px;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.06);
+        cursor: pointer;
+        transition: 0.2s ease;
+      }
+      .btn:hover,
+      .btn.active {
+        border-color: rgba(76, 224, 207, 0.55);
+        background: rgba(76, 224, 207, 0.14);
+        transform: translateY(-1px);
+      }
+      .btn.primary {
+        border-color: transparent;
+        color: #071c20;
+        background: var(--teal);
+        font-weight: 700;
+      }
+      .btn.primary:hover {
+        background: #73f0e1;
+      }
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 16px 0;
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 20px;
+        background: var(--panel);
+        box-shadow: 0 15px 45px rgba(0, 0, 0, 0.12);
+        backdrop-filter: blur(18px);
+      }
+      .kpi strong {
+        display: block;
+        margin: 4px 0 3px;
+        font-size: 29px;
+        letter-spacing: -0.05em;
+      }
+      .kpi span {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
+        gap: 16px;
+        align-items: start;
+      }
+      .section {
+        display: none;
+      }
+      .section.active {
+        display: block;
+        animation: appear 0.25s ease both;
+      }
+      @keyframes appear {
+        from {
+          opacity: 0;
+          transform: translateY(5px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .section-title {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        margin: 25px 0 12px;
+      }
+      .section-title p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .canvas-wrap {
+        position: relative;
+        overflow: hidden;
+        min-height: 390px;
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        background: linear-gradient(145deg, rgba(22, 26, 57, 0.9), rgba(14, 17, 37, 0.92));
+      }
+      #architecture {
+        display: block;
+        width: 100%;
+        height: 390px;
+      }
+      .canvas-hint {
+        position: absolute;
+        right: 15px;
+        bottom: 12px;
+        color: var(--muted);
+        font-size: 10px;
+        pointer-events: none;
+      }
+      .service-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .service {
+        min-height: 146px;
+      }
+      .service-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .service-icon {
+        display: grid;
+        width: 35px;
+        height: 35px;
+        place-items: center;
+        border-radius: 12px;
+        color: #0c1422;
+        background: var(--teal);
+        font-size: 17px;
+      }
+      .service:nth-child(2) .service-icon {
+        background: var(--purple);
+      }
+      .service:nth-child(3) .service-icon {
+        background: var(--orange);
+      }
+      .service:nth-child(4) .service-icon {
+        background: var(--green);
+      }
+      .service:nth-child(5) .service-icon {
+        background: #7cc8ff;
+      }
+      .service:nth-child(6) .service-icon {
+        background: #ff87bd;
+      }
+      .tag {
+        display: inline-flex;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 2px 8px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .tag.done {
+        border-color: rgba(114, 230, 163, 0.3);
+        color: var(--green);
+        background: rgba(114, 230, 163, 0.08);
+      }
+      .tag.pending {
+        border-color: rgba(255, 180, 84, 0.35);
+        color: var(--orange);
+        background: rgba(255, 180, 84, 0.08);
+      }
+      .service p {
+        margin: 11px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.9;
+      }
+      .list {
+        display: grid;
+        gap: 8px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border: 1px solid rgba(174, 185, 255, 0.12);
+        border-radius: 14px;
+        padding: 11px 12px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+      .row > div {
+        min-width: 0;
+        flex: 1;
+      }
+      .row strong {
+        display: block;
+        font-size: 12px;
+      }
+      .row small {
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .check {
+        width: 19px;
+        height: 19px;
+        accent-color: var(--teal);
+        cursor: pointer;
+      }
+      .check:checked + div strong {
+        color: var(--muted);
+        text-decoration: line-through;
+      }
+      .progress {
+        overflow: hidden;
+        height: 8px;
+        border-radius: 99px;
+        background: rgba(255, 255, 255, 0.09);
+      }
+      .progress span {
+        display: block;
+        width: 72%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--teal), var(--purple));
+        transition: width 0.35s ease;
+      }
+      .metric-line {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .metric-line strong {
+        color: var(--text);
+      }
+      .callout {
+        border-right: 3px solid var(--orange);
+        border-radius: 12px;
+        padding: 12px 15px;
+        color: var(--muted);
+        background: rgba(255, 180, 84, 0.08);
+        font-size: 11px;
+      }
+      .callout strong {
+        color: var(--orange);
+      }
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+      .table th,
+      .table td {
+        border-bottom: 1px solid var(--line);
+        padding: 11px 7px;
+        text-align: right;
+        vertical-align: top;
+      }
+      .table th {
+        color: var(--muted);
+        font-weight: 400;
+      }
+      .table code {
+        direction: ltr;
+        display: inline-block;
+        color: #c8c3ff;
+        font-family: Consolas, monospace;
+        font-size: 10px;
+      }
+      .side-stack {
+        display: grid;
+        gap: 16px;
+      }
+      .side-stack .card {
+        position: sticky;
+        top: 16px;
+      }
+      .nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-top: 20px;
+      }
+      .nav button {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 11px;
+        color: var(--muted);
+        background: transparent;
+        cursor: pointer;
+      }
+      .nav button.active {
+        border-color: rgba(155, 124, 255, 0.55);
+        color: var(--text);
+        background: rgba(155, 124, 255, 0.16);
+      }
+      .footer {
+        margin-top: 28px;
+        color: var(--muted);
+        font-size: 10px;
+        text-align: center;
+      }
+      @media (max-width: 850px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+        .side-stack .card {
+          position: static;
+        }
+        .kpis {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 560px) {
+        .shell {
+          width: min(100% - 22px, 1220px);
+          padding-top: 18px;
+        }
+        .topbar {
+          display: block;
+        }
+        .status {
+          margin-top: 14px;
+        }
+        .service-grid {
+          grid-template-columns: 1fr;
+        }
+        .kpis {
+          gap: 8px;
+        }
+        .card {
+          padding: 15px;
+          border-radius: 16px;
+        }
+        .kpi strong {
+          font-size: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">✦</div>
+          <div>
+            <div class="eyebrow">FUNTINO / BACKEND DELIVERY CANVAS</div>
+            <h1>گزارش پیاده‌سازی بک‌اند</h1>
+            <p class="subtitle">
+              نمای اجرایی و قابل‌تعامل از چیزی که ساخته شد، تست شد و هنوز به قرارداد واقعی
+              providerها وابسته است.
+            </p>
+          </div>
+        </div>
+        <div class="status"><i></i> baseline آماده‌ی توسعه‌ی فاز بعد</div>
+      </header>
+
+      <section class="hero">
+        <div class="hero-content">
+          <div class="eyebrow">SENIOR ENGINEERING HANDOFF</div>
+          <h2>یک ستون فقرات واقعی برای Customer App و سرویس‌های اطراف آن</h2>
+          <p class="subtitle">
+            API Gateway، PostgreSQL/Prisma، Outbox، RabbitMQ، Wallet ledger، Realtime، Device
+            Integration و Notifications از یک قرارداد مشترک و قابل‌ردیابی استفاده می‌کنند.
+          </p>
+          <div class="hero-actions">
+            <button class="btn primary" data-tab="architecture">دیدن معماری</button>
+            <button class="btn" data-tab="deliveries">لیست تحویل‌ها</button>
+            <button class="btn" data-tab="next">ریسک‌ها و ادامه مسیر</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="kpis" aria-label="خلاصه تحویل">
+        <div class="card kpi">
+          <span class="eyebrow">HTTP routes</span><strong>۲۲</strong
+          ><span>نسخه‌ی `/api/v1` و health</span>
+        </div>
+        <div class="card kpi">
+          <span class="eyebrow">backend units</span><strong>۶</strong
+          ><span>API، realtime، worker و package</span>
+        </div>
+        <div class="card kpi">
+          <span class="eyebrow">tests</span><strong>۳/۳</strong><span>جریان‌های پایه موفق</span>
+        </div>
+        <div class="card kpi">
+          <span class="eyebrow">storage</span><strong>۲</strong
+          ><span>memory برای dev، PostgreSQL برای prod</span>
+        </div>
+      </section>
+
+      <nav class="nav" aria-label="بخش‌های گزارش">
+        <button class="active" data-tab="overview">خلاصه</button>
+        <button data-tab="architecture">معماری</button>
+        <button data-tab="deliveries">تحویل‌ها</button>
+        <button data-tab="validation">تست و اعتبارسنجی</button>
+        <button data-tab="next">ادامه و ریسک</button>
+      </nav>
+
+      <div class="layout">
+        <div>
+          <section class="section active" data-section="overview">
+            <div class="section-title">
+              <div>
+                <div class="eyebrow">WHAT CHANGED</div>
+                <h2>خلاصه‌ی اجرایی</h2>
+              </div>
+              <p>وضعیت واقعی سورس مرجع</p>
+            </div>
+            <div class="card">
+              <div class="metric-line">
+                <span>آمادگی baseline بک‌اند</span><strong id="progressLabel">۶۷٪</strong>
+              </div>
+              <div class="progress"><span id="mainProgress"></span></div>
+              <div class="list" style="margin-top: 16px">
+                <div class="row">
+                  <span class="tag done">done</span>
+                  <div>
+                    <strong>Customer identity slice</strong
+                    ><small>OTP/ParsGreen، session، profile، avatar، کارت و قانون شعبه</small>
+                  </div>
+                  <span aria-hidden="true">✓</span>
+                </div>
+                <div class="row">
+                  <span class="tag done">done</span>
+                  <div>
+                    <strong>Persistence boundary</strong
+                    ><small
+                      >Prisma schema، profile/avatar migration، outbox و append-only ledger</small
+                    >
+                  </div>
+                  <span aria-hidden="true">✓</span>
+                </div>
+                <div class="row">
+                  <span class="tag done">done</span>
+                  <div>
+                    <strong>Runtime contracts</strong
+                    ><small>OpenAPI، AsyncAPI، Zod envelope و correlation metadata</small>
+                  </div>
+                  <span aria-hidden="true">✓</span>
+                </div>
+                <div class="row">
+                  <span class="tag pending">pending</span>
+                  <div>
+                    <strong>External provider activation</strong
+                    ><small
+                      >Secret و تنظیمات حساب ParsGreen، پرداخت و قرارداد واقعی RFID هنوز باید در
+                      staging تأیید شوند</small
+                    >
+                  </div>
+                  <span aria-hidden="true">!</span>
+                </div>
+              </div>
+            </div>
+            <div class="section-title">
+              <div>
+                <div class="eyebrow">BOUNDARIES</div>
+                <h2>مرزهای سرویس</h2>
+              </div>
+            </div>
+            <div class="service-grid">
+              <article class="card service">
+                <div class="service-head">
+                  <span class="service-icon">⌘</span><span class="tag done">ready</span>
+                </div>
+                <h3>API Gateway</h3>
+                <p>تنها مرز عمومی؛ auth، DTO، authorization اولیه و projection مشتری.</p>
+              </article>
+              <article class="card service">
+                <div class="service-head">
+                  <span class="service-icon">☻</span><span class="tag done">ready</span>
+                </div>
+                <h3>Customer Identity</h3>
+                <p>OTP hash/expiry/attempt، session امن، تکمیل پروفایل و avatar خصوصی.</p>
+              </article>
+              <article class="card service">
+                <div class="service-head">
+                  <span class="service-icon">◈</span><span class="tag done">ready</span>
+                </div>
+                <h3>Realtime Gateway</h3>
+                <p>احراز session و رساندن event به room کاربر؛ query منبع حقیقت نیست.</p>
+              </article>
+              <article class="card service">
+                <div class="service-head">
+                  <span class="service-icon">⌁</span><span class="tag done">ready</span>
+                </div>
+                <h3>Device Integration</h3>
+                <p>HMAC، freshness، dedupe اولیه و تبدیل رخداد بیرونی به قرارداد داخلی.</p>
+              </article>
+              <article class="card service">
+                <div class="service-head">
+                  <span class="service-icon">◎</span><span class="tag done">ready</span>
+                </div>
+                <h3>Wallet Projection</h3>
+                <p>ledger idempotent، event credit و همگام‌سازی وضعیت کارت از event.</p>
+              </article>
+              <article class="card service">
+                <div class="service-head">
+                  <span class="service-icon">↗</span><span class="tag done">ready</span>
+                </div>
+                <h3>Notifications</h3>
+                <p>
+                  ParsGreen adapter آماده‌ی runtime config است؛ فعال‌سازی provider با Secret محیط
+                  انجام می‌شود.
+                </p>
+              </article>
+              <article class="card service">
+                <div class="service-head">
+                  <span class="service-icon">≋</span
+                  ><span class="tag pending">contract-needed</span>
+                </div>
+                <h3>Payment & Operations</h3>
+                <p>
+                  مدل کامل سفارش، refund و scope پنل‌ها بعد از تأیید provider و policy اجرا می‌شود.
+                </p>
+              </article>
+            </div>
+          </section>
+
+          <section class="section" data-section="architecture">
+            <div class="section-title">
+              <div>
+                <div class="eyebrow">EVENT-FIRST FLOW</div>
+                <h2>نقشه‌ی معماری</h2>
+              </div>
+              <p>روی گره‌ها حرکت کنید</p>
+            </div>
+            <div class="canvas-wrap">
+              <canvas id="architecture" aria-label="نقشه معماری بک‌اند"></canvas
+              ><span class="canvas-hint">برای دیدن توضیح، روی گره‌ها کلیک کنید</span>
+            </div>
+            <div class="card" id="nodeInfo" style="margin-top: 12px">
+              <div class="eyebrow">SELECTED NODE</div>
+              <h3>API Gateway</h3>
+              <p class="subtitle">مرز عمومی REST، احراز هویت و orchestration use caseها.</p>
+            </div>
+            <div class="section-title">
+              <div>
+                <div class="eyebrow">DURABLE FLOW</div>
+                <h2>جریان قابل اتکا</h2>
+              </div>
+            </div>
+            <div class="card">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>مرحله</th>
+                    <th>مالک</th>
+                    <th>قاعده</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>۱. command</td>
+                    <td><code>api-gateway</code></td>
+                    <td>اعتبارسنجی و authorization قبل از تغییر</td>
+                  </tr>
+                  <tr>
+                    <td>۲. transaction</td>
+                    <td><code>postgresql</code></td>
+                    <td>تغییر دامنه و Outbox در یک مرز تراکنش</td>
+                  </tr>
+                  <tr>
+                    <td>۳. publish</td>
+                    <td><code>rabbitmq</code></td>
+                    <td>Confirm Channel، retry محدود و DLQ</td>
+                  </tr>
+                  <tr>
+                    <td>۴. projection</td>
+                    <td><code>wallet/realtime</code></td>
+                    <td>idempotency و عدم اتکا به cache برای حقیقت مالی</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section" data-section="deliveries">
+            <div class="section-title">
+              <div>
+                <div class="eyebrow">DELIVERY MAP</div>
+                <h2>فایل‌ها و ماژول‌های کلیدی</h2>
+              </div>
+              <p>برای handoff قابل ردیابی</p>
+            </div>
+            <div class="card">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>مسیر</th>
+                    <th>وظیفه</th>
+                    <th>وضعیت</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><code>apps/api-gateway/src/application</code></td>
+                    <td>Auth، Customer، Wallet consumer و Outbox</td>
+                    <td><span class="tag done">implemented</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>apps/api-gateway/src/infrastructure/store</code></td>
+                    <td>Port مشترک و adapterهای memory/Prisma</td>
+                    <td><span class="tag done">implemented</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>apps/api-gateway/prisma</code></td>
+                    <td>schema، migration و append-only ledger guard</td>
+                    <td><span class="tag done">implemented</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>packages/event-contracts</code></td>
+                    <td>event envelope و payload validation</td>
+                    <td><span class="tag done">implemented</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>packages/backend-core</code></td>
+                    <td>RabbitMQ، DLQ، error mapping و correlation</td>
+                    <td><span class="tag done">implemented</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>apps/realtime-gateway</code></td>
+                    <td>Socket.IO و user room authorization</td>
+                    <td><span class="tag done">implemented</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>services/device-integration</code></td>
+                    <td>signed webhook adapter</td>
+                    <td><span class="tag done">implemented</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>services/notifications</code></td>
+                    <td>event consumer adapter</td>
+                    <td><span class="tag pending">provider pending</span></td>
+                  </tr>
+                  <tr>
+                    <td><code>contracts/openapi</code> و <code>contracts/asyncapi</code></td>
+                    <td>قرارداد versioned بیرونی</td>
+                    <td><span class="tag done">updated</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section" data-section="validation">
+            <div class="section-title">
+              <div>
+                <div class="eyebrow">QUALITY GATE</div>
+                <h2>تست‌ها و شواهد</h2>
+              </div>
+              <p>قابل تکرار از root workspace</p>
+            </div>
+            <div class="card">
+              <div class="list" id="checks">
+                <label class="row"
+                  ><input class="check" type="checkbox" checked />
+                  <div>
+                    <strong>Backend typecheck</strong
+                    ><small><code>corepack pnpm backend:typecheck</code> — ۶ پکیج موفق</small>
+                  </div>
+                  <span class="tag done">pass</span></label
+                >
+                <label class="row"
+                  ><input class="check" type="checkbox" checked />
+                  <div>
+                    <strong>Production build</strong
+                    ><small>API، realtime، device و notifications build شدند.</small>
+                  </div>
+                  <span class="tag done">pass</span></label
+                >
+                <label class="row"
+                  ><input class="check" type="checkbox" checked />
+                  <div>
+                    <strong>Core flow tests</strong
+                    ><small
+                      >OTP، profile، no-branch signup، card، mission claim و wallet
+                      idempotency.</small
+                    >
+                  </div>
+                  <span class="tag done">3/3</span></label
+                >
+                <label class="row"
+                  ><input class="check" type="checkbox" checked />
+                  <div>
+                    <strong>HTTP smoke test</strong
+                    ><small
+                      >health، OTP، cookie، profile، avatar، household، card و claim روی
+                      localhost.</small
+                    >
+                  </div>
+                  <span class="tag done">pass</span></label
+                >
+                <label class="row"
+                  ><input class="check" type="checkbox" />
+                  <div>
+                    <strong>Docker integration</strong
+                    ><small>به Docker Desktop Engine نیاز دارد؛ در این محیط اجرا نشد.</small>
+                  </div>
+                  <span class="tag pending">blocked by env</span></label
+                >
+                <label class="row"
+                  ><input class="check" type="checkbox" />
+                  <div>
+                    <strong>Runflare staging</strong
+                    ><small>پس از ثبت provider secrets و migration gate باید انجام شود.</small>
+                  </div>
+                  <span class="tag pending">next gate</span></label
+                >
+              </div>
+            </div>
+            <div class="callout" style="margin-top: 12px">
+              <strong>نکته‌ی ارشد:</strong> سبز بودن تست‌های local به معنی آماده‌بودن provider مالی
+              یا RFID برای production نیست؛ آن‌ها قرارداد و integration test مستقل می‌خواهند.
+            </div>
+          </section>
+
+          <section class="section" data-section="next">
+            <div class="section-title">
+              <div>
+                <div class="eyebrow">NEXT GATES</div>
+                <h2>ادامه‌ی منطقی و ریسک‌ها</h2>
+              </div>
+              <p>ترتیب پیشنهادی توسعه</p>
+            </div>
+            <div class="card">
+              <div class="list">
+                <div class="row">
+                  <span class="tag pending">G0</span>
+                  <div>
+                    <strong>قرارداد عملیاتی providerها</strong
+                    ><small>سازنده RFID، API، webhook، SMS، درگاه، refund و source of truth.</small>
+                  </div>
+                </div>
+                <div class="row">
+                  <span class="tag pending">G4</span>
+                  <div>
+                    <strong>Scope پنل‌ها</strong
+                    ><small
+                      >Membership، role، organization/branch policy، MFA مدیر و audit دسترسی.</small
+                    >
+                  </div>
+                </div>
+                <div class="row">
+                  <span class="tag pending">DB</span>
+                  <div>
+                    <strong>اجرای PostgreSQL/Rabbit در staging</strong
+                    ><small>migrate، restart، retry، DLQ، replay، backup و restore.</small>
+                  </div>
+                </div>
+                <div class="row">
+                  <span class="tag pending">RUN</span>
+                  <div>
+                    <strong>Sync به deployment repositories</strong
+                    ><small
+                      >snapshot مستقل هر سرویس، build command و Auto Pull متناظر Runflare.</small
+                    >
+                  </div>
+                </div>
+                <div class="row">
+                  <span class="tag pending">E2E</span>
+                  <div>
+                    <strong>Playwright و contract tests</strong
+                    ><small
+                      >ورود مشتری، کارت، stale state، realtime reconnect و authorization
+                      matrix.</small
+                    >
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="side-stack">
+          <div class="card">
+            <div class="eyebrow">RUN COMMANDS</div>
+            <h3>فرمان‌های اصلی</h3>
+            <div class="list">
+              <div class="row">
+                <div>
+                  <strong><code>corepack pnpm dev:api</code></strong
+                  ><small>API Gateway</small>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <strong><code>corepack pnpm backend:typecheck</code></strong
+                  ><small>تمام backend units</small>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <strong><code>corepack pnpm --filter @funtino/api-gateway test</code></strong
+                  ><small>جریان پایه</small>
+                </div>
+              </div>
+              <div class="row">
+                <div>
+                  <strong><code>docker compose -f infra/docker-compose.yml up -d</code></strong
+                  ><small>زیرساخت local</small>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="eyebrow">SOURCE RULE</div>
+            <h3>قانون فراموش‌نشدنی</h3>
+            <p class="subtitle">
+              تغییر عادی فقط در source monorepo انجام می‌شود. deployment repository خروجی snapshot
+              است؛ بعد از build/test، فقط سرویس اثرپذیرفته sync و push می‌شود.
+            </p>
+            <div class="tag done">AGENTS.md enforced</div>
+          </div>
+          <div class="card">
+            <div class="eyebrow">DOCUMENTATION</div>
+            <h3>مرجع کامل</h3>
+            <p class="subtitle">
+              جزئیات فنی و محدوده‌ی providerهای موکول‌شده در فایل BackendImplementation.md کنار همین
+              Canvas قرار دارد.
+            </p>
+            <button class="btn" onclick="window.open('BackendImplementation.md', '_blank')">
+              بازکردن مستندات
+            </button>
+          </div>
+        </aside>
+      </div>
+      <footer class="footer">
+        Funtino platform · backend handoff · local interactive report · 2026-09-27
+      </footer>
+    </main>
+
+    <script>
+      const tabs = [...document.querySelectorAll('[data-tab]')];
+      const sections = [...document.querySelectorAll('[data-section]')];
+      function activate(name) {
+        tabs.forEach((button) => button.classList.toggle('active', button.dataset.tab === name));
+        sections.forEach((section) =>
+          section.classList.toggle('active', section.dataset.section === name),
+        );
+        if (name === 'architecture') requestAnimationFrame(drawArchitecture);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      tabs.forEach((button) =>
+        button.addEventListener('click', () => activate(button.dataset.tab)),
+      );
+
+      const checks = [...document.querySelectorAll('#checks .check')];
+      const progress = document.querySelector('#mainProgress');
+      const progressLabel = document.querySelector('#progressLabel');
+      function updateProgress() {
+        const done = checks.filter((input) => input.checked).length;
+        const value = Math.round((done / checks.length) * 100);
+        progress.style.width = `${value}%`;
+        progressLabel.textContent = `${value}٪`;
+        localStorage.setItem(
+          'funtino-backend-canvas-checks',
+          JSON.stringify(checks.map((input) => input.checked)),
+        );
+      }
+      try {
+        const saved = JSON.parse(localStorage.getItem('funtino-backend-canvas-checks') || 'null');
+        if (Array.isArray(saved))
+          checks.forEach((input, index) => {
+            if (typeof saved[index] === 'boolean') input.checked = saved[index];
+          });
+      } catch (_) {}
+      checks.forEach((input) => input.addEventListener('change', updateProgress));
+      updateProgress();
+
+      const canvas = document.querySelector('#architecture');
+      const context = canvas.getContext('2d');
+      const nodes = [
+        {
+          id: 'web',
+          label: 'سه وب‌اپ',
+          x: 0.12,
+          y: 0.3,
+          color: '#7cc8ff',
+          text: 'customer، operations و system فقط از API Gateway استفاده می‌کنند.',
+        },
+        {
+          id: 'api',
+          label: 'API Gateway',
+          x: 0.36,
+          y: 0.3,
+          color: '#4ce0cf',
+          text: 'REST، session، DTO، authorization و use case orchestration.',
+        },
+        {
+          id: 'db',
+          label: 'PostgreSQL',
+          x: 0.65,
+          y: 0.18,
+          color: '#9b7cff',
+          text: 'منبع حقیقت operational و مالی؛ Prisma و migration versioned.',
+        },
+        {
+          id: 'mq',
+          label: 'RabbitMQ',
+          x: 0.65,
+          y: 0.52,
+          color: '#ffb454',
+          text: 'event exchange، confirm publish، queue و DLQ.',
+        },
+        {
+          id: 'workers',
+          label: 'Workers',
+          x: 0.88,
+          y: 0.35,
+          color: '#72e6a3',
+          text: 'wallet، realtime، device integration و notifications.',
+        },
+      ];
+      let hovered = null;
+      function drawArchitecture() {
+        const ratio = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * ratio;
+        canvas.height = rect.height * ratio;
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        context.clearRect(0, 0, rect.width, rect.height);
+        const points = nodes.map((node) => ({
+          ...node,
+          px: rect.width * node.x,
+          py: rect.height * node.y,
+        }));
+        const links = [
+          ['web', 'api'],
+          ['api', 'db'],
+          ['api', 'mq'],
+          ['mq', 'workers'],
+          ['db', 'workers'],
+        ];
+        context.lineWidth = 1.5;
+        links.forEach(([from, to]) => {
+          const a = points.find((node) => node.id === from);
+          const b = points.find((node) => node.id === to);
+          context.strokeStyle = 'rgba(174,185,255,.28)';
+          context.setLineDash([5, 7]);
+          context.beginPath();
+          context.moveTo(a.px, a.py);
+          context.lineTo(b.px, b.py);
+          context.stroke();
+        });
+        context.setLineDash([]);
+        points.forEach((node) => {
+          const active = hovered === node.id;
+          context.shadowBlur = active ? 22 : 12;
+          context.shadowColor = node.color;
+          context.fillStyle = active ? node.color : 'rgba(29,34,68,.96)';
+          context.strokeStyle = node.color;
+          context.lineWidth = active ? 2 : 1;
+          context.beginPath();
+          context.roundRect(node.px - 72, node.py - 28, 144, 56, 15);
+          context.fill();
+          context.stroke();
+          context.shadowBlur = 0;
+          context.fillStyle = active ? '#0d1022' : '#f4f5ff';
+          context.font = '700 12px Tahoma';
+          context.textAlign = 'center';
+          context.textBaseline = 'middle';
+          context.fillText(node.label, node.px, node.py);
+        });
+      }
+      function nodeAt(event) {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        return nodes.find(
+          (node) =>
+            Math.abs(x - rect.width * node.x) < 80 && Math.abs(y - rect.height * node.y) < 38,
+        );
+      }
+      canvas.addEventListener('mousemove', (event) => {
+        hovered = nodeAt(event)?.id || null;
+        canvas.style.cursor = hovered ? 'pointer' : 'default';
+        drawArchitecture();
+      });
+      canvas.addEventListener('mouseleave', () => {
+        hovered = null;
+        drawArchitecture();
+      });
+      canvas.addEventListener('click', (event) => {
+        const node = nodeAt(event);
+        if (!node) return;
+        document.querySelector('#nodeInfo h3').textContent = node.label;
+        document.querySelector('#nodeInfo p').textContent = node.text;
+      });
+      window.addEventListener('resize', drawArchitecture);
+      drawArchitecture();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,535 @@
+openapi: 3.1.0
+info:
+  title: Funtino Wallet Owner API
+  version: 0.1.0
+  description: Private API for branch-scoped physical-card inventory and audited household assignment. Financial balances, charging, spend and ledger operations are not exposed by this contract.
+servers:
+  - url: http://wallet:4070
+    description: Private service network only
+security:
+  - WalletServiceToken: []
+    ServiceIdentity: []
+paths:
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/cards:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/BranchId'
+    get:
+      operationId: listBranchCardInventory
+      summary: List branch card inventory
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/CardInventoryStatus'
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+      responses:
+        '200':
+          description: Inventory page. Physical identifiers are always masked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardInventoryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    post:
+      operationId: registerBranchCard
+      summary: Register a physical card in branch inventory
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterCardRequest'
+      responses:
+        '201':
+          description: Card registered; provider verification remains unknown until confirmed by an approved adapter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardInventory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/cards/{cardId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/BranchId'
+      - $ref: '#/components/parameters/CardId'
+    get:
+      operationId: getBranchCardInventoryItem
+      summary: Read one card inventory item within its organization and branch
+      responses:
+        '200':
+          description: Card inventory item. Physical identifiers are always masked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardInventory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: changeBranchCardInventoryStatus
+      summary: Change an inventory status with optimistic concurrency
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[1-9][0-9]*$'
+          description: Current card inventory version returned by Wallet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeCardStatusRequest'
+      responses:
+        '200':
+          description: Updated inventory item.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardInventory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/cards/{cardId}/assignments:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/BranchId'
+      - $ref: '#/components/parameters/CardId'
+    post:
+      operationId: assignCardToHouseholdAtBranch
+      summary: Assign one verified in-stock card to one active household at its fixed branch
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignCardRequest' }
+      responses:
+        '201':
+          description: Active household/branch assignment created atomically.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardAssignment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/card-assignments:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/BranchId'
+    get:
+      operationId: listBranchCardAssignments
+      summary: List active household card assignments for a branch
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string, format: uuid }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200':
+          description: Assignment summaries. Household IDs are opaque; no member or financial data is returned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardAssignmentPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/households/{householdId}/card-assignments:
+    get:
+      operationId: listHouseholdCardAssignments
+      summary: List active card assignments for a household
+      parameters:
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          schema: { type: string, format: uuid }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200':
+          description: Current active assignment page only; monetary balances and unverified device activity are excluded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardAssignmentPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/card-assignments/{assignmentId}/transfer:
+    post:
+      operationId: transferCardAssignmentWithinBranch
+      summary: Atomically end an assignment and assign its card to another household in the same branch
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - name: assignmentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransferCardRequest' }
+      responses:
+        '200':
+          description: Assignment transferred with immutable history for both households.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardAssignment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/assignments/{assignmentId}:
+    get:
+      operationId: getActiveCardAssignment
+      summary: Read one active assignment for a trusted Gateway authorization decision
+      parameters:
+        - name: assignmentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Active assignment summary; never includes the physical card identifier.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardAssignment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/card-assignments/{assignmentId}/cancel:
+    post:
+      operationId: cancelCardAssignment
+      summary: Cancel an active assignment with a reason
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - name: assignmentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CancelCardRequest' }
+      responses:
+        '200':
+          { description: Assignment ended; card remains unavailable unless verified and eligible. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+components:
+  securitySchemes:
+    WalletServiceToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+    ServiceIdentity:
+      type: apiKey
+      in: header
+      name: x-funtino-service-id
+  parameters:
+    OrganizationId:
+      name: organizationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BranchId:
+      name: branchId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CardId:
+      name: cardId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ActorUserId:
+      name: x-funtino-actor-user-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CorrelationId:
+      name: x-correlation-id
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    CardInventoryStatus:
+      type: string
+      enum: [in_stock, assigned, blocked, retired]
+    CardManualStatusTarget:
+      type: string
+      enum: [in_stock, blocked, retired]
+    CardVerificationStatus:
+      type: string
+      enum: [unknown, verified, rejected]
+    RegisterCardRequest:
+      type: object
+      additionalProperties: false
+      required: [externalCardId, reason]
+      properties:
+        externalCardId:
+          type: string
+          minLength: 1
+          maxLength: 160
+          writeOnly: true
+          description: Private physical identifier; never returned in API responses, events or audit snapshots.
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    ChangeCardStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status:
+          $ref: '#/components/schemas/CardManualStatusTarget'
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    CardInventory:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          organizationId,
+          branchId,
+          maskedIdentifier,
+          status,
+          verificationStatus,
+          version,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        organizationId:
+          type: string
+          format: uuid
+        branchId:
+          type: string
+          format: uuid
+        maskedIdentifier:
+          type: string
+          description: Fixed mask; at most the final four characters are exposed.
+        status:
+          $ref: '#/components/schemas/CardInventoryStatus'
+        verificationStatus:
+          $ref: '#/components/schemas/CardVerificationStatus'
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CardInventoryPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardInventory'
+        nextCursor:
+          type: [string, 'null']
+          format: uuid
+    AssignCardRequest:
+      type: object
+      additionalProperties: false
+      required: [householdId, reason]
+      properties:
+        householdId:
+          {
+            type: string,
+            format: uuid,
+            description: Opaque ID validated by Customer & Household owner.,
+          }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    TransferCardRequest:
+      type: object
+      additionalProperties: false
+      required: [householdId, reason]
+      properties:
+        householdId:
+          {
+            type: string,
+            format: uuid,
+            description: New household in the assignment's existing branch.,
+          }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    CancelCardRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    CardAssignment:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          cardId,
+          organizationId,
+          branchId,
+          householdId,
+          maskedIdentifier,
+          status,
+          verificationStatus,
+          assignedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        cardId: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        maskedIdentifier: { type: string, maxLength: 32 }
+        status: { $ref: '#/components/schemas/CardInventoryStatus' }
+        verificationStatus: { $ref: '#/components/schemas/CardVerificationStatus' }
+        assignedAt: { type: string, format: date-time }
+    CardAssignmentPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CardAssignment' } }
+        nextCursor: { type: [string, 'null'], format: uuid }
+    CustomerCardAssignment:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          cardId,
+          organizationId,
+          branchId,
+          householdId,
+          maskedIdentifier,
+          cardStatus,
+          verificationStatus,
+          assignmentStatus,
+          assignedAt,
+          freshness,
+          lastDeviceEventAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        cardId: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        maskedIdentifier: { type: string, maxLength: 32 }
+        cardStatus: { $ref: '#/components/schemas/CardInventoryStatus' }
+        verificationStatus: { $ref: '#/components/schemas/CardVerificationStatus' }
+        assignmentStatus: { type: string, enum: [active] }
+        assignedAt: { type: string, format: date-time }
+        freshness: { type: string, enum: [unknown] }
+        lastDeviceEventAt: { type: 'null' }
+    CustomerCardAssignmentPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CustomerCardAssignment' } }
+  responses:
+    BadRequest:
+      description: Request validation failed.
+    Unauthorized:
+      description: Internal service identity is missing or invalid.
+    NotFound:
+      description: Card is not present in the requested organization and branch.
+    Conflict:
+      description: Identifier or idempotency conflict, stale version, or invalid lifecycle transition.
+    DependencyUnavailable:
+      description: Wallet database or Organization & Branch validation is unavailable.

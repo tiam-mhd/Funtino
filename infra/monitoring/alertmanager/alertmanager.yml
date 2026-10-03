@@ -1,0 +1,16 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: funtino-operations-webhook
+  group_by: [alertname, service, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: funtino-operations-webhook
+    webhook_configs:
+      - url_file: /run/secrets/operations_alert_webhook_url
+        send_resolved: true
+        max_alerts: 50

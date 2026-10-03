@@ -1,0 +1,205 @@
+openapi: 3.1.0
+info:
+  title: Funtino Customer & Household Owner API
+  version: 0.1.0
+  description: Private owner API for customer households, access grants and members. User IDs are opaque Identity references; no other service database is read.
+servers:
+  - url: http://customer-household:4080
+    description: Private service network only
+security:
+  - CustomerHouseholdGatewayToken: []
+    ServiceIdentity: []
+paths:
+  /internal/v1/households:
+    post:
+      operationId: createCustomerHousehold
+      summary: Create a household for the authenticated customer
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [ownerUserId, name]
+              properties:
+                ownerUserId: { type: string, format: uuid }
+                name: { type: string, minLength: 2, maxLength: 80 }
+      responses:
+        '201':
+          description: Household and owner access created atomically.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Household' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/users/{userId}/households:
+    get:
+      operationId: listCustomerHouseholdsForUser
+      summary: List households the specified customer is authorized to access
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Household summaries and active member summaries; no unrelated household is returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/HouseholdWithMembers' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/households/{householdId}/validation:
+    get:
+      operationId: validateActiveHouseholdForWallet
+      summary: Verify household eligibility before Wallet creates an allocation
+      security:
+        - CustomerHouseholdWalletToken: []
+          ServiceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/HouseholdId'
+      responses:
+        '200':
+          description: Current owner status and version. Wallet must fail closed on any other response.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HouseholdValidation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/households/{householdId}/members:
+    post:
+      operationId: addCustomerHouseholdMember
+      summary: Add a member to a household managed by the authenticated owner
+      parameters:
+        - $ref: '#/components/parameters/HouseholdId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [displayName, relationship]
+              properties:
+                displayName: { type: string, minLength: 2, maxLength: 80 }
+                relationship: { type: string, minLength: 2, maxLength: 40 }
+                birthDate: { type: [string, 'null'], format: date }
+                isDependent: { type: boolean, default: true }
+      responses:
+        '201':
+          description: Member created and audited; event contains identifiers only.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HouseholdMember' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+components:
+  securitySchemes:
+    CustomerHouseholdGatewayToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+    CustomerHouseholdWalletToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+    ServiceIdentity:
+      type: apiKey
+      in: header
+      name: x-funtino-service-id
+  parameters:
+    HouseholdId:
+      name: householdId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ActorUserId:
+      name: x-funtino-actor-user-id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    CorrelationId:
+      name: x-correlation-id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    HouseholdStatus:
+      type: string
+      enum: [active, suspended, archived]
+    Household:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, version, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 2, maxLength: 80 }
+        status: { $ref: '#/components/schemas/HouseholdStatus' }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+    HouseholdMember:
+      type: object
+      additionalProperties: false
+      required:
+        [id, householdId, displayName, relationship, status, isDependent, version, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        displayName: { type: string, minLength: 2, maxLength: 80 }
+        relationship: { type: string, minLength: 2, maxLength: 40 }
+        birthDate: { type: [string, 'null'], format: date }
+        status: { type: string, enum: [active, archived] }
+        isDependent: { type: boolean }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+    HouseholdWithMembers:
+      allOf:
+        - $ref: '#/components/schemas/Household'
+        - type: object
+          required: [members]
+          properties:
+            members:
+              type: array
+              items: { $ref: '#/components/schemas/HouseholdMember' }
+    HouseholdValidation:
+      type: object
+      additionalProperties: false
+      required: [householdId, status, version, eligibleForCard]
+      properties:
+        householdId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/HouseholdStatus' }
+        version: { type: integer, minimum: 1 }
+        eligibleForCard: { type: boolean }
+  responses:
+    BadRequest: { description: Request validation failed. }
+    Unauthorized: { description: Internal service identity is missing or invalid. }
+    NotFound: { description: Household does not exist. }
+    Conflict: { description: Idempotency key conflict or household state conflict. }
+    DependencyUnavailable: { description: Household owner database is unavailable. }

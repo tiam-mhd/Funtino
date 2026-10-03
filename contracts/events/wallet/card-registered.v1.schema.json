@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/wallet/card-registered.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "wallet.card-registered.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["cardId", "status", "verificationStatus", "version"],
+          "properties": {
+            "cardId": { "type": "string", "format": "uuid" },
+            "status": { "const": "in_stock" },
+            "verificationStatus": { "const": "unknown" },
+            "version": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

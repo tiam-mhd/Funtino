@@ -1,0 +1,137 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "../generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("ORGANIZATION_BRANCH_DATABASE_URL")
+  directUrl = env("ORGANIZATION_BRANCH_MIGRATION_DATABASE_URL")
+  schemas   = ["organization_branch"]
+}
+
+enum ResourceStatus {
+  active
+  suspended
+  archived
+
+  @@map("resource_status")
+  @@schema("organization_branch")
+}
+
+model Organization {
+  id                   String         @id @default(uuid()) @db.Uuid
+  name                 String         @db.VarChar(160)
+  slug                 String         @unique @db.VarChar(80)
+  timezone             String         @default("Asia/Tehran") @db.VarChar(64)
+  status               ResourceStatus @default(active)
+  version              Int            @default(1)
+  legacyCreatedAtLocal String?        @map("legacy_created_at_local") @db.VarChar(32)
+  legacyUpdatedAtLocal String?        @map("legacy_updated_at_local") @db.VarChar(32)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  branches             Branch[]
+
+  @@index([status, name])
+  @@map("organizations")
+  @@schema("organization_branch")
+}
+
+model Branch {
+  id                   String         @id @default(uuid()) @db.Uuid
+  organizationId       String         @map("organization_id") @db.Uuid
+  name                 String         @db.VarChar(160)
+  slug                 String         @db.VarChar(80)
+  address              String         @db.VarChar(500)
+  city                 String         @db.VarChar(120)
+  timezone             String         @default("Asia/Tehran") @db.VarChar(64)
+  status               ResourceStatus @default(active)
+  openingHours         Json           @map("opening_hours")
+  version              Int            @default(1)
+  legacyCreatedAtLocal String?        @map("legacy_created_at_local") @db.VarChar(32)
+  legacyUpdatedAtLocal String?        @map("legacy_updated_at_local") @db.VarChar(32)
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+  organization         Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, id])
+  @@index([organizationId, status, name])
+  @@index([status, id])
+  @@map("branches")
+  @@schema("organization_branch")
+}
+
+model AuditLog {
+  id             String   @id @default(uuid()) @db.Uuid
+  actorUserId    String   @map("actor_user_id") @db.Uuid
+  callerService  String   @map("caller_service") @db.VarChar(80)
+  action         String   @db.VarChar(120)
+  resourceType   String   @map("resource_type") @db.VarChar(40)
+  resourceId     String   @map("resource_id") @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  branchId       String?  @map("branch_id") @db.Uuid
+  correlationId  String   @map("correlation_id") @db.Uuid
+  reason         String   @db.VarChar(500)
+  before         Json?
+  after          Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([resourceType, resourceId, createdAt])
+  @@index([organizationId, branchId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("audit_logs")
+  @@schema("organization_branch")
+}
+
+model IdempotencyCommand {
+  callerService String   @map("caller_service") @db.VarChar(80)
+  key           String   @db.Uuid
+  requestHash   String   @map("request_hash") @db.Char(64)
+  response      Json
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([callerService, key])
+  @@index([createdAt])
+  @@map("idempotency_commands")
+  @@schema("organization_branch")
+}
+
+model OutboxEvent {
+  id             String    @id @db.Uuid
+  eventType      String    @map("event_type") @db.VarChar(160)
+  aggregateId    String    @map("aggregate_id") @db.Uuid
+  envelope       Json
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  availableAt    DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  attempts       Int       @default(0)
+  leaseToken     String?   @map("lease_token") @db.Uuid
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz(6)
+  deadLetteredAt DateTime? @map("dead_lettered_at") @db.Timestamptz(6)
+  lastErrorCode  String?   @map("last_error_code") @db.VarChar(80)
+
+  @@index([publishedAt, deadLetteredAt, availableAt, createdAt])
+  @@map("outbox_events")
+  @@schema("organization_branch")
+}
+
+model BackfillRun {
+  id                    String    @id @db.Uuid
+  sourceSystem          String    @map("source_system") @db.VarChar(80)
+  sourceHash            String    @map("source_hash") @db.Char(64)
+  status                String    @db.VarChar(20)
+  organizations         Int       @default(0)
+  branches              Int       @default(0)
+  insertedOrganizations Int       @default(0) @map("inserted_organizations")
+  insertedBranches      Int       @default(0) @map("inserted_branches")
+  conflictCount         Int       @default(0) @map("conflict_count")
+  startedAt             DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt           DateTime? @map("completed_at") @db.Timestamptz(6)
+  summary               Json?
+
+  @@unique([sourceSystem, sourceHash])
+  @@map("backfill_runs")
+  @@schema("organization_branch")
+}

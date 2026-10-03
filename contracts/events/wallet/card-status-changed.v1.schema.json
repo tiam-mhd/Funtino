@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/wallet/card-status-changed.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "wallet.card-status-changed.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["cardId", "previousStatus", "status", "version"],
+          "oneOf": [
+            {
+              "properties": {
+                "previousStatus": { "const": "in_stock" },
+                "status": { "enum": ["assigned", "blocked", "retired"] }
+              }
+            },
+            {
+              "properties": {
+                "previousStatus": { "const": "assigned" },
+                "status": { "enum": ["in_stock", "blocked", "retired"] }
+              }
+            },
+            {
+              "properties": {
+                "previousStatus": { "const": "blocked" },
+                "status": { "enum": ["in_stock", "retired"] }
+              }
+            }
+          ],
+          "properties": {
+            "cardId": { "type": "string", "format": "uuid" },
+            "previousStatus": { "enum": ["in_stock", "assigned", "blocked", "retired"] },
+            "status": { "enum": ["in_stock", "assigned", "blocked", "retired"] },
+            "version": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

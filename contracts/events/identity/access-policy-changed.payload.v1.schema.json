@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/identity/access-policy-changed.payload.v1.json",
+  "title": "Identity access policy changed payload v1",
+  "type": "object",
+  "required": ["auditId", "policyVersion", "changeType", "targetType", "targetId"],
+  "properties": {
+    "auditId": { "type": "string", "format": "uuid" },
+    "policyVersion": { "type": "integer", "minimum": 1 },
+    "changeType": {
+      "enum": [
+        "role.created",
+        "role.updated",
+        "role.disabled",
+        "membership.invited",
+        "membership.activated",
+        "membership.role_changed",
+        "membership.suspended",
+        "membership.revoked",
+        "membership.invitation_expired",
+        "permission_override.granted",
+        "permission_override.revoked"
+      ]
+    },
+    "targetType": { "enum": ["role", "membership", "permission_override"] },
+    "targetId": { "type": "string", "format": "uuid" }
+  },
+  "additionalProperties": false
+}

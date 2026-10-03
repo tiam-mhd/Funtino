@@ -1,0 +1,6 @@
+[
+  {
+    "targets": ["host.docker.internal:4070"],
+    "labels": { "__scheme__": "http", "service": "wallet", "environment": "local" }
+  }
+]

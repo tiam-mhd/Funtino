@@ -1,0 +1,2 @@
+export const MFA_STEP_UP_TTL_SECONDS = 5 * 60;
+export const MFA_STEP_UP_TTL_MS = MFA_STEP_UP_TTL_SECONDS * 1000;

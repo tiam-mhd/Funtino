@@ -1,0 +1,147 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "../generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DEVICE_INTEGRATION_DATABASE_URL")
+  directUrl = env("DEVICE_INTEGRATION_MIGRATION_DATABASE_URL")
+  schemas   = ["device_integration"]
+}
+
+enum DeviceType {
+  rfid_reader
+  terminal
+  access_gate
+  other
+
+  @@map("device_type")
+  @@schema("device_integration")
+}
+
+enum DeviceStatus {
+  active
+  suspended
+  retired
+
+  @@map("device_status")
+  @@schema("device_integration")
+}
+
+enum ReportedHealthState {
+  online
+  degraded
+  offline
+
+  @@map("reported_health_state")
+  @@schema("device_integration")
+}
+
+model Device {
+  id                  String              @id @default(uuid()) @db.Uuid
+  organizationId      String              @map("organization_id") @db.Uuid
+  branchId            String              @map("branch_id") @db.Uuid
+  adapterKey          String              @map("adapter_key") @db.VarChar(60)
+  externalDeviceId    String              @map("external_device_id") @db.VarChar(160)
+  displayName         String              @map("display_name") @db.VarChar(120)
+  deviceType          DeviceType          @map("device_type")
+  status              DeviceStatus        @default(active)
+  latestReportedState ReportedHealthState? @map("latest_reported_state")
+  latestObservedAt    DateTime?           @map("latest_observed_at") @db.Timestamptz(6)
+  version             Int                 @default(1)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  healthObservations  DeviceHealthObservation[]
+
+  @@unique([organizationId, adapterKey, externalDeviceId], map: "devices_org_adapter_external_id_key")
+  @@index([organizationId, branchId, id], map: "devices_org_branch_id_idx")
+  @@index([organizationId, branchId, status, id], map: "devices_org_branch_status_id_idx")
+  @@map("devices")
+  @@schema("device_integration")
+}
+
+model DeviceHealthObservation {
+  id                    String              @id @db.Uuid
+  deviceId              String              @map("device_id") @db.Uuid
+  externalObservationId String              @map("external_observation_id") @db.VarChar(160)
+  requestHash           String              @map("request_hash") @db.Char(64)
+  reportedState         ReportedHealthState @map("reported_state")
+  observedAt            DateTime            @map("observed_at") @db.Timestamptz(6)
+  receivedAt            DateTime            @default(now()) @map("received_at") @db.Timestamptz(6)
+  correlationId         String              @map("correlation_id") @db.Uuid
+  appliedAsLatest       Boolean             @map("applied_as_latest")
+  device                Device              @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+
+  @@unique([deviceId, externalObservationId], map: "device_health_observations_device_external_id_key")
+  @@index([deviceId, observedAt, id], map: "device_health_observations_device_observed_idx")
+  @@map("device_health_observations")
+  @@schema("device_integration")
+}
+
+model DeviceTransactionImport {
+  externalEventId String   @id @map("external_event_id") @db.VarChar(160)
+  transactionId   String   @unique(map: "device_transaction_imports_transaction_id_key") @map("transaction_id") @db.Uuid
+  requestHash     String   @map("request_hash") @db.Char(64)
+  organizationId  String   @map("organization_id") @db.Uuid
+  branchId        String   @map("branch_id") @db.Uuid
+  receivedAt      DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@index([organizationId, branchId, receivedAt], map: "device_transaction_imports_scope_received_idx")
+  @@map("device_transaction_imports")
+  @@schema("device_integration")
+}
+
+model DeviceAuditLog {
+  id             String   @id @db.Uuid
+  actorUserId    String   @map("actor_user_id") @db.Uuid
+  callerService  String   @map("caller_service") @db.VarChar(80)
+  action         String   @db.VarChar(120)
+  deviceId       String   @map("device_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  branchId       String   @map("branch_id") @db.Uuid
+  correlationId String   @map("correlation_id") @db.Uuid
+  reason         String   @db.VarChar(500)
+  before         Json?
+  after          Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([deviceId, createdAt], map: "device_audit_logs_device_created_idx")
+  @@index([organizationId, branchId, createdAt], map: "device_audit_logs_scope_created_idx")
+  @@index([actorUserId, createdAt], map: "device_audit_logs_actor_created_idx")
+  @@map("device_audit_logs")
+  @@schema("device_integration")
+}
+
+model IdempotencyCommand {
+  callerService String   @map("caller_service") @db.VarChar(80)
+  key           String   @db.Uuid
+  requestHash   String   @map("request_hash") @db.Char(64)
+  response      Json
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([callerService, key])
+  @@index([createdAt], map: "idempotency_commands_created_idx")
+  @@map("idempotency_commands")
+  @@schema("device_integration")
+}
+
+model OutboxEvent {
+  id             String    @id @db.Uuid
+  eventType      String    @map("event_type") @db.VarChar(160)
+  aggregateId    String    @map("aggregate_id") @db.Uuid
+  envelope       Json
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  availableAt    DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  attempts       Int       @default(0)
+  leaseToken     String?   @map("lease_token") @db.Uuid
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz(6)
+  deadLetteredAt DateTime? @map("dead_lettered_at") @db.Timestamptz(6)
+  lastErrorCode  String?   @map("last_error_code") @db.VarChar(80)
+
+  @@index([publishedAt, deadLetteredAt, availableAt, createdAt], map: "outbox_events_delivery_idx")
+  @@map("outbox_events")
+  @@schema("device_integration")
+}

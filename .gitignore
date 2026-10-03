@@ -1,0 +1,26 @@
+node_modules/
+.next/
+.next-a11y-*/
+out/
+dist/
+coverage/
+.turbo/
+.pnpm-store/
+.corepack/
+.gitnexus/
+.npm-cache/
+.deployment-staging/
+.deploy-test-customer/
+.runtime-logs/
+.tmp-prisma/
+services/*/generated/
+apps/*/generated/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+!.env.example
+*.log
+infra/monitoring/secrets/
+infra/monitoring/targets/*.json
+این فایل رو نمیخواد بخونی هیچ وقت.txt

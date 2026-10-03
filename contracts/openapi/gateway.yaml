@@ -1,0 +1,3889 @@
+openapi: 3.1.0
+info:
+  title: Funtino API Gateway
+  version: 0.1.0
+  description: >-
+    Public REST contract for customer, operations and system web apps. Operations marked
+    x-funtino-availability: implemented are live; planned operations are not callable yet.
+servers:
+  - url: http://localhost:4000
+security:
+  - sessionCookie: []
+paths:
+  /health/live:
+    get:
+      operationId: healthLive
+      security: []
+      responses:
+        '200':
+          description: Service is alive.
+  /health/ready:
+    get:
+      operationId: healthReady
+      security: []
+      responses:
+        '200':
+          description: Service readiness.
+  /api/v1/auth/otp/request:
+    post:
+      operationId: requestOtp
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpRequest'
+      responses:
+        '200':
+          description: OTP challenge created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, data, meta]
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  data:
+                    $ref: '#/components/schemas/OtpChallengeResponse'
+                  meta:
+                    $ref: '#/components/schemas/ResponseMeta'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /api/v1/auth/otp/verify:
+    post:
+      operationId: verifyOtp
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OtpVerify'
+      responses:
+        '200':
+          description: Session cookie is set. Global system administrators receive an MFA-pending session and must complete TOTP/recovery or enrollment before any application data is available.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OtpVerifySuccess' }
+        '503':
+          description: IAM could not classify the authenticated identity; no session is issued.
+  /api/v1/auth/me:
+    get:
+      operationId: getMe
+      responses:
+        '200':
+          description: Current user.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      responses:
+        '200':
+          description: Session revoked and cookie cleared.
+  /api/v1/operations/mfa/status:
+    get:
+      x-funtino-availability: implemented
+      operationId: getCurrentStaffMfaStatus
+      responses:
+        '200':
+          description: MFA status for the authenticated staff account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaStatusSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/v1/operations/mfa/enrollment/start:
+    post:
+      x-funtino-availability: implemented
+      operationId: startCurrentStaffMfaEnrollment
+      responses:
+        '200':
+          description: A pending TOTP secret and URI. The response is no-store and must never be logged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaEnrollmentStartSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: MFA is already enabled.
+  /api/v1/operations/mfa/enrollment/confirm:
+    post:
+      x-funtino-availability: implemented
+      operationId: confirmCurrentStaffMfaEnrollment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpCode'
+      responses:
+        '200':
+          description: MFA enabled; ten single-use recovery codes are shown exactly once. Response is no-store.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaRecoveryCodesSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          description: MFA verification is temporarily locked.
+  /api/v1/operations/mfa/step-up/verify:
+    post:
+      x-funtino-availability: implemented
+      operationId: verifyCurrentStaffMfaStepUp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaProof'
+      responses:
+        '200':
+          description: Fresh MFA evidence attached to this server-side session for at most five minutes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaStepUpSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          description: MFA verification is temporarily locked.
+  /api/v1/operations/mfa/recovery-codes/regenerate:
+    post:
+      x-funtino-availability: implemented
+      operationId: regenerateCurrentStaffMfaRecoveryCodes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaProof'
+      responses:
+        '200':
+          description: Previous unused codes are revoked; ten new codes are shown once. Response is no-store.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MfaRecoveryCodesSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          description: MFA verification is temporarily locked.
+  /api/v1/operations/mfa/disable:
+    post:
+      x-funtino-availability: implemented
+      operationId: disableCurrentStaffMfa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaProof'
+      responses:
+        '200':
+          description: MFA disabled after current-factor verification; all session step-up evidence is invalidated.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          description: MFA verification is temporarily locked.
+  /api/v1/operations/access-context:
+    get:
+      x-funtino-availability: implemented
+      operationId: getOperationsAccessContext
+      responses:
+        '200':
+          description: Non-revoked staff memberships and policy version available to the current user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsAccessContextSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Access policy service is unavailable; access must fail closed.
+  /api/v1/operations/scopes:
+    get:
+      x-funtino-availability: implemented
+      operationId: listCurrentOperationsScopes
+      description: Returns only active organization or branch scopes derived from the current user's active IAM memberships and confirmed active owner-service records. Response is private and never cached.
+      responses:
+        '200':
+          description: Current active scopes available to the authenticated operations user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsScopesSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          description: IAM or Organization & Branch could not confirm current scope state; access fails closed.
+  /api/v1/operations/scope-selection:
+    post:
+      x-funtino-availability: implemented
+      operationId: selectCurrentOperationsScope
+      description: Revalidates that the requested tenant scope belongs to an active IAM membership and is backed by an active organization and, for branch scopes, an active branch with the requested parent. Successful user selections are audited. Every subsequent data request must still be independently authorized for its exact scope and permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationsScopeSelectionRequest'
+      responses:
+        '200':
+          description: Scope revalidated and selection audit recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsScopeSelectionSuccess'
+        '400':
+          description: Invalid organization or branch scope format.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: IAM, owner data, or audit storage is unavailable; selection is not accepted.
+  /api/v1/system/health:
+    get:
+      x-funtino-availability: implemented
+      operationId: readSystemOperationalHealth
+      description: Requires an active session and the global system.health.read permission. Returns a restricted summary from the private Prometheus query API; internal target addresses and arbitrary query execution are never exposed.
+      responses:
+        '200':
+          description: Current backend availability, aggregate HTTP telemetry, freshness and active operational alerts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemHealthSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Private telemetry source is not configured or is temporarily unavailable.
+  /api/v1/system/organizations:
+    get:
+      x-funtino-availability: implemented
+      operationId: listSystemOrganizations
+      description: Returns only global-readable organizations or organization IDs authorized individually by Identity & Access. The service-owner data is never queried directly from this app.
+      parameters:
+        - $ref: '#/components/parameters/SystemCursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: A keyset-paginated page of authorized organizations with their actual owner-service status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemOrganizationListSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Identity & Access or the Organization & Branch owner is unavailable; access fails closed.
+    post:
+      x-funtino-availability: implemented
+      operationId: createSystemOrganization
+      description: Requires organization.create at global scope, fresh MFA step-up, trusted browser origin and an auditable reason.
+      parameters:
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemOrganizationCreate'
+      responses:
+        '201':
+          description: Organization created by the owner service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemOrganizationSuccess'
+        '400':
+          description: Invalid request.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Slug conflict or idempotency key conflict.
+        '503':
+          description: Identity & Access or the Organization & Branch owner is unavailable.
+  /api/v1/system/organizations/{organizationId}:
+    parameters:
+      - $ref: '#/components/parameters/SystemOrganizationId'
+    get:
+      x-funtino-availability: implemented
+      operationId: getSystemOrganization
+      responses:
+        '200':
+          description: Authorized organization detail, including its actual lifecycle status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemOrganizationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Organization not found.
+        '503':
+          description: Identity & Access or the Organization & Branch owner is unavailable.
+    patch:
+      x-funtino-availability: implemented
+      operationId: updateSystemOrganization
+      description: Requires organization.update at this organization scope, fresh MFA step-up, a reason and optimistic concurrency.
+      parameters:
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemOrganizationUpdate'
+      responses:
+        '200':
+          description: Updated organization.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemOrganizationSuccess'
+        '400':
+          description: Invalid request.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Organization not found.
+        '409':
+          description: Slug conflict, stale version or idempotency conflict.
+        '503':
+          description: Identity & Access or the Organization & Branch owner is unavailable.
+  /api/v1/system/organizations/{organizationId}/status:
+    parameters:
+      - $ref: '#/components/parameters/SystemOrganizationId'
+    post:
+      x-funtino-availability: implemented
+      operationId: changeSystemOrganizationStatus
+      description: This management surface supports reversible active/suspended transitions only. Archiving is terminal and is not offered here. Requires organization.update, fresh MFA step-up and a reason.
+      parameters:
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemResourceStatusChange'
+      responses:
+        '200':
+          description: Updated actual owner-service status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemOrganizationSuccess'
+        '400':
+          description: Invalid request.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Organization not found.
+        '409':
+          description: Invalid lifecycle transition, stale version or idempotency conflict.
+        '503':
+          description: Identity & Access or the Organization & Branch owner is unavailable.
+  /api/v1/system/organizations/{organizationId}/branches:
+    parameters:
+      - $ref: '#/components/parameters/SystemOrganizationId'
+    get:
+      x-funtino-availability: implemented
+      operationId: listSystemOrganizationBranches
+      description: Requires branch.read for the requested organization scope; owner service enforces the parent relationship.
+      parameters:
+        - $ref: '#/components/parameters/SystemCursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: A paginated page of branches with actual lifecycle status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemBranchListSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Organization not found.
+        '503':
+          description: Identity & Access or the Organization & Branch owner is unavailable.
+    post:
+      x-funtino-availability: implemented
+      operationId: createSystemOrganizationBranch
+      description: Requires branch.create at the organization scope, fresh MFA step-up, a reason and trusted browser origin.
+      parameters:
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemBranchCreate'
+      responses:
+        '201':
+          description: Branch created by the owner service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemBranchSuccess'
+        '400':
+          description: Invalid request.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Organization not found or inactive.
+        '409':
+          description: Slug conflict or idempotency key conflict.
+        '503':
+          description: Identity & Access or the Organization & Branch owner is unavailable.
+  /api/v1/system/organizations/{organizationId}/branches/{branchId}:
+    parameters:
+      - $ref: '#/components/parameters/SystemOrganizationId'
+      - $ref: '#/components/parameters/SystemBranchId'
+    get:
+      x-funtino-availability: implemented
+      operationId: getSystemOrganizationBranch
+      responses:
+        '200':
+          description: Authorized branch detail, including actual lifecycle status and opening hours.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemBranchSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Branch not found under this organization.
+        '503':
+          description: Identity & Access or the Organization & Branch owner is unavailable.
+    patch:
+      x-funtino-availability: implemented
+      operationId: updateSystemOrganizationBranch
+      description: Requires branch.update at this branch scope, fresh MFA step-up, a reason and optimistic concurrency.
+      parameters:
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemBranchUpdate'
+      responses:
+        '200':
+          description: Updated branch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemBranchSuccess'
+        '400':
+          description: Invalid request.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Branch not found under this organization.
+        '409':
+          description: Slug conflict, stale version or idempotency conflict.
+        '503':
+          description: Identity & Access or the Organization & Branch owner is unavailable.
+  /api/v1/system/organizations/{organizationId}/branches/{branchId}/status:
+    parameters:
+      - $ref: '#/components/parameters/SystemOrganizationId'
+      - $ref: '#/components/parameters/SystemBranchId'
+    post:
+      x-funtino-availability: implemented
+      operationId: changeSystemOrganizationBranchStatus
+      description: Supports reversible active/suspended transitions only. Suspension requires branch.deactivate; reactivation requires branch.update. Both require fresh MFA step-up and a reason.
+      parameters:
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemResourceStatusChange'
+      responses:
+        '200':
+          description: Updated actual owner-service status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemBranchSuccess'
+        '400':
+          description: Invalid request.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Branch not found under this organization.
+        '409':
+          description: Invalid lifecycle transition, stale version or idempotency conflict.
+        '503':
+          description: Identity & Access or the Organization & Branch owner is unavailable.
+  /api/v1/customer/home:
+    get:
+      operationId: getCustomerHome
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+      responses:
+        '200':
+          description: Customer home projection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerHomeSuccess'
+  /api/v1/customer/profile:
+    get:
+      operationId: getCustomerProfile
+      responses:
+        '200':
+          description: Current customer profile and completion state.
+    patch:
+      operationId: updateCustomerProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerProfileUpdate'
+      responses:
+        '200':
+          description: Updated customer profile.
+  /api/v1/customer/profile/avatar:
+    get:
+      operationId: getCustomerAvatar
+      responses:
+        '200':
+          description: Private customer avatar image.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+    post:
+      operationId: uploadCustomerAvatar
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Updated customer profile.
+  /api/v1/customer/branches:
+    get:
+      operationId: listBranches
+      security: []
+      responses:
+        '200':
+          description: Active branches.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerBranchesSuccess'
+  /api/v1/customer/branches/{branchId}:
+    get:
+      operationId: getBranch
+      security: []
+      parameters:
+        - name: branchId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Active branch details.
+  /api/v1/customer/households:
+    get:
+      operationId: listHouseholds
+      responses:
+        '200':
+          description: Households visible to the current user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerHouseholdsSuccess'
+    post:
+      operationId: createHousehold
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 80
+      responses:
+        '200':
+          description: Household created.
+  /api/v1/customer/households/{householdId}/members:
+    post:
+      operationId: addHouseholdMember
+      parameters:
+        - name: householdId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [displayName, relationship]
+              properties:
+                displayName:
+                  type: string
+                  minLength: 2
+                  maxLength: 80
+                relationship:
+                  type: string
+                  minLength: 2
+                  maxLength: 40
+                birthDate:
+                  type: string
+                  format: date
+                  nullable: true
+                isDependent:
+                  type: boolean
+      responses:
+        '200':
+          description: Household member created.
+  /api/v1/customer/cards:
+    get:
+      operationId: listCards
+      responses:
+        '200':
+          description: Cards visible to the current user's authorized households. Physical identifiers are masked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerCardsSuccess'
+  /api/v1/customer/cards/link:
+    post:
+      operationId: linkCard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardLink'
+      responses:
+        '200':
+          description: Card link requested.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerCardSuccess'
+  /api/v1/operations/permissions:
+    get:
+      x-funtino-availability: implemented
+      operationId: listOperationsPermissions
+      responses:
+        '200':
+          description: Full versioned permission catalog; effective authority is evaluated by the server.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionCatalogSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Access policy service is unavailable; access must fail closed.
+  /api/v1/operations/roles:
+    get:
+      x-funtino-availability: implemented
+      operationId: listOperationsRoles
+      parameters:
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/RoleCursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Roles visible in the requested membership scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleListSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Access policy service is unavailable; access must fail closed.
+    post:
+      x-funtino-availability: implemented
+      operationId: createOperationsRole
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleCreate'
+      responses:
+        '201':
+          description: Custom role created; sensitive changes require recent step-up authentication.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleMutationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Duplicate role name or stale policy version.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/roles/templates:
+    get:
+      x-funtino-availability: implemented
+      operationId: listOperationsRoleTemplates
+      parameters:
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+      responses:
+        '200':
+          description: Least-privilege role templates applicable to the authorized scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleTemplatesSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Access policy service is unavailable; access must fail closed.
+  /api/v1/operations/roles/{roleId}:
+    patch:
+      x-funtino-availability: implemented
+      operationId: updateOperationsRole
+      parameters:
+        - $ref: '#/components/parameters/RoleId'
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleUpdate'
+      responses:
+        '200':
+          description: Role updated with optimistic concurrency control.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleMutationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Role not found in the caller's scope.
+        '409':
+          description: Version conflict or protected system role.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/devices:
+    get:
+      x-funtino-availability: implemented
+      operationId: listOperationsDevices
+      description: Lists devices in the explicitly requested organization or branch scope. IAM authorization and current owner status are checked on every request. Health filters other than lifecycle status are applied by the UI only to pages already loaded.
+      parameters:
+        - name: scopeType
+          in: query
+          required: true
+          schema: { type: string, enum: [organization, branch] }
+        - name: organizationId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: branchId
+          in: query
+          required: false
+          description: Required only when scopeType is branch; forbidden for organization scope.
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/DeviceLifecycleStatus' }
+        - $ref: '#/components/parameters/RoleCursor'
+        - $ref: '#/components/parameters/DevicePageSize'
+      responses:
+        '200':
+          description: Current device data and capabilities evaluated for this session and scope.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsDevicePageSuccess' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: The organization or branch is no longer active. }
+        '503':
+          { description: IAM, owner, or Device Integration is unavailable; access fails closed. }
+  /api/v1/operations/reports:
+    get:
+      x-funtino-availability: implemented
+      operationId: getOperationsReport
+      description: Requires report.read in the exact organization/branch scope. The API validates live owner status and returns only aggregated branch/device operation metrics captured by the analytics event consumer; financial, customer-contact and visit metrics are not inferred.
+      parameters:
+        - name: scopeType
+          in: query
+          required: true
+          schema: { type: string, enum: [organization, branch] }
+        - name: organizationId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: branchId
+          in: query
+          required: false
+          description: Required only for branch scope and rejected for organization scope.
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Scope-filtered current snapshot, event-derived daily metrics, projection coverage and export capability.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsReportSuccess' }
+        '400':
+          {
+            description: Invalid scope or period; periods are limited to 366 days and cannot include future dates.,
+          }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: The requested organization or branch is no longer active. }
+        '503':
+          {
+            description: IAM,
+            Organization & Branch or Analytics Read Model is unavailable; access fails closed.,
+          }
+  /api/v1/operations/reports/export:
+    post:
+      x-funtino-availability: implemented
+      operationId: exportOperationsReport
+      description: Requires report.export in the exact scope, trusted browser origin and fresh MFA step-up. The export is limited to daily aggregate rows (maximum 366), contains no personal or financial fields, and is audited before delivery.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationsReportFilter' }
+      responses:
+        '200':
+          description: Audited, date-bounded aggregate CSV source rows.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsReportExportSuccess' }
+        '400': { description: Invalid scope or period. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { description: Missing report.export permission or fresh MFA step-up. }
+        '409': { description: The requested organization or branch is no longer active. }
+        '503':
+          {
+            description: IAM,
+            owner,
+            Analytics Read Model or export audit is unavailable; no file data is returned.,
+          }
+  /api/v1/operations/organizations/{organizationId}/branches:
+    get:
+      x-funtino-availability: implemented
+      operationId: listOperationsDeviceBranches
+      description: Lists active branches in an organization after branch.read authorization; used by device registration and branch filters.
+      parameters:
+        - $ref: '#/components/parameters/SystemOrganizationId'
+        - $ref: '#/components/parameters/RoleCursor'
+        - $ref: '#/components/parameters/DevicePageSize'
+      responses:
+        '200':
+          description: Minimal active branch labels and pagination cursor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsDeviceBranchPageSuccess' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: The organization is no longer active. }
+        '503': { description: IAM or Organization & Branch is unavailable; access fails closed. }
+  /api/v1/operations/organizations/{organizationId}/branches/{branchId}/devices:
+    post:
+      x-funtino-availability: implemented
+      operationId: registerOperationsDevice
+      description: Registers device identity only. Health stays unknown until Device Integration accepts a valid signed observation; operations cannot set health manually.
+      parameters:
+        - $ref: '#/components/parameters/SystemOrganizationId'
+        - $ref: '#/components/parameters/SystemBranchId'
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceRegistrationRequest' }
+      responses:
+        '201':
+          description: Device registered with its current lifecycle status and version.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceCommandSuccess' }
+        '400': { description: Invalid input or idempotency key. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Organization or branch not found. }
+        '409':
+          { description: Organization or branch is inactive or a duplicate device identity exists. }
+        '503':
+          { description: IAM, owner, or Device Integration is unavailable; write fails closed. }
+  /api/v1/operations/organizations/{organizationId}/branches/{branchId}/devices/{deviceId}:
+    patch:
+      x-funtino-availability: implemented
+      operationId: updateOperationsDevice
+      description: Renames a device or changes its lifecycle with optimistic concurrency. Retired is terminal; heartbeat-derived health is immutable through this operation.
+      parameters:
+        - $ref: '#/components/parameters/SystemOrganizationId'
+        - $ref: '#/components/parameters/SystemBranchId'
+        - name: deviceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceUpdateRequest' }
+      responses:
+        '200':
+          description: Device updated with its current lifecycle status and version.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceCommandSuccess' }
+        '400': { description: Invalid input, idempotency key, or If-Match version. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Device not found in the requested branch. }
+        '409': { description: Version conflict or terminal lifecycle transition. }
+        '503':
+          { description: IAM, owner, or Device Integration is unavailable; write fails closed. }
+  /api/v1/operations/organizations/{organizationId}/branches/{branchId}/cards:
+    parameters:
+      - $ref: '#/components/parameters/SystemOrganizationId'
+      - $ref: '#/components/parameters/SystemBranchId'
+    get:
+      x-funtino-availability: implemented
+      operationId: listOperationsBranchCards
+      description: Lists the Wallet owner's physical-card inventory for an active branch. IAM evaluates card.inventory.read and card.inventory.manage for this exact branch on the server. Only masked identifiers are returned; customer assignment is not part of this endpoint.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/OperationsCardInventoryStatus' }
+        - $ref: '#/components/parameters/RoleCursor'
+        - $ref: '#/components/parameters/DevicePageSize'
+      responses:
+        '200':
+          description: Current inventory page and IAM-evaluated management capability.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'no-store, private' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsCardInventoryPageSuccess' }
+        '400': { description: Invalid status, cursor, or page size. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Organization or branch not found. }
+        '409': { description: The organization or branch is not active. }
+        '503':
+          {
+            description: IAM,
+            Organization & Branch,
+            or Wallet is unavailable; access fails closed.,
+          }
+    post:
+      x-funtino-availability: implemented
+      operationId: registerOperationsBranchCard
+      description: Registers a physical card in Wallet inventory. Requires card.inventory.manage, a fresh MFA step-up, a reason, and an idempotency key. The physical identifier is write-only and is never returned.
+      parameters:
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationsCardRegistrationRequest' }
+      responses:
+        '201':
+          description: Card registered in the active branch; provider verification remains unknown unless verified by an approved adapter.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsCardCommandSuccess' }
+        '400': { description: Invalid card identifier, reason, or idempotency key. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { description: Missing card.inventory.manage permission or fresh MFA step-up. }
+        '404': { description: Organization or branch not found. }
+        '409': { description: Inactive branch, duplicate identifier, or idempotency conflict. }
+        '503':
+          { description: IAM, Organization & Branch, or Wallet is unavailable; write fails closed. }
+  /api/v1/operations/organizations/{organizationId}/branches/{branchId}/cards/{cardId}:
+    parameters:
+      - $ref: '#/components/parameters/SystemOrganizationId'
+      - $ref: '#/components/parameters/SystemBranchId'
+      - name: cardId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      x-funtino-availability: implemented
+      operationId: changeOperationsBranchCardStatus
+      description: Changes only the Wallet inventory lifecycle status using optimistic concurrency. Requires card.inventory.manage, a fresh MFA step-up, a reason, and an idempotency key. Retired cards are terminal.
+      parameters:
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationsCardStatusChangeRequest' }
+      responses:
+        '200':
+          description: Updated Wallet inventory item.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsCardCommandSuccess' }
+        '400': { description: Invalid status, reason, idempotency key, or If-Match version. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { description: Missing card.inventory.manage permission or fresh MFA step-up. }
+        '404': { description: Card not found in the requested branch. }
+        '409': { description: Version conflict or invalid inventory lifecycle transition. }
+        '503':
+          { description: IAM, Organization & Branch, or Wallet is unavailable; write fails closed. }
+  /api/v1/operations/organizations/{organizationId}/branches/{branchId}/customer-households/lookup:
+    post:
+      x-funtino-availability: implemented
+      operationId: lookupOperationsHouseholdsByVerifiedPhone
+      description: Exact verified-phone lookup only; phone is sent in a no-store request body (never in the URL), requires customer.lookup.limited for this branch, and records an audit event. Never supports prefix search or bulk export. Limited to 30 lookups per actor, per branch, per fixed 15-minute window.
+      parameters:
+        - $ref: '#/components/parameters/SystemOrganizationId'
+        - $ref: '#/components/parameters/SystemBranchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationsHouseholdLookupRequest' }
+      responses:
+        '200':
+          description: Household choices owned by the exact verified identity; only masked phone and minimum labels are returned.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'no-store, private' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsHouseholdLookupSuccess' }
+        '400': { description: Invalid phone format. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { description: Missing customer.lookup.limited for this exact branch. }
+        '429': { description: The actor exceeded the audited per-branch fixed-window lookup quota. }
+        '409': { description: Organization or branch is not active. }
+        '503':
+          {
+            description: IAM,
+            identity store or Customer & Household owner is unavailable; access fails closed.,
+          }
+  /api/v1/operations/organizations/{organizationId}/branches/{branchId}/card-assignments:
+    parameters:
+      - $ref: '#/components/parameters/SystemOrganizationId'
+      - $ref: '#/components/parameters/SystemBranchId'
+    get:
+      x-funtino-availability: implemented
+      operationId: listOperationsBranchCardAssignments
+      description: Lists active household/branch card assignments without member or monetary fields. Requires card.inventory.read.
+      parameters:
+        - $ref: '#/components/parameters/RoleCursor'
+        - $ref: '#/components/parameters/DevicePageSize'
+      responses:
+        '200':
+          description: Active assignment page.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'no-store, private' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsCardAssignmentPageSuccess' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: Organization or branch is not active. }
+        '503': { description: IAM, owner or Wallet is unavailable; access fails closed. }
+  /api/v1/operations/organizations/{organizationId}/branches/{branchId}/cards/{cardId}/assignments:
+    post:
+      x-funtino-availability: implemented
+      operationId: assignOperationsCardToHousehold
+      description: Requires card.assign, fresh MFA, exact active branch, an active household selected from an audited exact-phone lookup, reason and idempotency key.
+      parameters:
+        - $ref: '#/components/parameters/SystemOrganizationId'
+        - $ref: '#/components/parameters/SystemBranchId'
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationsCardAssignRequest' }
+      responses:
+        '201':
+          description: Verified in-stock card assigned to the household for this branch.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsCardAssignmentCommandSuccess' }
+        '400': { description: Invalid identifiers, reason or idempotency key. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { description: Missing card.assign permission or fresh MFA step-up. }
+        '404': { description: Card or household not found. }
+        '409':
+          {
+            description: Card not verified/in stock,
+            branch mismatch,
+            or an active card already exists for this household and branch.,
+          }
+        '503':
+          {
+            description: IAM,
+            owner,
+            Wallet or Customer & Household is unavailable; write fails closed.,
+          }
+  /api/v1/operations/organizations/{organizationId}/branches/{branchId}/card-assignments/{assignmentId}/transfer:
+    post:
+      x-funtino-availability: implemented
+      operationId: transferOperationsCardAssignment
+      description: Transfers only between households in the same fixed branch. Requires card.transfer, fresh MFA, reason and idempotency key.
+      parameters:
+        - $ref: '#/components/parameters/SystemOrganizationId'
+        - $ref: '#/components/parameters/SystemBranchId'
+        - name: assignmentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OperationsCardAssignRequest' }
+      responses:
+        '200':
+          description: Assignment transferred atomically with both sides recorded in history.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsCardAssignmentCommandSuccess' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { description: Missing card.transfer permission or fresh MFA step-up. }
+        '404': { description: Active assignment or target household not found. }
+        '409':
+          {
+            description: Target already has an active card in this branch or the assignment changed.,
+          }
+        '503':
+          { description: IAM, Wallet or Customer & Household is unavailable; write fails closed. }
+  /api/v1/operations/organizations/{organizationId}/branches/{branchId}/card-assignments/{assignmentId}/cancel:
+    post:
+      x-funtino-availability: implemented
+      operationId: cancelOperationsCardAssignment
+      description: Ends an active assignment with an auditable reason. Card inventory is not made assignable unless its verification and lifecycle allow it.
+      parameters:
+        - $ref: '#/components/parameters/SystemOrganizationId'
+        - $ref: '#/components/parameters/SystemBranchId'
+        - name: assignmentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 8, maxLength: 500 }
+      responses:
+        '200': { description: Assignment cancelled and immutable history recorded. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { description: Missing card.unassign permission or fresh MFA step-up. }
+        '404': { description: Active assignment not found. }
+        '409': { description: Assignment changed or card remains unavailable. }
+        '503': { description: IAM or Wallet is unavailable; write fails closed. }
+  /api/v1/operations/staff:
+    get:
+      x-funtino-availability: implemented
+      operationId: listOperationsStaff
+      parameters:
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/RoleCursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Minimal staff membership data in the authorized scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffListSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Access policy service is unavailable; access must fail closed.
+  /api/v1/operations/staff/invitations:
+    get:
+      x-funtino-availability: implemented
+      operationId: listOperationsStaffInvitations
+      parameters:
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/RoleCursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Pending invitations created in the authorized scope; phone numbers are masked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScopedInvitationsSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      x-funtino-availability: implemented
+      operationId: inviteOperationsStaff
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffInvitationCreate'
+      responses:
+        '202':
+          description: Pending invitation recorded; it is not active until the verified user accepts it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationMutationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Active membership or pending invitation already exists.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/staff/invitations/pending:
+    get:
+      x-funtino-availability: implemented
+      operationId: listMyPendingStaffInvitations
+      description: Invitations matching the authenticated user's verified OTP phone; the client cannot choose the lookup phone.
+      responses:
+        '200':
+          description: Invitations for the verified session phone, enriched with the current organization/branch name and lifecycle state from the owner service.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingInvitationsSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '503':
+          description: Identity & Access or authenticated identity lookup is unavailable. Owner lookup failures are returned per invitation as scopeStatus unavailable, never as stale labels.
+  /api/v1/operations/staff/invitations/{invitationId}/accept:
+    post:
+      x-funtino-availability: implemented
+      operationId: acceptOperationsStaffInvitation
+      parameters:
+        - $ref: '#/components/parameters/InvitationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Explicitly accepted invitation activates membership for the verified identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedInvitationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          description: Invitation not found for the authenticated account.
+        '409':
+          description: Invitation is expired, role changed, or membership already exists.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/staff/invitations/{invitationId}/revoke:
+    post:
+      x-funtino-availability: implemented
+      operationId: revokeOperationsStaffInvitation
+      parameters:
+        - $ref: '#/components/parameters/InvitationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Invitation revoked; it cannot be accepted afterward.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationRevocationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Invitation not found in the caller's scope.
+        '409':
+          description: Invitation is no longer pending.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/staff/{membershipId}/suspend:
+    post:
+      x-funtino-availability: implemented
+      operationId: suspendOperationsStaff
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Membership suspended; subsequent requests are denied immediately.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipMutationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Membership not found in the caller's scope.
+        '409':
+          description: Suspending this membership would remove the final administrator.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/staff/{membershipId}:
+    patch:
+      x-funtino-availability: implemented
+      operationId: updateOperationsStaffMembership
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffMembershipUpdate'
+      responses:
+        '200':
+          description: Membership role changed after delegation and scope validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipMutationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Membership not found in the caller's scope.
+        '409':
+          description: Version conflict or last-administrator invariant would be violated.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/staff/{membershipId}/reactivate:
+    post:
+      x-funtino-availability: implemented
+      operationId: reactivateOperationsStaff
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Suspended membership reactivated after scope and policy validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipMutationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Membership not found in the caller's scope.
+        '409':
+          description: Membership lifecycle transition is invalid.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/staff/{membershipId}/revoke:
+    post:
+      x-funtino-availability: implemented
+      operationId: revokeOperationsStaffMembership
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Membership revoked; authorization is denied immediately.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipMutationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Membership not found in the caller's scope.
+        '409':
+          description: Lifecycle transition or last-administrator invariant violation.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/staff/{membershipId}/permission-overrides:
+    get:
+      x-funtino-availability: implemented
+      operationId: listStaffPermissionOverrides
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+      responses:
+        '200':
+          description: Overrides for the target membership, visible only to an authorized manager.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionOverrideListSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      x-funtino-availability: implemented
+      operationId: setStaffPermissionOverride
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionOverrideCreate'
+      responses:
+        '201':
+          description: Membership-specific override created; deny takes precedence over allow.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionOverrideMutationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Conflicting policy update.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/staff/{membershipId}/permission-overrides/{overrideId}:
+    delete:
+      x-funtino-availability: implemented
+      operationId: revokeStaffPermissionOverride
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - name: overrideId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: Override revoked and effective on subsequent authorization checks.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionOverrideMutationSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Override not found in the caller's scope.
+        '503':
+          description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
+  /api/v1/operations/audit:
+    get:
+      x-funtino-availability: implemented
+      operationId: listOperationsAccessAudit
+      description: Requires a valid role and fresh server-side MFA step-up evidence (maximum age five minutes).
+      parameters:
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/AuditCursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Append-only IAM audit events visible in the authorized scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessAuditSuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Access policy service is unavailable; access must fail closed.
+  /api/v1/customer/wallets/{walletId}/summary:
+    get:
+      operationId: getWalletSummary
+      parameters:
+        - $ref: '#/components/parameters/WalletId'
+      responses:
+        '200':
+          description: Wallet balances and recent ledger entries.
+  /api/v1/customer/wallets/{walletId}/transactions:
+    get:
+      operationId: listWalletTransactions
+      parameters:
+        - $ref: '#/components/parameters/WalletId'
+      responses:
+        '200':
+          description: Wallet ledger entries.
+  /api/v1/customer/missions:
+    get:
+      operationId: listMissions
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+      responses:
+        '200':
+          description: Active mission catalog.
+  /api/v1/customer/missions/{missionId}/claim:
+    post:
+      operationId: claimMission
+      parameters:
+        - name: missionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [householdId]
+              properties:
+                householdId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Idempotent mission claim.
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: funtino_session
+  parameters:
+    SystemOrganizationId:
+      name: organizationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SystemBranchId:
+      name: branchId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SystemCursor:
+      name: cursor
+      in: query
+      required: false
+      description: Exclusive organization or branch UUID cursor returned by the previous page.
+      schema:
+        type: string
+        format: uuid
+    SystemIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: UUID generated for one logical mutation and reused when retrying the exact same request.
+      schema:
+        type: string
+        format: uuid
+    BranchId:
+      name: branchId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    ScopeType:
+      name: scopeType
+      in: query
+      required: false
+      description: Required for global scope; otherwise inferred from organizationId and branchId when omitted.
+      schema:
+        type: string
+        enum: [global, organization, branch]
+    WalletId:
+      name: walletId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OrganizationId:
+      name: organizationId
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    RoleId:
+      name: roleId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MembershipId:
+      name: membershipId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 512
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    DevicePageSize:
+      name: pageSize
+      in: query
+      required: false
+      description: Bounded device/branch result page; health and search filters apply only to pages already loaded by the Operations client.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 100
+    RoleCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+    AuditCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+    IfMatchVersion:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+  schemas:
+    SystemHealthStatus:
+      type: string
+      enum: [healthy, degraded, down, stale, unknown]
+    SystemHealthSeverity:
+      type: string
+      enum: [critical, warning, info]
+    SystemHealthService:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          key,
+          name,
+          status,
+          targets,
+          unavailableTargets,
+          requestsPerSecond,
+          serverErrorPercent,
+          p95LatencyMs,
+          freshnessSeconds,
+          lastScrapedAt,
+        ]
+      properties:
+        key: { type: string, pattern: '^[a-z0-9-]+$' }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        status: { $ref: '#/components/schemas/SystemHealthStatus' }
+        targets: { type: integer, minimum: 0 }
+        unavailableTargets: { type: integer, minimum: 0 }
+        requestsPerSecond: { type: [number, 'null'], minimum: 0 }
+        serverErrorPercent: { type: [number, 'null'], minimum: 0, maximum: 100 }
+        p95LatencyMs: { type: [number, 'null'], minimum: 0 }
+        freshnessSeconds: { type: [integer, 'null'], minimum: 0 }
+        lastScrapedAt: { type: [string, 'null'], format: date-time }
+    SystemHealthAlert:
+      type: object
+      additionalProperties: false
+      required: [name, service, severity]
+      properties:
+        name: { type: string, pattern: '^Funtino[A-Za-z0-9]+$' }
+        service: { type: string, pattern: '^[a-z0-9-]+$' }
+        severity: { $ref: '#/components/schemas/SystemHealthSeverity' }
+    SystemHealthSnapshot:
+      type: object
+      additionalProperties: false
+      required: [observedAt, source, services, activeAlerts]
+      properties:
+        observedAt: { type: string, format: date-time }
+        source: { type: string, const: prometheus }
+        services:
+          type: array
+          items: { $ref: '#/components/schemas/SystemHealthService' }
+        activeAlerts:
+          type: array
+          items: { $ref: '#/components/schemas/SystemHealthAlert' }
+    SystemHealthSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data: { $ref: '#/components/schemas/SystemHealthSnapshot' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    SystemResourceStatus:
+      type: string
+      enum: [active, suspended, archived]
+    SystemOrganization:
+      type: object
+      additionalProperties: false
+      required: [id, name, slug, timezone, status, version, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 2, maxLength: 160 }
+        slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
+        timezone: { type: string, minLength: 1, maxLength: 64 }
+        status: { $ref: '#/components/schemas/SystemResourceStatus' }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SystemOrganizationPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SystemOrganization' }
+        nextCursor: { type: [string, 'null'], format: uuid }
+    SystemOrganizationListSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data: { $ref: '#/components/schemas/SystemOrganizationPage' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    SystemOrganizationSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data: { $ref: '#/components/schemas/SystemOrganization' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    SystemOrganizationCreate:
+      type: object
+      additionalProperties: false
+      required: [name, slug, timezone, reason]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 160 }
+        slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
+        timezone:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 64,
+            description: Valid IANA timezone identifier.,
+          }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    SystemOrganizationUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 2
+      required: [reason]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 160 }
+        slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
+        timezone:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 64,
+            description: Valid IANA timezone identifier.,
+          }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    SystemResourceStatusChange:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status:
+          type: string
+          enum: [active, suspended]
+          description: Archive is intentionally excluded because it is terminal and irreversible.
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    SystemOpeningHours:
+      type: object
+      additionalProperties:
+        oneOf:
+          - type: 'null'
+          - type: object
+            additionalProperties: false
+            required: [open, close]
+            properties:
+              open: { type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+              close: { type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+      propertyNames:
+        enum: [saturday, sunday, monday, tuesday, wednesday, thursday, friday]
+    SystemBranch:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          organizationId,
+          name,
+          slug,
+          address,
+          city,
+          timezone,
+          status,
+          openingHours,
+          version,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        name: { type: string, minLength: 2, maxLength: 160 }
+        slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
+        address: { type: string, minLength: 3, maxLength: 500 }
+        city: { type: string, minLength: 2, maxLength: 120 }
+        timezone:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 64,
+            description: Valid IANA timezone identifier.,
+          }
+        status: { $ref: '#/components/schemas/SystemResourceStatus' }
+        openingHours: { $ref: '#/components/schemas/SystemOpeningHours' }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    SystemBranchPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SystemBranch' }
+        nextCursor: { type: [string, 'null'], format: uuid }
+    SystemBranchListSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data: { $ref: '#/components/schemas/SystemBranchPage' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    SystemBranchSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data: { $ref: '#/components/schemas/SystemBranch' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    SystemBranchCreate:
+      type: object
+      additionalProperties: false
+      required: [name, slug, address, city, timezone, openingHours, reason]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 160 }
+        slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
+        address: { type: string, minLength: 3, maxLength: 500 }
+        city: { type: string, minLength: 2, maxLength: 120 }
+        timezone:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 64,
+            description: Valid IANA timezone identifier.,
+          }
+        openingHours: { $ref: '#/components/schemas/SystemOpeningHours' }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    SystemBranchUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 2
+      required: [reason]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 160 }
+        slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
+        address: { type: string, minLength: 3, maxLength: 500 }
+        city: { type: string, minLength: 2, maxLength: 120 }
+        timezone:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 64,
+            description: Valid IANA timezone identifier.,
+          }
+        openingHours: { $ref: '#/components/schemas/SystemOpeningHours' }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    OtpRequest:
+      type: object
+      required: [phone]
+      properties:
+        phone:
+          type: string
+          example: '+989121234567'
+    OtpVerify:
+      type: object
+      required: [challengeId, phone, code]
+      properties:
+        challengeId:
+          type: string
+          format: uuid
+        phone:
+          type: string
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+    OtpVerifySuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data:
+          type: object
+          required: [user, expiresAt, mfaRequired]
+          properties:
+            user: { type: object, description: Public profile for the authenticated identity. }
+            expiresAt: { type: string, format: date-time }
+            mfaRequired:
+              type: boolean
+              description: True for an active global system administrator; the session remains restricted until MFA is completed.
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    OtpChallengeResponse:
+      type: object
+      required: [challengeId, expiresAt, deliveryStatus]
+      properties:
+        challengeId:
+          type: string
+          format: uuid
+        expiresAt:
+          type: string
+          format: date-time
+        deliveryStatus:
+          type: string
+          enum: [confirmed, unknown]
+          description: 'unknown means the provider request timed out after the send attempt; the client may continue verification and must not retry automatically.'
+        devCode:
+          type: string
+          pattern: '^[0-9]{6}$'
+          description: Only returned in non-production when EXPOSE_DEV_OTP is explicitly enabled.
+    TotpCode:
+      type: object
+      required: [code]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+    MfaProof:
+      type: object
+      required: [method, code]
+      additionalProperties: false
+      properties:
+        method:
+          type: string
+          enum: [totp, recovery]
+        code:
+          type: string
+          minLength: 6
+          maxLength: 35
+    MfaStatusSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          const: success
+        data:
+          type: object
+          required: [enabled, enrollmentPending, recoveryCodesRemaining]
+          properties:
+            enabled:
+              type: boolean
+            enrollmentPending:
+              type: boolean
+            recoveryCodesRemaining:
+              type: integer
+              minimum: 0
+              maximum: 10
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    MfaEnrollmentStartSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          const: success
+        data:
+          type: object
+          required: [secret, otpauthUri, expiresAt]
+          properties:
+            secret:
+              type: string
+            otpauthUri:
+              type: string
+              pattern: '^otpauth://totp/'
+            expiresAt:
+              type: string
+              format: date-time
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    MfaRecoveryCodesSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          const: success
+        data:
+          type: object
+          required: [recoveryCodes, factorVersion, method, verifiedAt, validUntil]
+          properties:
+            recoveryCodes:
+              type: array
+              minItems: 10
+              maxItems: 10
+              items:
+                type: string
+            factorVersion:
+              type: integer
+              minimum: 1
+            method:
+              type: string
+              enum: [totp, recovery]
+            verifiedAt:
+              type: string
+              format: date-time
+            validUntil:
+              type: string
+              format: date-time
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    MfaStepUpSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          const: success
+        data:
+          type: object
+          required: [method, factorVersion, verifiedAt, validUntil]
+          properties:
+            method:
+              type: string
+              enum: [totp, recovery]
+            factorVersion:
+              type: integer
+              minimum: 1
+            verifiedAt:
+              type: string
+              format: date-time
+            validUntil:
+              type: string
+              format: date-time
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    CardLink:
+      type: object
+      required: [householdId, branchId, externalCardId]
+      properties:
+        householdId:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+          nullable: true
+        branchId:
+          type: string
+          format: uuid
+          description: Branch printed/encoded on the physical card. Linking the card creates the customer-branch relationship.
+        externalCardId:
+          type: string
+    CustomerCardSummary:
+      type: object
+      required:
+        [
+          id,
+          householdId,
+          memberId,
+          branchId,
+          maskedCardId,
+          status,
+          lastSyncedAt,
+          walletId,
+          isStale,
+          freshness,
+        ]
+      properties:
+        id:
+          type: string
+          format: uuid
+        householdId:
+          type: string
+          format: uuid
+          description: Household authorized for the current customer session; this is a shared household-level card, not a member-specific card.
+        memberId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Always null for family-shared branch cards; retained only for DTO compatibility.
+        branchId:
+          type: string
+          format: uuid
+          nullable: true
+        maskedCardId:
+          type: string
+          description: Fixed mask plus the final four characters; the physical identifier is never returned.
+          example: '•••• •••• 4821'
+        status:
+          type: string
+          enum: [pending_sync, active, blocked, unlinked]
+        lastSyncedAt:
+          type: string
+          format: date-time
+          nullable: true
+        walletId:
+          type: string
+          format: uuid
+          nullable: true
+        isStale:
+          type: boolean
+        freshness:
+          type: string
+          enum: [fresh, stale, unknown]
+    CustomerHouseholdMemberSummary:
+      type: object
+      required: [id, displayName]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+      additionalProperties: false
+    CustomerHouseholdSummary:
+      type: object
+      required: [id, name, members]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerHouseholdMemberSummary'
+      additionalProperties: false
+    CustomerBranchSummary:
+      type: object
+      required: [id, name, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [open, closed]
+    CustomerCardsSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerCardSummary'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    CustomerHouseholdsSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerHouseholdSummary'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    CustomerCardSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          $ref: '#/components/schemas/CustomerCardSummary'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    CustomerHomeSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          properties:
+            cards:
+              type: array
+              items:
+                $ref: '#/components/schemas/CustomerCardSummary'
+          additionalProperties: true
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    CustomerBranchesSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerBranchSummary'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    ResponseMeta:
+      type: object
+      required: [requestId, correlationId]
+      properties:
+        requestId:
+          type: string
+          nullable: true
+        correlationId:
+          type: string
+          nullable: true
+    CustomerProfileUpdate:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 2
+          maxLength: 60
+          nullable: true
+        lastName:
+          type: string
+          minLength: 2
+          maxLength: 60
+          nullable: true
+        email:
+          type: string
+          format: email
+          nullable: true
+        birthDate:
+          type: string
+          format: date
+          nullable: true
+        gender:
+          type: string
+          enum: [female, male, other, prefer_not_to_say]
+          nullable: true
+        city:
+          type: string
+          maxLength: 80
+          nullable: true
+        avatarPreset:
+          type: string
+          enum: [sun, star, rainbow, rocket, crown, bear, cat, fox]
+          nullable: true
+    AccessScope:
+      oneOf:
+        - type: object
+          required: [type]
+          properties:
+            type:
+              const: global
+        - type: object
+          required: [type, organizationId]
+          properties:
+            type:
+              const: organization
+            organizationId:
+              type: string
+              format: uuid
+        - type: object
+          required: [type, organizationId, branchId]
+          properties:
+            type:
+              const: branch
+            organizationId:
+              type: string
+              format: uuid
+            branchId:
+              type: string
+              format: uuid
+    PermissionDefinition:
+      type: object
+      required: [key, scopes, delegable, stepUp]
+      properties:
+        key:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum: [global, organization, branch]
+        delegable:
+          type: boolean
+        stepUp:
+          type: boolean
+    PermissionCatalogSuccess:
+      type: object
+      required: [status, data, catalogVersion, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionDefinition'
+        catalogVersion:
+          type: integer
+          minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    RoleSummary:
+      type: object
+      required: [id, name, scope, permissionKeys, systemManaged, status, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        permissionKeys:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        systemManaged:
+          type: boolean
+        status:
+          type: string
+          enum: [active, disabled]
+        version:
+          type: integer
+          minimum: 1
+    RoleCreate:
+      type: object
+      additionalProperties: false
+      required: [name, scope, permissionKeys, reason]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        permissionKeys:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    RoleUpdate:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      minProperties: 2
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        permissionKeys:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+        status:
+          type: string
+          enum: [active, disabled]
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    RoleListSuccess:
+      type: object
+      required: [status, data, nextCursor, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleSummary'
+        nextCursor:
+          type: string
+          format: uuid
+          nullable: true
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    RoleMutationSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, policyVersion]
+          properties:
+            data:
+              $ref: '#/components/schemas/RoleSummary'
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    RoleTemplate:
+      type: object
+      required: [key, name, scopeType, permissionKeys]
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        scopeType:
+          type: string
+          enum: [global, organization, branch]
+        permissionKeys:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+    RoleTemplatesSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [policyVersion, catalogVersion, data]
+          properties:
+            policyVersion:
+              type: integer
+              minimum: 1
+            catalogVersion:
+              type: integer
+              minimum: 1
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RoleTemplate'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    StaffSummary:
+      type: object
+      required: [membershipId, userId, status, scope, role, version]
+      properties:
+        membershipId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        maskedPhone:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, active, suspended, revoked]
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        role:
+          $ref: '#/components/schemas/RoleSummary'
+        version:
+          type: integer
+          minimum: 1
+    DeviceLifecycleStatus:
+      type: string
+      enum: [active, suspended, retired]
+    DeviceHealthState:
+      type: string
+      enum: [unknown, online, degraded, stale, offline]
+    DeviceType:
+      type: string
+      enum: [rfid_reader, terminal, access_gate, other]
+    OperationsDevice:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          organizationId,
+          branchId,
+          adapterKey,
+          externalDeviceId,
+          displayName,
+          deviceType,
+          status,
+          healthState,
+          latestReportedState,
+          latestObservedAt,
+          freshnessSeconds,
+          version,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        adapterKey: { type: string, minLength: 1, maxLength: 60 }
+        externalDeviceId: { type: string, minLength: 1, maxLength: 160 }
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+        deviceType: { $ref: '#/components/schemas/DeviceType' }
+        status: { $ref: '#/components/schemas/DeviceLifecycleStatus' }
+        healthState: { $ref: '#/components/schemas/DeviceHealthState' }
+        latestReportedState: { type: [string, 'null'], enum: [online, degraded, offline, null] }
+        latestObservedAt: { type: [string, 'null'], format: date-time }
+        freshnessSeconds: { type: [integer, 'null'], minimum: 0 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    OperationsDevicePageSuccess:
+      type: object
+      required: [status, data, nextCursor, meta]
+      properties:
+        status: { type: string, enum: [success] }
+        data:
+          type: object
+          required: [items, capabilities]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/OperationsDevice' }
+            capabilities: { $ref: '#/components/schemas/OperationsDeviceCapabilities' }
+        nextCursor: { type: [string, 'null'], format: uuid }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    OperationsDeviceCapabilities:
+      type: object
+      additionalProperties: false
+      required: [canRegister, canManage, canReadBranches]
+      properties:
+        canRegister: { type: boolean }
+        canManage: { type: boolean }
+        canReadBranches: { type: boolean }
+    OperationsReportFilter:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [scopeType, organizationId, from, to]
+          properties:
+            scopeType: { type: string, const: organization }
+            organizationId: { type: string, format: uuid }
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+        - type: object
+          additionalProperties: false
+          required: [scopeType, organizationId, branchId, from, to]
+          properties:
+            scopeType: { type: string, const: branch }
+            organizationId: { type: string, format: uuid }
+            branchId: { type: string, format: uuid }
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+    OperationsReportDailyRow:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          date,
+          branchesCreated,
+          branchStatusChanges,
+          devicesRegistered,
+          deviceUpdates,
+          healthOnline,
+          healthDegraded,
+          healthOffline,
+        ]
+      properties:
+        date: { type: string, format: date }
+        branchesCreated: { type: integer, minimum: 0 }
+        branchStatusChanges: { type: integer, minimum: 0 }
+        devicesRegistered: { type: integer, minimum: 0 }
+        deviceUpdates: { type: integer, minimum: 0 }
+        healthOnline: { type: integer, minimum: 0 }
+        healthDegraded: { type: integer, minimum: 0 }
+        healthOffline: { type: integer, minimum: 0 }
+    OperationsReport:
+      type: object
+      additionalProperties: false
+      required: [scope, period, snapshot, daily, totals, projection, capabilities]
+      properties:
+        scope:
+          type: object
+          additionalProperties: false
+          required: [scopeType, organizationId, branchId]
+          properties:
+            scopeType: { type: string, enum: [organization, branch] }
+            organizationId: { type: string, format: uuid }
+            branchId: { type: [string, 'null'], format: uuid }
+        period:
+          type: object
+          additionalProperties: false
+          required: [from, to, timezone, days]
+          properties:
+            from: { type: string, format: date }
+            to: { type: string, format: date }
+            timezone: { type: string, const: UTC }
+            days: { type: integer, minimum: 1, maximum: 366 }
+        snapshot:
+          type: object
+          additionalProperties: false
+          required: [organizations, branches, devices, branchBreakdown, branchBreakdownTruncated]
+          properties:
+            organizations: { $ref: '#/components/schemas/OperationsReportResourceCounts' }
+            branches: { $ref: '#/components/schemas/OperationsReportResourceCounts' }
+            devices:
+              type: object
+              additionalProperties: false
+              required: [total, active, suspended, retired, unknownLifecycle, health]
+              properties:
+                total: { type: integer, minimum: 0 }
+                active: { type: integer, minimum: 0 }
+                suspended: { type: integer, minimum: 0 }
+                retired: { type: integer, minimum: 0 }
+                unknownLifecycle: { type: integer, minimum: 0 }
+                health: { $ref: '#/components/schemas/OperationsReportHealthCounts' }
+            branchBreakdown:
+              type: array
+              maxItems: 500
+              items: { $ref: '#/components/schemas/OperationsReportBranchRow' }
+            branchBreakdownTruncated: { type: boolean }
+        daily:
+          type: array
+          minItems: 1
+          maxItems: 366
+          items: { $ref: '#/components/schemas/OperationsReportDailyRow' }
+        totals:
+          type: object
+          additionalProperties: false
+          required:
+            [
+              branchesCreated,
+              branchStatusChanges,
+              devicesRegistered,
+              deviceUpdates,
+              healthOnline,
+              healthDegraded,
+              healthOffline,
+            ]
+          properties:
+            branchesCreated: { type: integer, minimum: 0 }
+            branchStatusChanges: { type: integer, minimum: 0 }
+            devicesRegistered: { type: integer, minimum: 0 }
+            deviceUpdates: { type: integer, minimum: 0 }
+            healthOnline: { type: integer, minimum: 0 }
+            healthDegraded: { type: integer, minimum: 0 }
+            healthOffline: { type: integer, minimum: 0 }
+        projection:
+          type: object
+          additionalProperties: false
+          required: [generationId, coverageStartedAt, lastEventAt, lastProcessedAt, asOf]
+          properties:
+            generationId: { type: string, format: uuid }
+            coverageStartedAt: { type: [string, 'null'], format: date-time }
+            lastEventAt: { type: [string, 'null'], format: date-time }
+            lastProcessedAt: { type: [string, 'null'], format: date-time }
+            asOf: { type: string, format: date-time }
+        capabilities:
+          type: object
+          additionalProperties: false
+          required: [canExport]
+          properties:
+            canExport:
+              type: boolean
+              description: True only when IAM grants report.export or MFA step-up is the sole remaining requirement; the export request is always reauthorized server-side.
+    OperationsReportResourceCounts:
+      type: object
+      additionalProperties: false
+      required: [active, suspended, archived, unknown]
+      properties:
+        active: { type: integer, minimum: 0 }
+        suspended: { type: integer, minimum: 0 }
+        archived: { type: integer, minimum: 0 }
+        unknown: { type: integer, minimum: 0 }
+    OperationsReportHealthCounts:
+      type: object
+      additionalProperties: false
+      required: [online, degraded, offline, stale, unknown]
+      properties:
+        online: { type: integer, minimum: 0 }
+        degraded: { type: integer, minimum: 0 }
+        offline: { type: integer, minimum: 0 }
+        stale: { type: integer, minimum: 0 }
+        unknown: { type: integer, minimum: 0 }
+    OperationsReportBranchRow:
+      type: object
+      additionalProperties: false
+      required:
+        [branchId, branchName, status, devicesTotal, online, degraded, offline, stale, unknown]
+      properties:
+        branchId: { type: string, format: uuid }
+        branchName: { type: [string, 'null'] }
+        status: { type: string, enum: [active, suspended, archived] }
+        devicesTotal: { type: integer, minimum: 0 }
+        online: { type: integer, minimum: 0 }
+        degraded: { type: integer, minimum: 0 }
+        offline: { type: integer, minimum: 0 }
+        stale: { type: integer, minimum: 0 }
+        unknown: { type: integer, minimum: 0 }
+    OperationsReportSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, enum: [success] }
+        data: { $ref: '#/components/schemas/OperationsReport' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    OperationsReportExportSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, enum: [success] }
+        data:
+          type: object
+          additionalProperties: false
+          required: [period, daily]
+          properties:
+            period:
+              type: object
+              required: [from, to, timezone, days]
+              properties:
+                from: { type: string, format: date }
+                to: { type: string, format: date }
+                timezone: { type: string, const: UTC }
+                days: { type: integer, minimum: 1, maximum: 366 }
+            daily:
+              type: array
+              maxItems: 366
+              items: { $ref: '#/components/schemas/OperationsReportDailyRow' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    OperationsDeviceBranchPageSuccess:
+      type: object
+      required: [status, data, nextCursor, meta]
+      properties:
+        status: { type: string, enum: [success] }
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [id, organizationId, name, city]
+                properties:
+                  id: { type: string, format: uuid }
+                  organizationId: { type: string, format: uuid }
+                  name: { type: string }
+                  city: { type: string }
+        nextCursor: { type: [string, 'null'], format: uuid }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    DeviceRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [adapterKey, externalDeviceId, displayName, deviceType, reason]
+      properties:
+        adapterKey:
+          { type: string, minLength: 1, maxLength: 60, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]*$' }
+        externalDeviceId: { type: string, minLength: 1, maxLength: 160 }
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+        deviceType: { $ref: '#/components/schemas/DeviceType' }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    DeviceUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 2
+      required: [reason]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+        status: { $ref: '#/components/schemas/DeviceLifecycleStatus' }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    DeviceCommandSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, enum: [success] }
+        data:
+          type: object
+          additionalProperties: false
+          required: [deviceId, status, version]
+          properties:
+            deviceId: { type: string, format: uuid }
+            status: { $ref: '#/components/schemas/DeviceLifecycleStatus' }
+            version: { type: integer, minimum: 1 }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    OperationsCardInventoryStatus:
+      type: string
+      enum: [in_stock, assigned, blocked, retired]
+    OperationsCardManualStatus:
+      type: string
+      enum: [in_stock, blocked, retired]
+    OperationsCardVerificationStatus:
+      type: string
+      enum: [unknown, verified, rejected]
+    OperationsCardInventory:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          organizationId,
+          branchId,
+          maskedIdentifier,
+          status,
+          verificationStatus,
+          version,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        maskedIdentifier: { type: string, minLength: 1, maxLength: 32 }
+        status: { $ref: '#/components/schemas/OperationsCardInventoryStatus' }
+        verificationStatus: { $ref: '#/components/schemas/OperationsCardVerificationStatus' }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    OperationsCardInventoryPageSuccess:
+      type: object
+      required: [status, data, nextCursor, meta]
+      properties:
+        status: { type: string, enum: [success] }
+        data:
+          type: object
+          required: [items, capabilities]
+          properties:
+            items:
+              type: array
+              items: { $ref: '#/components/schemas/OperationsCardInventory' }
+            capabilities:
+              type: object
+              additionalProperties: false
+              required:
+                [canManage, canAssign, canTransfer, canUnassign, canLookupCustomer, requiresStepUp]
+              properties:
+                canManage: { type: boolean }
+                canAssign: { type: boolean }
+                canTransfer: { type: boolean }
+                canUnassign: { type: boolean }
+                canLookupCustomer: { type: boolean }
+                requiresStepUp:
+                  type: boolean
+                  description: True when at least one otherwise evaluated branch capability is blocked only by a missing or expired MFA step-up.
+        nextCursor: { type: [string, 'null'], format: uuid }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    OperationsCardCommandSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, enum: [success] }
+        data: { $ref: '#/components/schemas/OperationsCardInventory' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    OperationsCardRegistrationRequest:
+      type: object
+      additionalProperties: false
+      required: [externalCardId, reason]
+      properties:
+        externalCardId:
+          type: string
+          minLength: 1
+          maxLength: 160
+          writeOnly: true
+          description: Physical identifier is sent only to Wallet and is never returned in a response or rendered in logs.
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    OperationsCardStatusChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [status, reason]
+      properties:
+        status: { $ref: '#/components/schemas/OperationsCardManualStatus' }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    OperationsHouseholdLookupRequest:
+      type: object
+      additionalProperties: false
+      required: [phone]
+      properties:
+        phone: { type: string, minLength: 8, maxLength: 20, writeOnly: true }
+    OperationsHouseholdLookupSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data:
+          type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [householdId, householdName, maskedPhone, activeMemberCount]
+                properties:
+                  householdId: { type: string, format: uuid }
+                  householdName: { type: string, minLength: 2, maxLength: 80 }
+                  maskedPhone: { type: string, maxLength: 32 }
+                  activeMemberCount: { type: integer, minimum: 0 }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    OperationsCardAssignment:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          cardId,
+          organizationId,
+          branchId,
+          householdId,
+          maskedIdentifier,
+          status,
+          verificationStatus,
+          assignedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        cardId: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        maskedIdentifier: { type: string, maxLength: 32 }
+        status: { $ref: '#/components/schemas/OperationsCardInventoryStatus' }
+        verificationStatus: { $ref: '#/components/schemas/OperationsCardVerificationStatus' }
+        assignedAt: { type: string, format: date-time }
+    OperationsCardAssignmentPageSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, nextCursor, meta]
+      properties:
+        status: { type: string, const: success }
+        data:
+          type: object
+          additionalProperties: false
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/OperationsCardAssignment' } }
+        nextCursor: { type: [string, 'null'], format: uuid }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    OperationsCardAssignRequest:
+      type: object
+      additionalProperties: false
+      required: [phone, householdId, reason]
+      properties:
+        phone: { type: string, minLength: 8, maxLength: 20, writeOnly: true }
+        householdId: { type: string, format: uuid }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+    OperationsCardAssignmentCommandSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data: { $ref: '#/components/schemas/OperationsCardAssignment' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    StaffListSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, nextCursor, policyVersion]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/StaffSummary'
+            nextCursor:
+              type: string
+              nullable: true
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    StaffMembershipUpdate:
+      type: object
+      additionalProperties: false
+      required: [roleId, reason]
+      properties:
+        roleId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    StaffMembershipSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, policyVersion]
+          properties:
+            data:
+              $ref: '#/components/schemas/StaffSummary'
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    MembershipMutationSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, policyVersion]
+          properties:
+            data:
+              $ref: '#/components/schemas/StaffSummary'
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    OperationsAccessContextSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [memberships, policyVersion, catalogVersion]
+          properties:
+            memberships:
+              type: array
+              items:
+                $ref: '#/components/schemas/AccessMembershipSummary'
+            policyVersion:
+              type: integer
+              minimum: 1
+            catalogVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    OperationsTenantScope:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [type, organizationId]
+          properties:
+            type:
+              const: organization
+            organizationId:
+              type: string
+              format: uuid
+        - type: object
+          additionalProperties: false
+          required: [type, organizationId, branchId]
+          properties:
+            type:
+              const: branch
+            organizationId:
+              type: string
+              format: uuid
+            branchId:
+              type: string
+              format: uuid
+    OperationsScopeOption:
+      type: object
+      additionalProperties: false
+      required: [scope, organization]
+      properties:
+        scope:
+          $ref: '#/components/schemas/OperationsTenantScope'
+        organization:
+          type: object
+          additionalProperties: false
+          required: [id, name]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        branch:
+          type: object
+          additionalProperties: false
+          required: [id, name, city]
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            city:
+              type: string
+    OperationsScopesSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [items, policyVersion]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/OperationsScopeOption'
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    OperationsScopeSelectionRequest:
+      type: object
+      additionalProperties: false
+      required: [scope]
+      properties:
+        scope:
+          $ref: '#/components/schemas/OperationsTenantScope'
+    OperationsScopeSelectionSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          allOf:
+            - $ref: '#/components/schemas/OperationsScopeOption'
+            - type: object
+              required: [policyVersion]
+              properties:
+                policyVersion:
+                  type: integer
+                  minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    AccessMembershipSummary:
+      type: object
+      required: [membershipId, status, scope, role, version]
+      properties:
+        membershipId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, active, suspended, revoked]
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        role:
+          $ref: '#/components/schemas/RoleSummary'
+        version:
+          type: integer
+          minimum: 1
+    StaffInvitationCreate:
+      type: object
+      additionalProperties: false
+      required: [phoneE164, scope, roleId, reason]
+      properties:
+        phoneE164:
+          type: string
+          pattern: '^[+][1-9][0-9]{7,14}$'
+          writeOnly: true
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        roleId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    StaffInvitationSummary:
+      type: object
+      required: [id, membershipId, status, maskedPhone, scope, role, expiresAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        membershipId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [pending, accepted, revoked, expired]
+        maskedPhone:
+          type: string
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        role:
+          $ref: '#/components/schemas/RoleSummary'
+        expiresAt:
+          type: string
+          format: date-time
+    ScopedInvitationsSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, nextCursor, policyVersion]
+          properties:
+            data:
+              type: array
+              items:
+                allOf:
+                  - $ref: '#/components/schemas/StaffInvitationSummary'
+                  - type: object
+                    required: [isExpired, roleChanged]
+                    properties:
+                      isExpired:
+                        type: boolean
+                      roleChanged:
+                        type: boolean
+            nextCursor:
+              type: string
+              format: uuid
+              nullable: true
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    PendingInvitationsSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data]
+          properties:
+            data:
+              type: array
+              items:
+                type: object
+                required:
+                  [
+                    id,
+                    scope,
+                    organizationName,
+                    branchName,
+                    scopeStatus,
+                    role,
+                    maskedPhone,
+                    expiresAt,
+                    roleChanged,
+                  ]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  scope:
+                    $ref: '#/components/schemas/AccessScope'
+                  organizationName:
+                    type: string
+                    nullable: true
+                    description: Current owner-service name; null when the owner resource no longer exists.
+                  branchName:
+                    type: string
+                    nullable: true
+                    description: Current owner-service branch name; null for organization invitations or a missing branch.
+                  scopeStatus:
+                    type: string
+                    enum: [active, inactive, unavailable, system_only]
+                    description: Current lifecycle confirmation from Organization & Branch; system_only marks a global scope intended for System Web. Acceptance is always revalidated server-side.
+                  role:
+                    $ref: '#/components/schemas/RoleSummary'
+                  maskedPhone:
+                    type: string
+                  expiresAt:
+                    type: string
+                    format: date-time
+                  roleChanged:
+                    type: boolean
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    InvitationMutationSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, policyVersion]
+          properties:
+            data:
+              $ref: '#/components/schemas/StaffInvitationSummary'
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    AcceptedInvitationSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, policyVersion]
+          properties:
+            data:
+              type: object
+              required: [membershipId, status, scope, role]
+              properties:
+                membershipId:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  const: active
+                scope:
+                  $ref: '#/components/schemas/AccessScope'
+                role:
+                  $ref: '#/components/schemas/RoleSummary'
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    InvitationRevocationSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, policyVersion]
+          properties:
+            data:
+              type: object
+              required: [id, membershipId, status]
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                membershipId:
+                  type: string
+                  format: uuid
+                status:
+                  type: string
+                  const: revoked
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    PermissionOverrideCreate:
+      type: object
+      additionalProperties: false
+      required: [permission, effect, scope, reason]
+      properties:
+        permission:
+          type: string
+          minLength: 1
+          maxLength: 120
+        effect:
+          type: string
+          enum: [allow, deny]
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        resource:
+          type: object
+          required: [type, id]
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              minLength: 1
+              maxLength: 80
+            id:
+              type: string
+              minLength: 1
+              maxLength: 160
+        expiresAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    PermissionOverrideSummary:
+      type: object
+      required:
+        [
+          kind,
+          id,
+          membershipId,
+          permissionKey,
+          effect,
+          scope,
+          startsAt,
+          expiresAt,
+          revokedAt,
+          reason,
+        ]
+      properties:
+        kind:
+          type: string
+          const: permission_override
+        id:
+          type: string
+          format: uuid
+        membershipId:
+          type: string
+          format: uuid
+        permissionKey:
+          type: string
+        effect:
+          type: string
+          enum: [allow, deny]
+        scope:
+          $ref: '#/components/schemas/AccessScope'
+        resource:
+          type: object
+          required: [type, id]
+          properties:
+            type:
+              type: string
+            id:
+              type: string
+        startsAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+    PermissionOverrideListSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, policyVersion]
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/PermissionOverrideSummary'
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    PermissionOverrideMutationSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, policyVersion]
+          properties:
+            data:
+              $ref: '#/components/schemas/PermissionOverrideSummary'
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    AccessAuditSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status:
+          type: string
+          enum: [success]
+        data:
+          type: object
+          required: [data, nextCursor, policyVersion]
+          properties:
+            data:
+              type: array
+              items:
+                type: object
+                required:
+                  [
+                    id,
+                    actorType,
+                    actorUserId,
+                    actorLabel,
+                    action,
+                    targetType,
+                    targetId,
+                    scope,
+                    reason,
+                    beforeState,
+                    afterState,
+                    policyVersion,
+                    correlationId,
+                    outcome,
+                    createdAt,
+                  ]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  actorType:
+                    type: string
+                    enum: [user, system]
+                  actorUserId:
+                    type: string
+                    format: uuid
+                    nullable: true
+                  actorLabel:
+                    type: string
+                    nullable: true
+                  action:
+                    type: string
+                  targetType:
+                    type: string
+                  targetId:
+                    type: string
+                  scope:
+                    $ref: '#/components/schemas/AccessScope'
+                  reason:
+                    type: string
+                  beforeState:
+                    type: object
+                    nullable: true
+                    additionalProperties: true
+                  afterState:
+                    type: object
+                    nullable: true
+                    additionalProperties: true
+                  policyVersion:
+                    type: integer
+                    minimum: 1
+                    nullable: true
+                  correlationId:
+                    type: string
+                    format: uuid
+                  outcome:
+                    type: string
+                    enum: [succeeded, denied, failed]
+                  createdAt:
+                    type: string
+                    format: date-time
+            nextCursor:
+              type: string
+              maxLength: 128
+              nullable: true
+            policyVersion:
+              type: integer
+              minimum: 1
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    ReasonRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    Error:
+      type: object
+      required: [status, error]
+      properties:
+        status:
+          type: string
+          enum: [error]
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+  responses:
+    Unauthenticated:
+      description: Authentication is required.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The current actor lacks the required permission or scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: Too many requests.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

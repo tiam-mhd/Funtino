@@ -1,0 +1,183 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "../generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("ANALYTICS_DATABASE_URL")
+  directUrl = env("ANALYTICS_MIGRATION_DATABASE_URL")
+  schemas   = ["analytics_read_model"]
+}
+
+enum ResourceStatus {
+  active
+  suspended
+  archived
+
+  @@map("resource_status")
+  @@schema("analytics_read_model")
+}
+
+enum DeviceLifecycleStatus {
+  active
+  suspended
+  retired
+
+  @@map("device_lifecycle_status")
+  @@schema("analytics_read_model")
+}
+
+enum DeviceHealthState {
+  online
+  degraded
+  offline
+
+  @@map("device_health_state")
+  @@schema("analytics_read_model")
+}
+
+enum ProjectionGenerationStatus {
+  building
+  active
+  superseded
+  failed
+
+  @@map("projection_generation_status")
+  @@schema("analytics_read_model")
+}
+
+model ProjectionGeneration {
+  id            String                     @id @db.Uuid
+  status        ProjectionGenerationStatus @default(building)
+  highWatermark BigInt?                    @map("high_watermark")
+  createdAt     DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  activatedAt   DateTime?                  @map("activated_at") @db.Timestamptz(6)
+  completedAt   DateTime?                  @map("completed_at") @db.Timestamptz(6)
+  lastErrorCode String?                    @map("last_error_code") @db.VarChar(80)
+
+  @@index([status, createdAt])
+  @@map("projection_generations")
+  @@schema("analytics_read_model")
+}
+
+model ProjectionControl {
+  id                 Int       @id @default(1)
+  activeGenerationId String?   @map("active_generation_id") @db.Uuid
+  coverageStartedAt  DateTime? @map("coverage_started_at") @db.Timestamptz(6)
+  lastEventAt        DateTime? @map("last_event_at") @db.Timestamptz(6)
+  lastProcessedAt    DateTime? @map("last_processed_at") @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("projection_control")
+  @@schema("analytics_read_model")
+}
+
+model RebuildLease {
+  id        Int       @id @default(1)
+  leaseId   String?   @map("lease_id") @db.Uuid
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(6)
+
+  @@map("rebuild_lease")
+  @@schema("analytics_read_model")
+}
+
+model AnalyticsEvent {
+  sequence       BigInt   @id @default(autoincrement())
+  eventId        String   @unique @map("event_id") @db.Uuid
+  eventType      String   @map("event_type") @db.VarChar(160)
+  occurredAt     DateTime @map("occurred_at") @db.Timestamptz(6)
+  sourceId       String   @map("source_id") @db.VarChar(80)
+  aggregateId    String   @map("aggregate_id") @db.VarChar(160)
+  organizationId String   @map("organization_id") @db.Uuid
+  branchId       String?  @map("branch_id") @db.Uuid
+  payload        Json
+  receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@index([organizationId, branchId, occurredAt, eventType], map: "analytics_events_scope_time_idx")
+  @@map("analytics_events")
+  @@schema("analytics_read_model")
+}
+
+model OrganizationProjection {
+  generationId String         @map("generation_id") @db.Uuid
+  id           String         @db.Uuid
+  name         String?
+  status       ResourceStatus
+  version      Int
+  updatedAt    DateTime       @map("updated_at") @db.Timestamptz(6)
+
+  @@id([generationId, id])
+  @@index([generationId, status])
+  @@map("organization_projection")
+  @@schema("analytics_read_model")
+}
+
+model BranchProjection {
+  generationId   String         @map("generation_id") @db.Uuid
+  id             String         @db.Uuid
+  organizationId String         @map("organization_id") @db.Uuid
+  name           String?
+  status         ResourceStatus
+  version        Int
+  updatedAt      DateTime       @map("updated_at") @db.Timestamptz(6)
+
+  @@id([generationId, id])
+  @@index([generationId, organizationId, status, id], map: "branch_projection_scope_idx")
+  @@map("branch_projection")
+  @@schema("analytics_read_model")
+}
+
+model DeviceProjection {
+  generationId     String                 @map("generation_id") @db.Uuid
+  id               String                 @db.Uuid
+  organizationId   String                 @map("organization_id") @db.Uuid
+  branchId         String                 @map("branch_id") @db.Uuid
+  displayName      String?
+  deviceType       String?                @map("device_type") @db.VarChar(40)
+  // A health observation may arrive before the lifecycle registration event.
+  // Keep the device visible but explicitly classify its lifecycle as unknown.
+  status           DeviceLifecycleStatus?
+  latestHealth     DeviceHealthState?     @map("latest_health")
+  latestObservedAt DateTime?              @map("latest_observed_at") @db.Timestamptz(6)
+  version          Int
+  updatedAt        DateTime               @map("updated_at") @db.Timestamptz(6)
+
+  @@id([generationId, id])
+  @@index([generationId, organizationId, branchId, status], map: "device_projection_scope_idx")
+  @@index([generationId, latestObservedAt])
+  @@map("device_projection")
+  @@schema("analytics_read_model")
+}
+
+model DailyOperationalMetric {
+  generationId   String   @map("generation_id") @db.Uuid
+  day            DateTime @db.Date
+  organizationId String   @map("organization_id") @db.Uuid
+  branchId       String   @map("branch_id") @db.Uuid
+  metricKey      String   @map("metric_key") @db.VarChar(80)
+  count          Int      @default(0)
+
+  @@id([generationId, day, organizationId, branchId, metricKey])
+  @@index([generationId, organizationId, day, metricKey], map: "daily_metrics_scope_day_idx")
+  @@map("daily_operational_metrics")
+  @@schema("analytics_read_model")
+}
+
+model ReportExportAudit {
+  id             String   @id @db.Uuid
+  actorUserId    String   @map("actor_user_id") @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  branchId       String?  @map("branch_id") @db.Uuid
+  fromDay        DateTime @map("from_day") @db.Date
+  toDay          DateTime @map("to_day") @db.Date
+  rowCount       Int      @map("row_count")
+  correlationId  String   @map("correlation_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([organizationId, branchId, createdAt], map: "report_export_audit_scope_created_idx")
+  @@index([actorUserId, createdAt], map: "report_export_audit_actor_created_idx")
+  @@map("report_export_audit")
+  @@schema("analytics_read_model")
+}

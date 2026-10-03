@@ -1,0 +1,362 @@
+.page {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+.heading,
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.heading h2,
+.sectionHeading h3 {
+  margin: 5px 0;
+  color: var(--ft-ink);
+  font-size: clamp(18px, 3vw, 24px);
+}
+.heading p,
+.sectionHeading p {
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 12px;
+  line-height: 1.9;
+}
+.eyebrow {
+  color: var(--ft-teal-dark);
+  font-size: 11px;
+  font-weight: 900;
+}
+.filters,
+.coverage,
+.periodSummary,
+.branchPanel,
+.mfaPanel {
+  padding: clamp(16px, 3vw, 24px);
+  box-shadow: none;
+}
+.filterForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+}
+.filterForm label,
+.mfaForm label {
+  display: grid;
+  gap: 6px;
+  color: var(--ft-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+.filterForm input,
+.mfaForm input,
+.mfaForm select {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--ft-line);
+  border-radius: 12px;
+  padding: 8px 11px;
+  color: var(--ft-ink);
+  background: white;
+  font: inherit;
+}
+.filterForm input:focus-visible,
+.mfaForm input:focus-visible,
+.mfaForm select:focus-visible {
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+.filterActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.helper {
+  margin: 10px 0 0;
+  color: var(--ft-muted);
+  font-size: 11px;
+  line-height: 1.9;
+}
+.coverage {
+  border-color: rgb(14 143 147 / 18%);
+  background: #f6fcfb;
+}
+.coverage strong {
+  color: var(--ft-ink);
+  font-size: 13px;
+}
+.coverage p {
+  margin: 7px 0 0;
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+  line-height: 1.9;
+}
+.coverageWarning {
+  border-inline-start: 3px solid #d18a1d;
+  padding-inline-start: 10px;
+  color: #805519 !important;
+}
+.coverage code {
+  color: var(--ft-teal-dark);
+}
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.metricCard {
+  display: grid;
+  gap: 8px;
+  padding: 17px;
+  box-shadow: none;
+}
+.metricCard span {
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+  font-weight: 800;
+}
+.metricCard strong {
+  color: var(--ft-ink);
+  font-size: 28px;
+  line-height: 1.25;
+}
+.metricCard small {
+  color: var(--ft-muted);
+  font-size: 10px;
+  line-height: 1.8;
+}
+.warningValue {
+  color: #9c5d06 !important;
+}
+.periodSummary,
+.branchPanel {
+  display: grid;
+  gap: 14px;
+}
+.sectionHeading h3 {
+  font-size: 16px;
+}
+.sectionHeading p {
+  font-size: 11px;
+}
+.totalGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+.totalGrid > div {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--ft-line);
+  border-radius: 13px;
+  padding: 12px;
+}
+.totalGrid span {
+  color: var(--ft-muted);
+  font-size: 10px;
+}
+.totalGrid strong {
+  color: var(--ft-ink);
+  font-size: 18px;
+}
+.tableScroller {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--ft-line);
+  border-radius: 13px;
+}
+.tableScroller:focus-visible {
+  outline: 3px solid var(--ft-focus, #2563eb);
+  outline-offset: 3px;
+}
+.tableScroller table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: right;
+}
+.tableScroller th,
+.tableScroller td {
+  border-bottom: 1px solid var(--ft-line);
+  padding: 11px 12px;
+  white-space: nowrap;
+}
+.tableScroller thead th {
+  color: var(--ft-ink-soft);
+  background: #f8f9fc;
+  font-weight: 800;
+}
+.tableScroller tbody th {
+  color: var(--ft-ink);
+  font-weight: 800;
+}
+.tableScroller tbody tr:last-child th,
+.tableScroller tbody tr:last-child td {
+  border-bottom: 0;
+}
+.empty {
+  margin: 0;
+  color: var(--ft-muted);
+  font-size: 12px;
+}
+.healthPanel {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 9px;
+}
+.healthItem {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  box-shadow: none;
+}
+.healthItem > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ft-ink-soft);
+  font-size: 10px;
+}
+.healthItem strong {
+  color: var(--ft-ink);
+  font-size: 14px;
+}
+.barTrack {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef0f5;
+}
+.barTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+.bar_success {
+  background: #21865d;
+}
+.bar_warning {
+  background: #d18a1d;
+}
+.bar_danger {
+  background: #c44c5a;
+}
+.bar_neutral {
+  background: #8390a3;
+}
+.state,
+.error {
+  padding: 16px;
+  color: var(--ft-ink-soft);
+}
+.error {
+  border-color: rgb(216 91 105 / 30%);
+  background: #fff7f8;
+}
+.error p {
+  margin: 0 0 9px;
+  color: #963b49;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.errorText {
+  margin: 0;
+  color: #963b49;
+  font-size: 12px;
+}
+.notice {
+  margin: 0;
+  border: 1px solid rgb(33 134 93 / 22%);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: #23694c;
+  background: #f2fbf6;
+  font-size: 12px;
+}
+.mfaPanel {
+  display: grid;
+  gap: 14px;
+  border-color: rgb(120 80 223 / 23%);
+}
+.mfaForm {
+  display: grid;
+  max-width: 520px;
+  gap: 12px;
+}
+.mfaForm p,
+.warning {
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 12px;
+  line-height: 1.9;
+}
+.secret {
+  overflow-wrap: anywhere;
+  border-radius: 9px;
+  padding: 11px;
+  color: #4d397f;
+  background: #f4f0ff;
+}
+.recoveryCodes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px 18px;
+  margin: 0;
+  padding-inline-start: 25px;
+}
+.recoveryCodes code {
+  color: var(--ft-ink);
+  font-size: 12px;
+}
+.check {
+  display: flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 9px !important;
+  font-weight: 600 !important;
+}
+.check input {
+  width: 18px;
+  min-height: 18px;
+}
+.warning {
+  border-radius: 10px;
+  padding: 11px;
+  color: #805519 !important;
+  background: #fff8eb;
+}
+
+@media (max-width: 900px) {
+  .metricsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .healthPanel {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 620px) {
+  .filterForm {
+    grid-template-columns: 1fr;
+  }
+  .filterActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .totalGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .healthPanel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sectionHeading {
+    align-items: flex-start;
+  }
+}

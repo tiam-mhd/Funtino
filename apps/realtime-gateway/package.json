@@ -1,0 +1,30 @@
+{
+  "name": "@funtino/realtime-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @funtino/event-contracts build && pnpm --filter @funtino/backend-core build && tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@funtino/backend-core": "workspace:*",
+    "@funtino/event-contracts": "workspace:*",
+    "@nestjs/common": "11.0.11",
+    "@nestjs/config": "4.0.2",
+    "@nestjs/core": "11.0.11",
+    "@nestjs/platform-fastify": "11.0.11",
+    "@nestjs/platform-socket.io": "11.0.11",
+    "@nestjs/websockets": "11.0.11",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "socket.io": "4.8.1"
+  },
+  "devDependencies": {
+    "tsx": "4.19.3",
+    "typescript": "5.8.2"
+  }
+}

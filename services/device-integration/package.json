@@ -1,0 +1,35 @@
+{
+  "name": "@funtino/device-integration",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm prisma:generate && pnpm --filter @funtino/event-contracts build && pnpm --filter @funtino/backend-core build && tsx watch src/main.ts",
+    "build": "pnpm prisma:generate && tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "lint": "eslint .",
+    "typecheck": "pnpm prisma:generate && tsc --noEmit",
+    "test": "pnpm prisma:generate && pnpm --filter @funtino/event-contracts build && pnpm --filter @funtino/backend-core build && tsx --test tests/unit/device-domain.spec.ts tests/unit/device-registry.service.spec.ts tests/unit/device-service-token.guard.spec.ts tests/unit/organization-branch-scope.client.spec.ts tests/unit/health.controller.spec.ts tests/integration/device-repository.spec.ts tests/integration/device-security-and-outbox.spec.ts",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:bootstrap": "prisma db execute --schema prisma/schema.prisma --file prisma/bootstrap.sql",
+    "prisma:migrate": "pnpm prisma:bootstrap && prisma migrate deploy --schema prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@funtino/backend-core": "workspace:*",
+    "@funtino/event-contracts": "workspace:*",
+    "@nestjs/common": "11.0.11",
+    "@nestjs/config": "4.0.2",
+    "@nestjs/core": "11.0.11",
+    "@nestjs/platform-fastify": "11.0.11",
+    "@prisma/client": "6.7.0",
+    "fastify": "5.2.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "prisma": "6.7.0",
+    "tsx": "4.19.3",
+    "typescript": "5.8.2"
+  }
+}

@@ -1,0 +1,6 @@
+[
+  {
+    "targets": ["host.docker.internal:4010"],
+    "labels": { "__scheme__": "http", "service": "realtime-gateway", "environment": "local" }
+  }
+]

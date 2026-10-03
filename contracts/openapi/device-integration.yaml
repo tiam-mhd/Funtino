@@ -1,0 +1,405 @@
+openapi: 3.1.0
+info:
+  title: Funtino Device Integration Owner API
+  version: 0.1.0
+  description: Internal-only API for branch device registry and normalized, signed device observations.
+servers:
+  - url: http://localhost:4020
+    description: Local development only
+paths:
+  /internal/v1/organizations/{organizationId}/devices:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+    get:
+      operationId: listDevices
+      summary: List registered devices in an organization, optionally filtered to a branch
+      security:
+        - internalGatewayToken: []
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/DeviceStatus' }
+        - name: cursor
+          in: query
+          schema: { type: string, format: uuid }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        '200':
+          description: Device page with health derived from persisted observations and configured freshness thresholds
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DevicePage' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/devices:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/BranchId'
+    post:
+      operationId: registerDevice
+      summary: Register a device for an active branch
+      description: The service validates the organization/branch pair with its owner. Registration is idempotent, audited, and written with its outbox event in one transaction.
+      security:
+        - internalGatewayToken: []
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceRegistration' }
+      responses:
+        '201':
+          description: Registered device identity and current version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceCommandResult' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/devices/{deviceId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/BranchId'
+      - $ref: '#/components/parameters/DeviceId'
+    get:
+      operationId: getDevice
+      summary: Get one device and its current derived health
+      security:
+        - internalGatewayToken: []
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+      responses:
+        '200':
+          description: Device
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    patch:
+      operationId: updateDevice
+      summary: Rename, suspend, reactivate, or retire a device with optimistic concurrency
+      description: Retired devices are terminal. Reactivation requires the branch owner to confirm the branch is active.
+      security:
+        - internalGatewayToken: []
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceUpdate' }
+      responses:
+        '200':
+          description: Updated device identity and current version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeviceCommandResult' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v1/device/health-observations:
+    post:
+      operationId: reportDeviceHealth
+      summary: Ingest an authenticated normalized health observation
+      description: HMAC-SHA256 covers the exact raw request body. Duplicate observation IDs are idempotent; older observations are retained but cannot replace newer current health.
+      security:
+        - deviceWebhookSignature: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HealthObservationInput' }
+      responses:
+        '202':
+          description: Observation durably accepted or recognized as a duplicate
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthObservationResult' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v1/device/events:
+    post:
+      operationId: importDeviceTransactionEvent
+      summary: Import the existing signed device transaction event
+      description: Existing normalized transaction contract is preserved; accepted event and durable outbox record are committed atomically.
+      security:
+        - deviceWebhookSignature: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeviceTransactionInput' }
+      responses:
+        '202':
+          description: Event durably accepted or recognized as a duplicate
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransactionImportResult' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    internalGatewayToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+      description: Runtime secret held only by the API Gateway. Pair with x-funtino-service-id=api-gateway.
+    deviceWebhookSignature:
+      type: apiKey
+      in: header
+      name: x-device-signature
+      description: sha256=<hex HMAC-SHA256 of the exact raw JSON body>.
+  parameters:
+    ServiceId:
+      name: x-funtino-service-id
+      in: header
+      required: true
+      schema: { type: string, const: api-gateway }
+    ActorUserId:
+      name: x-funtino-actor-user-id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    CorrelationId:
+      name: x-correlation-id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    OptionalCorrelationId:
+      name: x-correlation-id
+      in: header
+      required: false
+      description: If omitted, the service request ID is used as the correlation ID.
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, pattern: '^"?[1-9][0-9]*"?$' }
+    OrganizationId:
+      name: organizationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    BranchId:
+      name: branchId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    DeviceStatus:
+      type: string
+      enum: [active, suspended, retired]
+    DeviceType:
+      type: string
+      enum: [rfid_reader, terminal, access_gate, other]
+    HealthState:
+      type: string
+      enum: [unknown, online, degraded, stale, offline]
+    DeviceRegistration:
+      type: object
+      additionalProperties: false
+      required: [adapterKey, externalDeviceId, displayName, deviceType, reason]
+      properties:
+        adapterKey:
+          { type: string, minLength: 1, maxLength: 60, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]*$' }
+        externalDeviceId: { type: string, minLength: 1, maxLength: 160 }
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+        deviceType: { $ref: '#/components/schemas/DeviceType' }
+        reason: { type: string, minLength: 5, maxLength: 500 }
+    DeviceUpdate:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      minProperties: 2
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+        status: { $ref: '#/components/schemas/DeviceStatus' }
+        reason: { type: string, minLength: 5, maxLength: 500 }
+    DeviceCommandResult:
+      type: object
+      additionalProperties: false
+      required: [deviceId, status, version]
+      properties:
+        deviceId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/DeviceStatus' }
+        version: { type: integer, minimum: 1 }
+    Device:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          organizationId,
+          branchId,
+          adapterKey,
+          externalDeviceId,
+          displayName,
+          deviceType,
+          status,
+          healthState,
+          latestReportedState,
+          latestObservedAt,
+          freshnessSeconds,
+          version,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        adapterKey: { type: string }
+        externalDeviceId: { type: string }
+        displayName: { type: string }
+        deviceType: { $ref: '#/components/schemas/DeviceType' }
+        status: { $ref: '#/components/schemas/DeviceStatus' }
+        healthState: { $ref: '#/components/schemas/HealthState' }
+        latestReportedState: { type: [string, 'null'], enum: [online, degraded, offline, null] }
+        latestObservedAt: { type: [string, 'null'], format: date-time }
+        freshnessSeconds: { type: [integer, 'null'], minimum: 0 }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    DevicePage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Device' }
+        nextCursor: { type: [string, 'null'], format: uuid }
+    HealthObservationInput:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          organizationId,
+          adapterKey,
+          externalDeviceId,
+          externalObservationId,
+          reportedState,
+          observedAt,
+        ]
+      properties:
+        organizationId: { type: string, format: uuid }
+        adapterKey: { type: string, minLength: 1, maxLength: 60 }
+        externalDeviceId: { type: string, minLength: 1, maxLength: 160 }
+        externalObservationId: { type: string, minLength: 1, maxLength: 160 }
+        reportedState: { type: string, enum: [online, degraded, offline] }
+        observedAt: { type: string, format: date-time }
+    HealthObservationResult:
+      type: object
+      additionalProperties: false
+      required: [accepted, duplicate, deviceId, observationId, observedAt, isLatest]
+      properties:
+        accepted: { const: true }
+        duplicate: { type: boolean }
+        deviceId: { type: string, format: uuid }
+        observationId: { type: string, format: uuid }
+        observedAt: { type: string, format: date-time }
+        isLatest: { type: boolean }
+    DeviceTransactionInput:
+      type: object
+      required:
+        [
+          eventId,
+          organizationId,
+          branchId,
+          externalCardId,
+          transactionKind,
+          amountMinor,
+          currency,
+          occurredAt,
+        ]
+      properties:
+        eventId: { type: string, minLength: 1, maxLength: 160 }
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        externalCardId: { type: string, minLength: 1, maxLength: 160 }
+        transactionKind: { type: string, enum: [top_up, spend, refund, adjustment] }
+        amountMinor: { type: integer }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        occurredAt: { type: string, format: date-time }
+        sourceDeviceId: { type: string, maxLength: 160 }
+    TransactionImportResult:
+      type: object
+      additionalProperties: false
+      required: [accepted, duplicate, externalEventId, transactionId]
+      properties:
+        accepted: { const: true }
+        duplicate: { type: boolean }
+        externalEventId: { type: string }
+        transactionId: { type: string, format: uuid }
+    Error:
+      type: object
+      properties:
+        statusCode: { type: integer }
+        message: { type: string }
+  responses:
+    InvalidRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Internal service or device signature is invalid
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Device or branch was not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Identity, version, status transition, or idempotency key conflicts with current state
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unavailable:
+      description: Database, configuration, or organization/branch owner is unavailable
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

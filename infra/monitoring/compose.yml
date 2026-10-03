@@ -1,0 +1,95 @@
+name: funtino-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+    ports:
+      - '127.0.0.1:9090:9090'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts:/etc/prometheus/alerts:ro
+      - ./targets:/etc/prometheus/targets:ro
+      - funtino-prometheus-data:/prometheus
+    secrets:
+      - api_gateway_metrics_token
+      - realtime_metrics_token
+      - device_integration_metrics_token
+      - wallet_metrics_token
+      - notifications_metrics_token
+      - identity_access_metrics_token
+      - organization_branch_metrics_token
+      - analytics_metrics_token
+    networks:
+      - funtino-local
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.34.1
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - '127.0.0.1:9093:9093'
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - funtino-alertmanager-data:/alertmanager
+    secrets:
+      - operations_alert_webhook_url
+    networks:
+      - funtino-local
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.2
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    ports:
+      - '127.0.0.1:3001:3000'
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - funtino-grafana-data:/var/lib/grafana
+    secrets:
+      - grafana_admin_password
+    networks:
+      - funtino-local
+    restart: unless-stopped
+
+volumes:
+  funtino-prometheus-data:
+  funtino-alertmanager-data:
+  funtino-grafana-data:
+
+secrets:
+  api_gateway_metrics_token:
+    file: ./secrets/api-gateway-metrics-token
+  realtime_metrics_token:
+    file: ./secrets/realtime-metrics-token
+  device_integration_metrics_token:
+    file: ./secrets/device-integration-metrics-token
+  wallet_metrics_token:
+    file: ./secrets/wallet-metrics-token
+  notifications_metrics_token:
+    file: ./secrets/notifications-metrics-token
+  identity_access_metrics_token:
+    file: ./secrets/identity-access-metrics-token
+  organization_branch_metrics_token:
+    file: ./secrets/organization-branch-metrics-token
+  analytics_metrics_token:
+    file: ./secrets/analytics-metrics-token
+  operations_alert_webhook_url:
+    file: ./secrets/operations-alert-webhook-url
+  grafana_admin_password:
+    file: ./secrets/grafana-admin-password
+
+networks:
+  funtino-local:
+    external: true
+    name: funtino-local_default

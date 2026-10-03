@@ -1,0 +1,270 @@
+.page {
+  min-height: 100vh;
+  background: #f7f7fb;
+  color: var(--ft-ink);
+}
+
+.topbar {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--ft-line);
+  padding: 14px clamp(16px, 4vw, 52px);
+  background: var(--ft-surface);
+}
+
+.homeLink {
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--ft-teal-dark);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.homeLink:focus-visible {
+  outline: 3px solid var(--ft-teal-dark);
+  outline-offset: 3px;
+}
+
+.content {
+  display: grid;
+  width: min(100%, 1380px);
+  gap: 20px;
+  margin: 0 auto;
+  padding: 28px clamp(16px, 4vw, 52px) 56px;
+}
+
+.heading,
+.panelHeading,
+.serviceHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.heading {
+  align-items: center;
+}
+
+.heading h1 {
+  margin: 5px 0;
+  font-size: clamp(24px, 4vw, 34px);
+  letter-spacing: -0.04em;
+}
+
+.heading p,
+.panelHeading p {
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.eyebrow {
+  color: #7045d4;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.summaryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ft-ink-soft);
+  font-size: 12px;
+}
+
+.serviceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.serviceCard {
+  min-width: 0;
+  padding: 18px;
+}
+
+.serviceHeading {
+  align-items: center;
+}
+
+.serviceHeading h2,
+.panelHeading h2,
+.failureCard h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.serviceHeading small {
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0 12px;
+}
+
+.metrics div {
+  min-width: 0;
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--ft-surface-soft);
+}
+
+.metrics dt {
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+}
+
+.metrics dd {
+  margin: 4px 0 0;
+  direction: ltr;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.lastScrape {
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+}
+
+.alertPanel {
+  padding: 18px;
+}
+
+.emptyAlerts,
+.feedback,
+.staleNotice,
+.errorNotice,
+.failureCard {
+  border-radius: var(--ft-radius-sm);
+  padding: 14px 16px;
+  line-height: 1.8;
+}
+
+.emptyAlerts,
+.feedback {
+  color: var(--ft-ink-soft);
+  background: var(--ft-surface-soft);
+}
+
+.staleNotice {
+  color: #704600;
+  background: #fff4d8;
+}
+
+.errorNotice {
+  color: #8a2634;
+  background: #fff0f2;
+}
+
+.alertList {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.alertList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--ft-line);
+  padding: 12px 0 4px;
+}
+
+.alertList li > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.alertList strong {
+  direction: ltr;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.alertList small {
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+}
+
+.footnote {
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+}
+
+.failureCard {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  border: 1px solid var(--ft-line);
+  background: var(--ft-surface);
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.failureCard p {
+  margin: 0;
+  color: var(--ft-ink-soft);
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    min-height: 68px;
+  }
+
+  .content {
+    gap: 16px;
+    padding-top: 20px;
+  }
+
+  .heading,
+  .panelHeading {
+    align-items: stretch;
+  }
+
+  .heading {
+    flex-direction: column;
+  }
+
+  .heading > :last-child {
+    align-self: flex-start;
+  }
+
+  .serviceGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
+  .summaryRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .serviceCard,
+  .alertPanel {
+    padding: 14px;
+  }
+
+  .serviceHeading {
+    align-items: flex-start;
+  }
+}

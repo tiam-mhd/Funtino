@@ -1,0 +1,6 @@
+[
+  {
+    "targets": ["host.docker.internal:4050"],
+    "labels": { "__scheme__": "http", "service": "organization-branch", "environment": "local" }
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/organization-branch/organization-status-changed.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "organization.organization-status-changed.v1" },
+        "payload": {
+          "$ref": "https://contracts.funtino.ir/events/organization-branch/payloads.v1.json#/$defs/organizationStatusChanged"
+        }
+      }
+    }
+  ]
+}

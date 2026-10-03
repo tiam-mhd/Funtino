@@ -1,0 +1,229 @@
+:root {
+  --ft-ink: #202341;
+  --ft-ink-soft: #626783;
+  --ft-muted: #626783;
+  --ft-surface: #ffffff;
+  --ft-surface-soft: #f6f5fb;
+  --ft-line: #ebeaf3;
+  --ft-teal: #0ecfc1;
+  --ft-teal-dark: #006b70;
+  --ft-orange: #ffad42;
+  --ft-purple: #7850df;
+  --ft-pink: #f070b7;
+  --ft-blue: #599ce7;
+  --ft-danger: #d85b69;
+  --ft-success: #3aaf78;
+  --ft-shadow-sm: 0 8px 24px rgb(33 35 72 / 7%);
+  --ft-shadow-md: 0 18px 46px rgb(33 35 72 / 12%);
+  --ft-radius-sm: 14px;
+  --ft-radius-md: 22px;
+  --ft-radius-lg: 30px;
+  --ft-focus: 0 0 0 4px rgb(14 207 193 / 22%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.ft-mark {
+  display: inline-flex;
+  width: 156px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 84%);
+  border-radius: 13px;
+  padding: 3px 7px;
+  background: rgb(255 255 255 / 86%);
+  box-shadow: 0 8px 18px rgb(36 38 79 / 8%);
+}
+
+.ft-mark__logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.ft-mark--compact {
+  width: 112px;
+  height: 34px;
+  border-radius: 10px;
+  padding: 2px 5px;
+}
+
+.ft-surface {
+  border: 1px solid var(--ft-line);
+  border-radius: var(--ft-radius-md);
+  background: var(--ft-surface);
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.ft-button {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  padding: 0 18px;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.ft-button:hover {
+  transform: translateY(-1px);
+}
+
+.ft-button:focus-visible,
+.ft-section-heading__action:focus-visible,
+.ft-mark:focus-visible {
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.ft-button--primary {
+  background: var(--ft-teal-dark);
+  box-shadow: 0 8px 18px rgb(0 107 112 / 22%);
+}
+
+.ft-button--secondary {
+  background: var(--ft-purple);
+  box-shadow: 0 8px 18px rgb(120 80 223 / 20%);
+}
+
+.ft-button--ghost {
+  border-color: var(--ft-line);
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+}
+
+.ft-button--danger {
+  background: var(--ft-danger);
+}
+
+.ft-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
+.ft-badge {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.ft-badge--success {
+  color: #247e56;
+  background: #e7f7ef;
+}
+
+.ft-badge--warning {
+  color: #81520d;
+  background: #fff2da;
+}
+
+.ft-badge--info {
+  color: #2c6eae;
+  background: #e9f4ff;
+}
+
+.ft-badge--neutral {
+  color: var(--ft-ink-soft);
+  background: var(--ft-surface-soft);
+}
+
+.ft-badge--danger {
+  color: #a94251;
+  background: #ffe9ed;
+}
+
+.ft-icon-badge {
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 16px;
+  font-size: 22px;
+}
+
+.ft-icon-badge--teal {
+  background: #e1fbf8;
+}
+
+.ft-icon-badge--orange {
+  background: #fff1dd;
+}
+
+.ft-icon-badge--purple {
+  background: #efe9ff;
+}
+
+.ft-icon-badge--pink {
+  background: #ffe9f5;
+}
+
+.ft-icon-badge--blue {
+  background: #e8f3ff;
+}
+
+.ft-progress__track {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eeedf4;
+}
+
+.ft-progress__value {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--ft-teal), #54e0bb);
+}
+
+.ft-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.ft-section-heading__eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ft-teal-dark);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.ft-section-heading__title {
+  margin: 0;
+  color: var(--ft-ink);
+  font-size: 19px;
+  letter-spacing: -0.03em;
+}
+
+.ft-section-heading__action {
+  flex: 0 0 auto;
+  color: var(--ft-purple);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}

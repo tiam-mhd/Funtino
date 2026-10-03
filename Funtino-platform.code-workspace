@@ -1,0 +1,20 @@
+{
+  "folders": [
+    {
+      "name": "Funtino source workspace",
+      "path": ".",
+    },
+    {
+      "name": "Frontend Runtime | Runflare",
+      "path": "../Funtino-deployments/funtino-frontend-runtime",
+    },
+    {
+      "name": "Backend Runtime | Runflare",
+      "path": "../Funtino-deployments/funtino-backend-runtime",
+    },
+  ],
+  "settings": {
+    "git.autoRepositoryDetection": true,
+    "git.openRepositoryInParentFolders": "never",
+  },
+}

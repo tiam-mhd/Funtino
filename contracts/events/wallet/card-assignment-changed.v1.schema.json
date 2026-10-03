@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/wallet/card-assignment-changed.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "wallet.card-assignment-changed.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["assignmentId", "cardId", "householdId", "previousHouseholdId", "action"],
+          "properties": {
+            "assignmentId": { "type": "string", "format": "uuid" },
+            "cardId": { "type": "string", "format": "uuid" },
+            "householdId": { "type": "string", "format": "uuid" },
+            "previousHouseholdId": { "type": ["string", "null"], "format": "uuid" },
+            "action": { "enum": ["assigned", "transferred", "cancelled"] }
+          },
+          "additionalProperties": false,
+          "allOf": [
+            {
+              "if": { "properties": { "action": { "enum": ["assigned", "cancelled"] } } },
+              "then": { "properties": { "previousHouseholdId": { "type": "null" } } }
+            },
+            {
+              "if": { "properties": { "action": { "const": "transferred" } } },
+              "then": {
+                "properties": { "previousHouseholdId": { "type": "string", "format": "uuid" } }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

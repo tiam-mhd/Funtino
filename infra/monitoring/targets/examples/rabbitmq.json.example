@@ -1,0 +1,6 @@
+[
+  {
+    "targets": ["rabbitmq:15692"],
+    "labels": { "service": "rabbitmq", "environment": "local" }
+  }
+]

@@ -1,0 +1,147 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "../generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("CUSTOMER_HOUSEHOLD_DATABASE_URL")
+  directUrl = env("CUSTOMER_HOUSEHOLD_MIGRATION_DATABASE_URL")
+  schemas   = ["customer_household"]
+}
+
+enum HouseholdStatus {
+  active
+  suspended
+  archived
+
+  @@map("household_status")
+  @@schema("customer_household")
+}
+
+enum HouseholdAccessRole {
+  owner
+  guardian
+
+  @@map("household_access_role")
+  @@schema("customer_household")
+}
+
+enum HouseholdAccessStatus {
+  active
+  suspended
+  revoked
+
+  @@map("household_access_status")
+  @@schema("customer_household")
+}
+
+enum HouseholdMemberStatus {
+  active
+  archived
+
+  @@map("household_member_status")
+  @@schema("customer_household")
+}
+
+model Household {
+  id          String          @id @default(uuid()) @db.Uuid
+  ownerUserId String          @map("owner_user_id") @db.Uuid
+  name        String          @db.VarChar(80)
+  status      HouseholdStatus @default(active)
+  version     Int             @default(1)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  accesses    HouseholdAccess[]
+  members     HouseholdMember[]
+
+  @@index([ownerUserId, status, createdAt], map: "customer_household_owner_status_idx")
+  @@map("households")
+  @@schema("customer_household")
+}
+
+model HouseholdAccess {
+  id          String               @id @default(uuid()) @db.Uuid
+  householdId String               @map("household_id") @db.Uuid
+  userId      String               @map("user_id") @db.Uuid
+  role        HouseholdAccessRole  @default(owner)
+  status      HouseholdAccessStatus @default(active)
+  createdAt   DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  household   Household            @relation(fields: [householdId], references: [id], onDelete: Restrict)
+
+  @@unique([householdId, userId], map: "customer_household_access_household_user_key")
+  @@index([userId, status, householdId], map: "customer_household_access_user_status_idx")
+  @@map("household_accesses")
+  @@schema("customer_household")
+}
+
+model HouseholdMember {
+  id           String               @id @default(uuid()) @db.Uuid
+  householdId  String               @map("household_id") @db.Uuid
+  displayName  String               @map("display_name") @db.VarChar(80)
+  relationship String               @db.VarChar(40)
+  birthDate    DateTime?            @map("birth_date") @db.Date
+  isDependent  Boolean              @default(true) @map("is_dependent")
+  status       HouseholdMemberStatus @default(active)
+  version      Int                  @default(1)
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  household    Household            @relation(fields: [householdId], references: [id], onDelete: Restrict)
+
+  @@index([householdId, status, createdAt], map: "customer_household_member_household_status_idx")
+  @@map("household_members")
+  @@schema("customer_household")
+}
+
+model AuditLog {
+  id             String   @id @db.Uuid
+  actorUserId    String   @map("actor_user_id") @db.Uuid
+  callerService  String   @map("caller_service") @db.VarChar(80)
+  action         String   @db.VarChar(120)
+  resourceType   String   @map("resource_type") @db.VarChar(40)
+  resourceId     String   @map("resource_id") @db.Uuid
+  correlationId  String   @map("correlation_id") @db.Uuid
+  reason         String?  @db.VarChar(500)
+  before         Json?
+  after          Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([actorUserId, createdAt, id], map: "customer_household_audit_actor_created_idx")
+  @@index([resourceType, resourceId, createdAt], map: "customer_household_audit_resource_created_idx")
+  @@index([correlationId], map: "customer_household_audit_correlation_idx")
+  @@map("audit_logs")
+  @@schema("customer_household")
+}
+
+model IdempotencyCommand {
+  callerService String   @map("caller_service") @db.VarChar(80)
+  key           String   @db.Uuid
+  requestHash   String   @map("request_hash") @db.Char(64)
+  response      Json
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([callerService, key])
+  @@index([createdAt], map: "customer_household_idempotency_created_idx")
+  @@map("idempotency_commands")
+  @@schema("customer_household")
+}
+
+model OutboxEvent {
+  id             String    @id @db.Uuid
+  eventType      String    @map("event_type") @db.VarChar(160)
+  aggregateId    String    @map("aggregate_id") @db.VarChar(80)
+  envelope       Json
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  availableAt    DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  attempts       Int       @default(0)
+  leaseToken     String?   @map("lease_token") @db.Uuid
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz(6)
+  deadLetteredAt DateTime? @map("dead_lettered_at") @db.Timestamptz(6)
+  lastErrorCode  String?   @map("last_error_code") @db.VarChar(80)
+
+  @@index([publishedAt, deadLetteredAt, availableAt, createdAt], map: "customer_household_outbox_delivery_idx")
+  @@map("outbox_events")
+  @@schema("customer_household")
+}

@@ -1,0 +1,114 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 5s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['127.0.0.1:9090']
+        labels:
+          service: prometheus
+          environment: local
+
+  - job_name: alertmanager
+    static_configs:
+      - targets: ['alertmanager:9093']
+        labels:
+          service: alertmanager
+          environment: local
+
+  - job_name: grafana
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: grafana
+          environment: local
+
+  - job_name: funtino_api_gateway
+    metrics_path: /internal/metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/api_gateway_metrics_token
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/api-gateway.json']
+
+  - job_name: funtino_realtime_gateway
+    metrics_path: /internal/metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/realtime_metrics_token
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/realtime-gateway.json']
+
+  - job_name: funtino_device_integration
+    metrics_path: /internal/metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/device_integration_metrics_token
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/device-integration.json']
+
+  - job_name: funtino_wallet
+    metrics_path: /internal/metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/wallet_metrics_token
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/wallet.json']
+
+  - job_name: funtino_notifications
+    metrics_path: /internal/metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/notifications_metrics_token
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/notifications.json']
+
+  - job_name: funtino_identity_access
+    metrics_path: /internal/metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/identity_access_metrics_token
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/identity-access.json']
+
+  - job_name: funtino_organization_branch
+    metrics_path: /internal/metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/organization_branch_metrics_token
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/organization-branch.json']
+
+  - job_name: funtino_analytics_read_model
+    metrics_path: /internal/metrics
+    scheme: https
+    authorization:
+      type: Bearer
+      credentials_file: /run/secrets/analytics_metrics_token
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/analytics-read-model.json']
+
+  - job_name: funtino_rabbitmq
+    metrics_path: /metrics/detailed
+    params:
+      family: [queue_coarse_metrics, queue_consumer_count]
+    file_sd_configs:
+      - files: ['/etc/prometheus/targets/rabbitmq.json']

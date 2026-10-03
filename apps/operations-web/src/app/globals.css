@@ -1,0 +1,28 @@
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+  background: #f6f7fb;
+  color: var(--ft-ink);
+  font-family: 'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+::selection {
+  color: var(--ft-ink);
+  background: rgb(14 207 193 / 25%);
+}

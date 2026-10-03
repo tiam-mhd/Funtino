@@ -1,0 +1,178 @@
+groups:
+  - name: funtino-backend-availability
+    rules:
+      - alert: FuntinoBackendScrapeFailed
+        expr: up{job=~"funtino_.*|prometheus|alertmanager|grafana"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Funtino backend telemetry target is unreachable'
+          description: 'The scrape target for {{ $labels.service }} has failed for more than two minutes.'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#target-scrape-failure'
+
+      - alert: FuntinoApiGatewayTargetMissing
+        expr: absent(up{job="funtino_api_gateway"})
+        for: 10m
+        labels:
+          severity: warning
+          service: api-gateway
+        annotations:
+          summary: 'API Gateway is not configured as a telemetry target'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#missing-target'
+
+      - alert: FuntinoRealtimeGatewayTargetMissing
+        expr: absent(up{job="funtino_realtime_gateway"})
+        for: 10m
+        labels:
+          severity: warning
+          service: realtime-gateway
+        annotations:
+          summary: 'Realtime Gateway is not configured as a telemetry target'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#missing-target'
+
+      - alert: FuntinoDeviceIntegrationTargetMissing
+        expr: absent(up{job="funtino_device_integration"})
+        for: 10m
+        labels:
+          severity: warning
+          service: device-integration
+        annotations:
+          summary: 'Device Integration is not configured as a telemetry target'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#missing-target'
+
+      - alert: FuntinoWalletTargetMissing
+        expr: absent(up{job="funtino_wallet"})
+        for: 10m
+        labels:
+          severity: warning
+          service: wallet
+        annotations:
+          summary: 'Wallet is not configured as a telemetry target'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#missing-target'
+
+      - alert: FuntinoNotificationsTargetMissing
+        expr: absent(up{job="funtino_notifications"})
+        for: 10m
+        labels:
+          severity: warning
+          service: notifications
+        annotations:
+          summary: 'Notifications is not configured as a telemetry target'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#missing-target'
+
+      - alert: FuntinoIdentityAccessTargetMissing
+        expr: absent(up{job="funtino_identity_access"})
+        for: 10m
+        labels:
+          severity: warning
+          service: identity-access
+        annotations:
+          summary: 'Identity & Access is not configured as a telemetry target'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#missing-target'
+
+      - alert: FuntinoOrganizationBranchTargetMissing
+        expr: absent(up{job="funtino_organization_branch"})
+        for: 10m
+        labels:
+          severity: warning
+          service: organization-branch
+        annotations:
+          summary: 'Organization & Branch is not configured as a telemetry target'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#missing-target'
+
+      - alert: FuntinoAnalyticsReadModelTargetMissing
+        expr: absent(up{job="funtino_analytics_read_model"})
+        for: 10m
+        labels:
+          severity: warning
+          service: analytics-read-model
+        annotations:
+          summary: 'Analytics Read Model is not configured as a telemetry target'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#missing-target'
+
+      - alert: FuntinoRabbitMQTargetMissing
+        expr: absent(up{job="funtino_rabbitmq"})
+        for: 10m
+        labels:
+          severity: warning
+          service: rabbitmq
+        annotations:
+          summary: 'RabbitMQ is not configured as a telemetry target'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#missing-target'
+
+      - alert: FuntinoPrometheusTargetMissing
+        expr: absent(up{job="prometheus"})
+        for: 2m
+        labels:
+          severity: critical
+          service: prometheus
+        annotations:
+          summary: 'Prometheus self-scrape is missing'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#monitoring-stack'
+
+      - alert: FuntinoAlertmanagerTargetMissing
+        expr: absent(up{job="alertmanager"})
+        for: 2m
+        labels:
+          severity: critical
+          service: alertmanager
+        annotations:
+          summary: 'Alertmanager target is missing'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#monitoring-stack'
+
+      - alert: FuntinoGrafanaTargetMissing
+        expr: absent(up{job="grafana"})
+        for: 10m
+        labels:
+          severity: warning
+          service: grafana
+        annotations:
+          summary: 'Grafana target is missing'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#monitoring-stack'
+
+  - name: funtino-http-slo-candidates
+    rules:
+      - alert: FuntinoBackendHigh5xxRate
+        expr: |
+          (
+            sum by (service) (rate(funtino_http_server_requests_total{status=~"5.."}[5m]))
+            /
+            sum by (service) (rate(funtino_http_server_requests_total[5m]))
+          ) > 0.05
+          and
+          sum by (service) (rate(funtino_http_server_requests_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'HTTP 5xx rate is above the initial 5% alert threshold'
+          description: '{{ $labels.service }} exceeded the candidate error threshold for ten minutes; tune this threshold with Operations before pilot.'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#http-5xx-or-latency-alert'
+
+      - alert: FuntinoBackendHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (service, le) (rate(funtino_http_server_request_duration_seconds_bucket[5m]))
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'HTTP p95 latency exceeded the initial one-second alert threshold'
+          description: '{{ $labels.service }} exceeded the candidate latency threshold for ten minutes; tune this threshold with Operations before pilot.'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#http-5xx-or-latency-alert'
+
+  - name: funtino-rabbitmq
+    rules:
+      - alert: FuntinoRabbitMQQueueBacklog
+        expr: rabbitmq_detailed_queue_messages_ready > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: rabbitmq
+        annotations:
+          summary: 'RabbitMQ queue backlog exceeded the initial threshold'
+          description: 'Queue {{ $labels.vhost }}/{{ $labels.queue }} has more than 1000 ready messages for five minutes; tune per queue before pilot.'
+          runbook: 'DOCS/runbooks/operational-telemetry.md#rabbitmq-backlog-alert'
