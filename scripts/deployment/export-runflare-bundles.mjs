@@ -21,6 +21,14 @@ const DEPLOYMENT_PARENT = resolve(SOURCE_ROOT, '..', 'Funtino-deployments');
 const TURBO_CLI = resolve(SOURCE_ROOT, 'node_modules/turbo/bin/turbo');
 const PROTECTED_FILE_NAME = 'این فایل رو نمیخواد بخونی هیچ وقت.txt';
 const SNAPSHOT_RECEIPT = '.funtino-snapshot.json';
+const GENERATED_PATH_SEGMENTS = new Set([
+  'node_modules',
+  '.next',
+  'dist',
+  'generated',
+  '.turbo',
+  'coverage',
+]);
 const SAFE_GIT_DIRECTORY_ENV = createSafeGitEnvironment();
 
 const BUNDLES = Object.freeze({
@@ -114,19 +122,16 @@ function assertNotProtectedPath(path) {
   }
 }
 
+function isGeneratedSnapshotPath(relativePath) {
+  const parts = toPosixPath(relativePath).split('/');
+  return parts.some((part) => GENERATED_PATH_SEGMENTS.has(part));
+}
+
 function assertSafeSnapshotPath(relativePath) {
   assertNotProtectedPath(relativePath);
   const normalized = toPosixPath(relativePath);
   const parts = normalized.split('/');
-  if (
-    parts.includes('.git') ||
-    parts.includes('node_modules') ||
-    parts.includes('.next') ||
-    parts.includes('dist') ||
-    parts.includes('generated') ||
-    parts.includes('.turbo') ||
-    parts.includes('coverage')
-  ) {
+  if (parts.includes('.git') || isGeneratedSnapshotPath(normalized)) {
     throw new Error(`Snapshot contains a generated or local-only path: ${normalized}.`);
   }
 
@@ -171,7 +176,10 @@ async function copyTree(sourceDirectory, destinationDirectory, relativeDirectory
   }
 }
 
-async function collectFileHashes(directory, { ignoreGit = false, ignoreReceipt = false } = {}) {
+async function collectFileHashes(
+  directory,
+  { ignoreGit = false, ignoreReceipt = false, ignoreGeneratedPaths = false } = {},
+) {
   const files = [];
 
   async function visit(currentDirectory, relativeDirectory = '') {
@@ -186,6 +194,9 @@ async function collectFileHashes(directory, { ignoreGit = false, ignoreReceipt =
         continue;
       }
       if (ignoreReceipt && relativePath === SNAPSHOT_RECEIPT) {
+        continue;
+      }
+      if (ignoreGeneratedPaths && isGeneratedSnapshotPath(relativePath)) {
         continue;
       }
 
@@ -395,6 +406,7 @@ async function inspectExistingDestination(bundleName, destinationDirectory, rele
   const existingFiles = await collectFileHashes(destinationDirectory, {
     ignoreGit: true,
     ignoreReceipt: true,
+    ignoreGeneratedPaths: true,
   });
 
   if (!hasReceipt) {
@@ -557,6 +569,7 @@ async function syncSnapshot(bundleName, bundle, snapshot, releaseRequested) {
   const copiedFiles = await collectFileHashes(destinationDirectory, {
     ignoreGit: true,
     ignoreReceipt: true,
+    ignoreGeneratedPaths: true,
   });
   if (JSON.stringify(copiedFiles) !== JSON.stringify(snapshot.receipt.files)) {
     throw new Error(`Snapshot copy verification failed for ${bundleName}.`);

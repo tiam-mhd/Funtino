@@ -49,6 +49,8 @@ Source monorepo منبع حقیقت است. Runtime repositoryها snapshot قا
 
 Exporter از چند-scope prune در pnpm/Turbo استفاده می‌کند و runtime supervisor، manifest، worker-startup runner و Dockerfile متناظر را به root snapshot می‌گذارد. Exporter مسیر مقصد را به دو sibling مصوب محدود می‌کند، receipt هش‌دار برای snapshot می‌سازد و مقصد دارای فایل تغییرکرده، staged یا اضافه را overwrite نمی‌کند.
 
+در inventory محتوای clone مقصد، فقط مسیرهای خروجی و cache استاندارد (`node_modules`، `.next`، `dist`، `generated`، `.turbo` و `coverage`) نادیده گرفته می‌شوند تا build محلی مانع انتشار نشود؛ فایل‌های غیر از این مسیرها همچنان با receipt و وضعیت Git کنترل می‌شوند. خروجی Turbo prune نیز پیش از ساخت snapshot از cache محلی پاک می‌ماند.
+
 در clone دارای origin، exporter عادی از sync خودداری می‌کند. فقط برای release درخواست‌شده از گزینه‌ی `--release` استفاده شود؛ این حالت ابتدا working tree را پاک می‌خواهد، سپس `git fetch origin main` و divergence برابر `0 0` را کنترل می‌کند و snapshot را آماده‌ی stage می‌سازد. این گزینه commit یا push نمی‌کند. برای اولین bootstrap، ابتدا snapshot محلی را بساز و بعد remote را متصل کن.
 
 Dockerfile root از Node.js 22 و pnpm 10.12.4 استفاده می‌کند. NEXT_PUBLIC_* فقط build-time است. هیچ secretی وارد Docker ARG، image layer یا repository نمی‌شود. secret هر process فقط در runtime Environment/Secret و طبق env allow-list آن child تعریف می‌شود.
