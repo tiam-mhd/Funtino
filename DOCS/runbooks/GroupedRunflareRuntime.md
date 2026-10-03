@@ -111,7 +111,24 @@ Runflare network settings می‌تواند چند network را برای یک س
 | Device Integration | بدون migration در startup؛ job مالک جدا |
 | Notifications | migration ندارد |
 
-Runner فعلی فقط همان پنج Worker را قبول می‌کند و stage شکست را با log ساخت‌یافته گزارش می‌دهد. برای رفع وابستگی bootstrap به schema هنوز ساخته‌نشده، `prisma/bootstrap.prisma` فقط به `public` موجود وصل می‌شود و SQL نام schema مالک را صریح می‌سازد؛ بعد `prisma/schema.prisma` اصلی و URL دارای `schema=<owner>` برای migrationهای نسخه‌دار استفاده می‌شوند. دستور دستی `prisma:schema` همان runner را در حالت `--bootstrap-only` فراخوانی می‌کند تا منطق URL bootstrap یکسان بماند. هر Worker URL دیتابیس/credential migration مالک خودش را به کار می‌برد. در rollout نخست replica را یکی نگه دار تا رفتار startup و زمان migration روشن شود. برای API Gateway و Device Integration job/command یک‌باره‌ی release اجرا کن و compatibility/rollback آن را ثبت کن.
+Runner فعلی فقط همان پنج Worker را قبول می‌کند و stage شکست را با log ساخت‌یافته گزارش می‌دهد. پیش از اجرای Prisma، hostname، پورت، دیتابیس و schema از URL migration همان Worker log می‌شود و فقط DNS lookup انجام می‌شود؛ این مرحله عمداً socket باز نمی‌کند. برای رفع وابستگی bootstrap به schema هنوز ساخته‌نشده، `prisma/bootstrap.prisma` فقط به `public` موجود وصل می‌شود و SQL نام schema مالک را صریح می‌سازد؛ بعد `prisma/schema.prisma` اصلی و URL دارای `schema=<owner>` برای migrationهای نسخه‌دار استفاده می‌شوند. URL هر مرحله در صورت نداشتن `application_name` یک نام `funtino-<worker>-<phase>` می‌گیرد تا نشست‌های PostgreSQL قابل تشخیص باشند. دستور دستی `prisma:schema` همان runner را در حالت `--bootstrap-only` فراخوانی می‌کند تا منطق URL bootstrap یکسان بماند. هر Worker URL دیتابیس/credential migration مالک خودش را به کار می‌برد. در rollout نخست replica را یکی نگه دار تا رفتار startup و زمان migration روشن شود. برای API Gateway و Device Integration job/command یک‌باره‌ی release اجرا کن و compatibility/rollback آن را ثبت کن.
+
+برای تشخیص مرحله از Runflare log استفاده کن:
+
+- `service.database.dns_lookup.failed`: hostname همان URL migration resolve نشده؛ network attachment و نام سرویس داخلی را بررسی کن.
+- `service.database.dns_lookup.completed` ولی timeout در `create_schema`: فقط DNS تأیید شده؛ دسترسی TCP به target port، مقصد PostgreSQL و log دیتابیس را بررسی کن.
+- برای دیدن نشست‌های migration در زمان startup، از pgAdmin این query فقط‌خواندنی را اجرا کن:
+
+```sql
+SELECT application_name, client_addr, state, wait_event_type, wait_event,
+       now() - backend_start AS connected_for
+FROM pg_stat_activity
+WHERE datname = 'postgresquk_db'
+  AND application_name LIKE 'funtino-%'
+ORDER BY backend_start;
+```
+
+هیچ ردیفی یعنی نشست احراز‌شده‌ای با این نام هنگام query موجود نبوده؛ این به‌تنهایی موفقیت اتصال را ثابت نمی‌کند.
 
 ## ۷. Cutover
 

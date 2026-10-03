@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { lookup } from 'node:dns/promises';
 import { createInterface } from 'node:readline';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,6 +59,7 @@ const MIGRATION_STEPS = [
 ];
 
 const DATABASE_CONNECT_TIMEOUT_SECONDS = 5;
+const DATABASE_DNS_LOOKUP_TIMEOUT_MS = DATABASE_CONNECT_TIMEOUT_SECONDS * 1000;
 const BOOTSTRAP_DATABASE_SCHEMA = 'public';
 const MIGRATION_PROGRESS_INTERVAL_MS = 15_000;
 
@@ -148,8 +150,103 @@ export function migrationCommandEnvironment(service, env = process.env, step) {
   if (step.socketTimeoutSeconds) {
     migrationUrl.searchParams.set('socket_timeout', String(step.socketTimeoutSeconds));
   }
+  if (!migrationUrl.searchParams.has('application_name')) {
+    migrationUrl.searchParams.set('application_name', `funtino-${service}-${step.phase}`);
+  }
 
   return { ...env, [config.migrationUrlKey]: migrationUrl.toString() };
+}
+
+export async function resolveDatabaseHost(service, options = {}) {
+  const config = getWorkerConfig(service);
+  if (!config) {
+    throw new WorkerStartupError(
+      'UNKNOWN_WORKER',
+      'resolve_worker',
+      'Worker name is not supported.',
+    );
+  }
+
+  const env = options.env ?? process.env;
+  const writeEvent = options.writeEvent ?? logEvent;
+  const resolveHost = options.resolveHost ?? ((host) => lookup(host, { all: true, verbatim: true }));
+  const timeoutMs = options.timeoutMs ?? DATABASE_DNS_LOOKUP_TIMEOUT_MS;
+  const url = parseDatabaseUrl(
+    config.migrationUrlKey,
+    config.schema,
+    env[config.migrationUrlKey],
+  );
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  const port = Number(url.port || 5432);
+  const startedAt = Date.now();
+  const endpoint = {
+    service,
+    host,
+    port,
+    database: databaseName(url),
+    schema: config.schema,
+    timeoutMs,
+  };
+
+  writeEvent('service.database.dns_lookup.started', endpoint);
+
+  let addresses;
+  try {
+    addresses = await withPromiseTimeout(
+      Promise.resolve().then(() => resolveHost(host)),
+      timeoutMs,
+      'DATABASE_DNS_LOOKUP_TIMEOUT',
+    );
+  } catch (error) {
+    const causeCode = error?.code ?? 'DATABASE_DNS_LOOKUP_FAILED';
+    writeEvent('service.database.dns_lookup.failed', {
+      ...endpoint,
+      phase: 'dns_lookup',
+      causeCode,
+      elapsedMs: Date.now() - startedAt,
+    });
+    throw new WorkerStartupError(
+      'DATABASE_DNS_LOOKUP_FAILED',
+      'database_dns_lookup',
+      `Could not resolve PostgreSQL host ${host} (${causeCode}).`,
+    );
+  }
+
+  if (!Array.isArray(addresses) || addresses.length === 0) {
+    const causeCode = 'DATABASE_DNS_NO_ADDRESSES';
+    writeEvent('service.database.dns_lookup.failed', {
+      ...endpoint,
+      phase: 'dns_lookup',
+      causeCode,
+      elapsedMs: Date.now() - startedAt,
+    });
+    throw new WorkerStartupError(
+      causeCode,
+      'database_dns_lookup',
+      `PostgreSQL host ${host} resolved to no addresses.`,
+    );
+  }
+
+  const result = {
+    ...endpoint,
+    addresses: addresses.map(({ address, family }) => ({ address, family })),
+    elapsedMs: Date.now() - startedAt,
+  };
+  writeEvent('service.database.dns_lookup.completed', result);
+  return result;
+}
+
+function withPromiseTimeout(operation, timeoutMs, timeoutCode) {
+  let timeoutHandle;
+  const timeout = new Promise((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      const error = new Error('Operation exceeded its deadline.');
+      error.code = timeoutCode;
+      reject(error);
+    }, timeoutMs);
+  });
+
+  return Promise.race([operation, timeout]).finally(() => clearTimeout(timeoutHandle));
 }
 
 function parseDatabaseUrl(key, expectedSchema, value) {
@@ -479,6 +576,7 @@ async function main() {
     logEvent('service.startup.started', { service });
     if (bootstrapOnly) {
       validateMigrationEnvironment(service, process.env);
+      await resolveDatabaseHost(service);
       await runStartupMigrations(service, { bootstrapOnly: true });
       logEvent('service.schema_bootstrap.completed', { service });
       return;
@@ -486,7 +584,10 @@ async function main() {
     await startBehindMigrationGate({
       service,
       env: process.env,
-      migrate: () => runStartupMigrations(service),
+      migrate: async () => {
+        await resolveDatabaseHost(service);
+        await runStartupMigrations(service);
+      },
       startApplication: () => launchApplication(applicationArgs),
     });
   } catch (error) {

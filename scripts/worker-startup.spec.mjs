@@ -4,6 +4,7 @@ import {
   MigrationCommandError,
   WORKERS,
   migrationCommandEnvironment,
+  resolveDatabaseHost,
   redactMigrationOutput,
   runPrismaCommand,
   runStartupMigrations,
@@ -75,6 +76,7 @@ test('uses the existing public schema for bootstrap without changing the databas
   assert.equal(bounded.searchParams.get('application_name'), 'funtino-test');
   assert.equal(bounded.searchParams.get('connect_timeout'), '5');
   assert.equal(bounded.searchParams.get('socket_timeout'), '30');
+  assert.equal(bounded.searchParams.get('application_name'), 'funtino-test');
   assert.equal(bounded.password, original.password);
 
   const migrationEnv = migrationCommandEnvironment('wallet', env, {
@@ -102,6 +104,79 @@ test('configures public as the bootstrap schema for every startup-migrated worke
     assert.equal(bootstrap.username, original.username);
     assert.equal(bootstrap.password, original.password);
   }
+});
+
+test('logs the exact migration endpoint and resolved addresses without exposing credentials', async () => {
+  const events = [];
+  const env = environmentFor('identity-access');
+  const result = await resolveDatabaseHost('identity-access', {
+    env,
+    resolveHost: async (host) => {
+      assert.equal(host, 'ddl-db');
+      return [{ address: '10.20.30.40', family: 4 }];
+    },
+    writeEvent: (event, fields) => events.push({ event, ...fields }),
+  });
+
+  assert.equal(result.host, 'ddl-db');
+  assert.equal(result.port, 5432);
+  assert.equal(result.database, 'funtino_test');
+  assert.equal(result.schema, 'identity_access');
+  assert.deepEqual(result.addresses, [{ address: '10.20.30.40', family: 4 }]);
+  assert.deepEqual(
+    events.map(({ event }) => event),
+    ['service.database.dns_lookup.started', 'service.database.dns_lookup.completed'],
+  );
+  assert.doesNotMatch(JSON.stringify(events), /migration-test-password|postgresql:\/\//);
+});
+
+test('fails with a concise DNS error when the configured database service name does not resolve', async () => {
+  const events = [];
+  const env = environmentFor('wallet');
+  const resolverError = Object.assign(new Error('resolver detail'), { code: 'ENOTFOUND' });
+
+  await assert.rejects(
+    resolveDatabaseHost('wallet', {
+      env,
+      resolveHost: async () => {
+        throw resolverError;
+      },
+      writeEvent: (event, fields) => events.push({ event, ...fields }),
+    }),
+    (error) => {
+      assert.equal(error.code, 'DATABASE_DNS_LOOKUP_FAILED');
+      assert.equal(error.stage, 'database_dns_lookup');
+      assert.match(error.message, /ddl-db/);
+      assert.doesNotMatch(error.message, /migration-test-password|postgresql:\/\//);
+      return true;
+    },
+  );
+
+  assert.deepEqual(events.at(-1), {
+    event: 'service.database.dns_lookup.failed',
+    service: 'wallet',
+    host: 'ddl-db',
+    port: 5432,
+    database: 'funtino_test',
+    schema: 'wallet',
+    timeoutMs: 5_000,
+    phase: 'dns_lookup',
+    causeCode: 'ENOTFOUND',
+    elapsedMs: events.at(-1).elapsedMs,
+  });
+});
+
+test('fails closed when DNS returns no database host addresses', async () => {
+  const events = [];
+  await assert.rejects(
+    resolveDatabaseHost('analytics-read-model', {
+      env: environmentFor('analytics-read-model'),
+      resolveHost: async () => [],
+      writeEvent: (event, fields) => events.push({ event, ...fields }),
+    }),
+    { code: 'DATABASE_DNS_NO_ADDRESSES', stage: 'database_dns_lookup' },
+  );
+  assert.equal(events.at(-1).causeCode, 'DATABASE_DNS_NO_ADDRESSES');
 });
 
 test('redacts database URLs and configured secrets but preserves Prisma and PostgreSQL codes', () => {
@@ -162,6 +237,10 @@ test('runs only idempotent schema bootstrap and pending versioned migrations, in
     'public',
   );
   assert.equal(
+    new URL(calls[0].options.env.WALLET_MIGRATION_DATABASE_URL).searchParams.get('application_name'),
+    'funtino-wallet-create_schema',
+  );
+  assert.equal(
     calls[0].options.env.WALLET_MIGRATION_DATABASE_URL.includes('socket_timeout=20'),
     true,
   );
@@ -169,6 +248,10 @@ test('runs only idempotent schema bootstrap and pending versioned migrations, in
   assert.equal(
     new URL(calls[1].options.env.WALLET_MIGRATION_DATABASE_URL).searchParams.get('schema'),
     'wallet',
+  );
+  assert.equal(
+    new URL(calls[1].options.env.WALLET_MIGRATION_DATABASE_URL).searchParams.get('application_name'),
+    'funtino-wallet-apply_pending_migrations',
   );
   assert.equal(
     calls[1].options.env.WALLET_MIGRATION_DATABASE_URL.includes('socket_timeout'),
