@@ -136,4 +136,4 @@ Runner فعلی فقط همان پنج Worker را قبول می‌کند و sta
 
 ## ۹. وضعیت اتصال
 
-در پایان همین پیاده‌سازی فقط local source Git و دو local snapshot/repository قابل ثبت‌اند. تا وقتی remote GitHub، branch، Runflare item، webhook/Auto Pull، network/domain، secret و health در پنل با دسترسی واقعی تأیید نشوند، وضعیت آن‌ها «تنظیم/تأیید نشده» است.
+Source monorepo و دو snapshot runtime در GitHub روی branch `main` commit و push شده‌اند؛ هر snapshot source revision خود را در `.funtino-snapshot.json` ثبت می‌کند. اتصال دو repository به Runflare، Auto Pull/webhook، network/domain/TLS، Environment/Secret و health واقعی باید در پنل تأیید شود. تا پایان staging و cutover، ۱۲ آیتم قدیمی و database/queue/cacheهای جدا را برای rollback نگه دار.

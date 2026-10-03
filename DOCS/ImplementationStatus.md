@@ -2,16 +2,16 @@
 
 آخرین به‌روزرسانی: 2026-10-03
 
-## شروع گذار به دو runtime repository — 2026-10-03
+## وضعیت GitHub bootstrap و دو runtime — 2026-10-03
 
-- ADR-0016 پذیرفته شد و نگاشت جاری ۱۲ آیتم application به دو runtime را تعریف می‌کند. مرز سه وب‌اپ، دو gateway، هفت worker، packageها، schemaها و دیتابیس‌های مالکانه حفظ شده است.
-- Git source در ریشه‌ی Funtino با branch محلی `main` مقداردهی اولیه شد. هنوز commit و remote ندارد؛ تمام فایل‌های source untracked هستند و source revision برای snapshotها `null` است.
-- exporter از pnpm/Turbo برای ساخت workspaceهای pruneشده استفاده کرد: frontend با سه app و design-system (۱۱۳ فایل) و backend با دو gateway، هفت service و packageهای backend-core/event-contracts (۳۰۹ فایل).
-- دو sibling repository با Git مستقل و branch `main` ساخته شدند: `funtino-frontend-runtime` و `funtino-backend-runtime`. هر دو snapshot دارای Dockerfile، `.dockerignore`، lockfile، supervisor، manifest، healthcheck و README هستند. هیچ remote، commit یا push ساخته نشده است.
-- دو bundle، به‌ترتیب ۳ و ۹ process را با supervisor fail-fast و healthcheck تجمیعی TCP اجرا می‌کنند. پنج migration startup طبق ADR-0015 دست‌نخورده و محدود به همان پنج Worker باقی مانده است.
-- ۱۲ repository محلی و آیتم‌های قدیمی Runflare حذف یا ویرایش نشده‌اند و برای rollback باقی می‌مانند.
-- مسیر local `.gitnexus/` به‌همراه `CLAUDE.md` و `.claude/` در worktree حاضر است، اما این task analyzer را اجرا یا index را refresh نکرد. تازگی index نسبت به تغییرهای فعلی و نحوه‌ی exclude شدن فایل حفاظت‌شده از خود آن index تأیید نشده است؛ محتوای index بررسی نشده و فایل محلی حفاظت‌شده از Git و snapshot exporter خارج است.
-- Docker build، install/build/test داخل snapshot، شبکه و HTTPS داخلی، WebSocket، تنظیم Environment/Secret، دامنه/port، Auto Pull و Runflare cutover اجرا یا تأیید نشده‌اند. exporter موفق‌شدن snapshot را گزارش کرد؛ هیچ تست یا Docker build در این مرحله اجرا نشد.
+- ADR-0016 نگاشت جاری سه وب‌اپ و نه process بک‌اند را به دو runtime تعریف می‌کند؛ packageها، schemaها و دیتابیس‌های مالکانه جدا باقی مانده‌اند.
+- Source monorepo در ریشه‌ی Funtino به `https://github.com/tiam-mhd/Funtino` متصل و روی `main` push شد. این repository منبع حقیقت تغییرات محصول و مستندات است.
+- دو snapshot مستقل، `funtino-frontend-runtime` و `funtino-backend-runtime`، به repositoryهای GitHub متناظر متصل و روی `main` push شدند. هر snapshot در `.funtino-snapshot.json` به source revision زمان تولید اشاره می‌کند.
+- exporter با pnpm/Turbo workspaceها را prune می‌کند: frontend شامل سه app و design-system (۱۱۳ فایل) و backend شامل دو gateway، هفت service و packageهای `backend-core` و `event-contracts` (۳۰۹ فایل) است. هر snapshot Dockerfile، `.dockerignore`، lockfile، supervisor، manifest، healthcheck و README دارد.
+- سه local `main` پس از fetch با `origin/main` برابر شدند (`0 0`). هر دو bundle processهای خود را با supervisor fail-fast و healthcheck تجمیعی TCP اجرا می‌کنند. migration startup طبق ADR-0015 به همان پنج Worker محدود است.
+- ۱۲ repository و آیتم قدیمی Runflare و database/queue/cacheهای جدا حذف یا ویرایش نشده‌اند؛ آن‌ها برای rollback و منبع مقایسه باقی مانده‌اند.
+- index محلی GitNexus در این task اجرا یا refresh نشد؛ تازگی آن نسبت به تغییرهای اخیر تأیید نشده است. `.claude/`، `CLAUDE.md` و تصویر ریشه فایل‌های local-only هستند، روی دیسک باقی مانده‌اند و وارد commit/push نشده‌اند. فایل حفاظت‌شده نیز خوانده یا پردازش نشده است.
+- اتصال repositoryها به آیتم Runflare، Auto Pull/webhook، network/domain/TLS، Environment/Secret و health واقعی هنوز در پنل انجام یا تأیید نشده است. Docker build و تست محلی اجرا نشد.
 
 گام باقی‌مانده برای اتصال واقعی: GitHub remote و commitهای اولیه‌ی source و دو bundle، ساخت دو Docker item، mapping شبکه/domain/target port، تنظیم secretهای واقعی در پنل، build/health/smoke staging، backup/restore و cutover مرحله‌ای با rollback.
 
