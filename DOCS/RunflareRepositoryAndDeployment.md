@@ -32,9 +32,9 @@ ADR-0002 تصمیم اولیه‌ی یک repository به‌ازای هر item ر
 | Backend  | Wallet                | 4070 | شبکه‌ی داخلی                                      |
 | Backend  | Customer & Household  | 4080 | شبکه‌ی داخلی                                      |
 
-هر process روی port فعلی خودش و host برابر 0.0.0.0 گوش می‌دهد. برای هر target port باید network/route مختص همان process ساخته شود و هر domain به network متناظر وصل شود. مستند Runflare امکان افزودن چند network، انتقال Port به Target Port و اتصال domain به network انتخاب‌شده را توضیح می‌دهد؛ نام دقیق network و TLS خصوصی باید در حساب واقعی ثبت و آزمایش شود. NodePort مستقیم برای دسترسی production انتخاب نشود. [تنظیمات شبکه‌ی Runflare](https://docs.runflare.com/general/network-settings/)
+هر process روی port فعلی خودش و host برابر 0.0.0.0 گوش می‌دهد. برای هر target port باید network/route مختص همان process ساخته شود و هر domain به network متناظر وصل شود. مستند Runflare امکان افزودن چند network، انتقال Port به Target Port و اتصال domain به network انتخاب‌شده را توضیح می‌دهد؛ نام دقیق network و mapping پورت باید از حساب واقعی ثبت شود. NodePort مستقیم برای ارتباط backend production انتخاب نشود. [تنظیمات شبکه‌ی Runflare](https://docs.runflare.com/general/network-settings/)
 
-API Gateway، Realtime و سه وب‌اپ route عمومی دارند. هفت worker از اینترنت عمومی route نمی‌گیرند. ارتباط backend به backend باید همچنان با URLهای HTTPS و credential جداگانه‌ی فعلی انجام شود. تا زمانی که گواهی و HTTPS برای هر URL خصوصی در Runflare اثبات نشده، cutover انجام نمی‌شود؛ تبدیل URLها به HTTP یا localhost مجاز نیست. Realtime برای دامنه‌ی خودش نیاز به فعال‌بودن Socket.IO/WebSocket دارد. [راهنمای WebSocket در Runflare](https://runflare.com/docs/how-to-setup-websocket/)
+API Gateway، Realtime و سه وب‌اپ route عمومی دارند. هفت worker از اینترنت عمومی route نمی‌گیرند. برای اتصال Gateway به IAM، از نام ClusterIP خصوصی و Port نمایش‌داده‌شده در Runflare استفاده شود. اگر route آن `http:80 -> 4040` است، مقدار `IDENTITY_ACCESS_URL` برابر `http://<network-name>:80` خواهد بود؛ فقط alias تک‌برچسبی `*-service` روی پورت 80 مجاز است. این validation فعلاً فقط در `IdentityAccessClient` پیاده شده؛ URLهای دیگر backend را تا به‌روزرسانی client مربوطه به HTTP تغییر نده. نام `.internal.funtino.ir` تا وقتی در DNS واقعی تعریف نشده استفاده نشود. NodePort و localhost جایگزین ClusterIP نیستند. آدرس‌های عمومی HTTPS می‌مانند. Realtime برای دامنه‌ی خودش نیاز به فعال‌بودن Socket.IO/WebSocket دارد. [راهنمای WebSocket در Runflare](https://runflare.com/docs/how-to-setup-websocket/)
 
 ## ساخت و اجرای دو bundle
 
@@ -78,7 +78,7 @@ Migrationهای خارج از این پنج Worker با job/فرمان نسخه�
 
 ## گذار و rollback
 
-1. ابتدا routeهای موازی پورت و domain در حساب Runflare ایجاد شوند؛ URL خصوصی HTTPS، WebSocket، CORS، callback و service-to-service smoke تأیید شوند.
+1. ابتدا routeهای موازی پورت و domain در حساب Runflare ایجاد شوند؛ public HTTPS، ClusterIP name/Port خصوصی، WebSocket، CORS، callback و service-to-service smoke تأیید شوند.
 2. متغیرهای هر child با allow-list به Runflare item مربوط وارد شوند؛ هیچ Secret از source کپی نشود.
 3. startup و health تمام processها، منابع CPU/memory، database pool، queue consumer concurrency، session و reconnect Socket.IO در staging اندازه‌گیری شوند.
 4. ابتدا route ترافیک کم‌ریسک تغییر کند و log/health/telemetry و backup/restore پایش شوند.

@@ -31,7 +31,7 @@
 - Dockerfile هر repository مستقل، root اجرایی، install/build/start و health check را تعیین می‌کند؛ هر دو image روی Node.js 22 و pnpm 10.12.4 pin می‌شوند.
 - هر child فقط کلیدهای محیطی allow-list شده‌ی خودش را می‌گیرد. `NEXT_PUBLIC_*` فقط برای build فرانت است؛ secretهای backend فقط runtime environment هستند.
 - پنج Worker مشخص‌شده در ADR-0015 فقط با runner فعلی و پیش از شروع app migration اجرا می‌کنند. API Gateway، Realtime، Device و Notifications migration را در startup اجرا نمی‌کنند.
-- internal URLهای سرویس‌های backend در production همچنان HTTPS می‌مانند. هر process با پورت target خودش روی شبکه‌ی خصوصی Runflare منتشر می‌شود؛ دامنه‌های API و Socket.IO و سه دامنه‌ی frontend به پورت process متناظر route می‌شوند. تحقق این map باید در حساب Runflare، روی هر item و شبکه، پیش از cutover بررسی شود.
+- HTTPS برای endpointهای عمومی و hostnameهای production برقرار می‌ماند. فراخوانی Gateway به Identity & Access از ClusterIP خصوصی Runflare و نام/Port ثبت‌شده در Runflare استفاده می‌کند؛ اگر آن route به شکل `http:80 -> 4040` ساخته شده باشد، فقط این فراخوانی طبق قاعده‌ی محدود ADR-0017 مجاز است. نام شبکه و mapping واقعی باید از پنل خوانده شود؛ hostname سفارشی حدسی قابل استفاده نیست.
 - مرحله‌ی گذار، rollback و حذف ۱۲ item قدیمی را خودکار نمی‌کند. itemها تا تکمیل route، environment، migration، smoke و rollback واقعی حفظ می‌شوند.
 
 ## پیامدها و trade-offها
@@ -47,7 +47,7 @@
 - هر process داخل bundle با همان container، image، سقف منابع، چرخه‌ی restart و پنجره‌ی deployment شریک است. CPU/memory contention و خرابی یک process می‌تواند کل bundle را restart کند.
 - environment allow-list فقط جلوی نشت اتفاقی config را می‌گیرد؛ processهای یک container با UID مشترک مرز امنیتی قوی در برابر process compromised ندارند. هر bundle یک trust domain مشترک است.
 - scale کردن یکی از processها مستقل ممکن نیست؛ replica کردن bundle، هر سه frontend یا هر ۹ backend را با هم تکثیر می‌کند. باید idempotency، session، WebSocket، queue consumer concurrency و database poolها در pilot بررسی شوند.
-- Runflare باید برای هر item چند شبکه‌ی ClusterIP و اتصال چند domain به شبکه‌ی منتخب را در پلن و پنل واقعی تأیید کند. آدرس backendهای خصوصی باید HTTPS معتبر داشته باشد؛ loopback یا HTTP جایگزین URLهای production نمی‌شود.
+- Runflare باید برای هر item شبکه‌های ClusterIP و اتصال domain به شبکه‌ی منتخب را در پنل واقعی تأیید کند. endpointهای عمومی HTTPS می‌خواهند؛ فقط مسیر Gateway به Identity & Access می‌تواند مطابق ADR-0017 از alias خصوصی ClusterIP روی HTTP/Port 80 استفاده کند. loopback، NodePort یا HTTP به hostname عمومی جایگزین این مسیر نیست.
 - یک release backend واحد، rollback همه‌ی backend processها را با هم انجام می‌دهد. سازگاری schema و قرارداد باید پیش از rollout تضمین شود.
 - کاهش itemها نباید باعث ادغام schema، credential، permission، queue ownership یا منبع حقیقت سرویس‌ها شود.
 
@@ -62,7 +62,7 @@
 
 1. دو manifest پردازه، supervisor، health check، Dockerfile و snapshot exporter از source نگه‌داری شوند.
 2. دو snapshot محلی ساخته و با Git مستقل مقداردهی شوند؛ این کار به‌تنهایی انتشار یا اتصال Runflare نیست.
-3. پیش از تغییر ترافیک، برای frontend هر سه دامنه/پورت و برای backend هفت route داخلی + دو route عمومی/بلادرنگ در Runflare تنظیم و با HTTPS، WebSocket، health و service-to-service smoke تأیید شوند.
+3. پیش از تغییر ترافیک، برای frontend هر سه دامنه/پورت و برای backend هفت route داخلی + دو route عمومی/بلادرنگ در Runflare تنظیم شوند؛ endpointهای عمومی با HTTPS و WebSocket و مسیرهای داخلی با ClusterIP name/Port ثبت‌شده و smoke سرویس‌به‌سرویس تأیید شوند.
 4. secrets هر child طبق allow-list در Environment/Secret همان item تنظیم شوند. migration jobهای خارج از ADR-0015 پیش از انتشار app جدا اجرا شوند.
 5. cutover مرحله‌ای انجام شود و ۱۲ item پیشین تا تأیید سلامت و rollback حفظ شوند.
 6. rollback با برگرداندن domain/route به itemهای پیشین یا redeploy snapshot قبلی انجام می‌شود. حذف itemهای قدیمی فقط پس از دوره‌ی پایدار و تأیید backup/restore مجاز است.
@@ -71,6 +71,7 @@
 
 - [ADR-0002](0002-runflare-deployment-repositories.md)
 - [ADR-0015](0015-worker-startup-migrations.md)
+- [ADR-0017](0017-runflare-clusterip-service-urls.md)
 - [ساختار repository](../FolderAndFileStructure.md)
 - [قواعد پیاده‌سازی](../ImplementationRules.md)
 - [راهبرد repository و Runflare](../RunflareRepositoryAndDeployment.md)

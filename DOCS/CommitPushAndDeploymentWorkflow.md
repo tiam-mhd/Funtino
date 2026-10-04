@@ -20,7 +20,7 @@ Source monorepo منبع حقیقت است. Runtime repositoryها snapshot قا
 | apps/api-gateway، apps/realtime-gateway، هفت service موجود در services/*، packages/backend-core، packages/event-contracts، scripts/worker-startup.mjs و scripts/runtime-bundle | backend / funtino-backend-runtime | 4000 تا 4080 طبق manifest | Funtino Backend |
 | infra/docker-compose.yml یا providerهای managed | بدون Git deployment | PostgreSQL، RabbitMQ، Redis | itemهای داده‌ی مستقل |
 
-فرانت سه host مستقل را به پورت‌های 3000 تا 3002 route می‌کند. Backend، api.funtino.ir را به 4000 و realtime.funtino.ir را به 4010 route می‌کند. پورت‌های 4020 تا 4080 فقط route خصوصی دارند. URLهای خصوصی production همچنان HTTPS هستند.
+فرانت سه host مستقل را به پورت‌های 3000 تا 3002 route می‌کند. Backend، api.funtino.ir را به 4000 و realtime.funtino.ir را به 4010 route می‌کند. پورت‌های 4020 تا 4080 فقط route خصوصی دارند. endpointهای عمومی HTTPS هستند؛ مسیر Gateway به IAM از ClusterIP name/Port واقعی Runflare طبق ADR-0017 استفاده می‌کند.
 
 هر تغییر app به bundle والد می‌رود. تغییر design-system، backend-core یا event-contracts bundle مصرف‌کننده را کامل می‌سازد. تغییر root toolchain، lockfile یا contract مشترک که هر دو را تحت تأثیر می‌گذارد، هر دو snapshot را تولید می‌کند. تغییر مستندات صرفاً مستقر نمی‌شود.
 
@@ -106,7 +106,7 @@ Database schema و migration با انتشار app یکی فرض نمی‌شود
 | Validation | lint/typecheck/test/build، Docker، health و smoke |
 | Push safety | fetch، divergence و نبود force-push |
 | Secrets/network | فقط وضعیت تأیید، بدون مقدار credential |
-| Open risks | migration، HTTPS داخلی، منابع، rollback یا setup تأییدنشده |
+| Open risks | migration، ClusterIP/private network، منابع، rollback یا setup تأییدنشده |
 
 اگر هر مورد از پنل/remote قابل مشاهده نباشد، «تأیید نشده» ثبت می‌شود؛ نبود مشاهده به‌معنای موفقیت نیست.
 

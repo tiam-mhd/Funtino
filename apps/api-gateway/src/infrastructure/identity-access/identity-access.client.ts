@@ -762,13 +762,23 @@ export class IdentityAccessClient {
 
     let url: URL;
     try {
-      url = new URL(path, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
-      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+      const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+      const parsedBaseUrl = new URL(normalizedBaseUrl);
+      if (
+        !['http:', 'https:'].includes(parsedBaseUrl.protocol) ||
+        parsedBaseUrl.username ||
+        parsedBaseUrl.password
+      ) {
         throw new Error('Invalid internal service URL.');
       }
-      if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
-        throw new Error('Internal service traffic must use TLS in production.');
+      if (
+        process.env.NODE_ENV === 'production' &&
+        parsedBaseUrl.protocol !== 'https:' &&
+        !isRunflareClusterIpBaseUrl(parsedBaseUrl)
+      ) {
+        throw new Error('Production HTTP is allowed only for a Runflare ClusterIP service URL.');
       }
+      url = new URL(path, normalizedBaseUrl);
     } catch (error) {
       writeStructuredLog({
         level: 'error',
@@ -815,6 +825,7 @@ export class IdentityAccessClient {
         headers,
         ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
         signal: AbortSignal.timeout(3_000),
+        redirect: 'error',
       });
     } catch {
       throw new DomainError('DEPENDENCY_UNAVAILABLE', 'سرویس مدیریت دسترسی در دسترس نیست.');
@@ -857,4 +868,16 @@ export class IdentityAccessClient {
       throw new DomainError('DEPENDENCY_UNAVAILABLE', 'پاسخ سرویس مدیریت دسترسی قابل خواندن نیست.');
     }
   }
+}
+
+function isRunflareClusterIpBaseUrl(url: URL): boolean {
+  const hostname = url.hostname.toLowerCase();
+  return (
+    url.protocol === 'http:' &&
+    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-service$/.test(hostname) &&
+    (url.port === '' || url.port === '80') &&
+    url.pathname === '/' &&
+    !url.search &&
+    !url.hash
+  );
 }
