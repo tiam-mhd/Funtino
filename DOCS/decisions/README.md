@@ -36,3 +36,4 @@
 - [ADR-0018: لاگ تشخیصی هم‌بسته برای backend](0018-correlated-backend-diagnostics.md)
 - [ADR-0019: مجوز ساخت مجموعه برای مدیر سراسری bootstrapشده](0019-system-admin-organization-provisioning.md)
 - [ADR-0020: نشست مدیریتی قابل‌تنظیم و دسترسی مدیر سراسری](0020-admin-session-duration-and-system-admin-capabilities.md)
+- [ADR-0021: مدیر سراسری مقید به هویت مالک تنظیم‌شده در Runflare](0021-runflare-bound-system-admin-owner.md)

@@ -62,6 +62,8 @@ Migrationهای خارج از این پنج Worker با job/فرمان نسخه�
 
 تغییر سیاست نشست، migration افزایشی `identity_access.policy_state.management_session_ttl_hours` را به Worker ‏Identity & Access اضافه می‌کند؛ طبق ADR-0015 هنگام startup همان Worker اعمال می‌شود. API Gateway و System Web باید با هم از snapshotهای backend و frontend منتشر شوند. پس از انتشار، role مدیر فعلی با CLI یک‌باره و TOTP به permission جدید مجهز می‌شود و `IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED=true` فقط در پنجره‌ی rollout مجاز، روی process مربوط به IAM در item بک‌اند تنظیم می‌شود؛ این گیت در image یا source باز نمی‌شود.
 
+Bootstrap مالک مقید به شماره طبق ADR-0021 است و migration تازه‌ای ندارد. تغییر CLI، Gateway endpoint داخلی و allow-listها فقط Backend bundle را اثر می‌دهد. در Runflare Backend، شماره‌ی مالک را در `SYSTEM_ADMIN_OWNER_PHONE_E164`، secret lookup را در `SYSTEM_ADMIN_BOOTSTRAP_LOOKUP_TOKEN` و برای mutationهای عادی IAM، `IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED=true` را تنظیم کن؛ دستور نهایی user UUID نمی‌پذیرد و مقصد را از Gateway روی loopback می‌گیرد.
+
 ## اثر تغییر و انتشار
 
 | تغییر source                                          | Runtimeهای لازم                                                           |

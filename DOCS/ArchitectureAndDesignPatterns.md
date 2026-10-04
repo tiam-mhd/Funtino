@@ -26,18 +26,19 @@
 
 ## ۳. مرز سرویس‌ها
 
-| سرویس                 | مالکیت                                                        | رویدادهای نمونه                                                           |
-| --------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Identity & Access     | User، نشست، OTP، membership، role، permission، override و MFA | UserRegistered، MembershipGranted، PolicyChanged                          |
-| Organization & Branch | سازمان، شعبه، ساعت و تنظیمات                                  | `organization.branch-created.v1`, `organization.branch-status-changed.v1` |
-| Customer & Household  | خانواده، عضو، رضایت، دسترسی خانوادگی و دعوت                   | `customer.household-created.v1`, `customer.household-member-created.v1`   |
-| Wallet                | موجودی فیزیکی کارت، تخصیص فعال خانواده/شعبه، history و ledger | `wallet.card-assignment-changed.v1`, Wallet ledger events                 |
-| Payment & Orders      | سفارش، پرداخت، برگشت و تطبیق                                  | PaymentConfirmed، RefundCompleted                                         |
-| Device Integration    | کارت فیزیکی، دستگاه و sync                                    | DeviceTransactionImported، SyncFailed                                     |
-| Loyalty & CRM         | مأموریت، کمپین، کوپن و امتیاز                                 | MissionCompleted، RewardGranted                                           |
-| Notifications         | ارسال و وضعیت پیام                                            | NotificationSent، DeliveryFailed                                          |
-| Realtime Gateway      | کانال‌های زنده و roomهای مجاز                                 | RealtimeProjectionUpdated                                                 |
-| Analytics/Read Model  | مدل‌های query و گزارش                                         | ReadModelRefreshed                                                        |
+| سرویس                 | مالکیت                                                               | رویدادهای نمونه                                                           |
+| --------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| API Gateway identity  | حساب مشتری، شماره‌ی تأییدشده، OTP، session و profile                 | —                                                                         |
+| Identity & Access     | reference opaque کاربر، membership، role، permission، override و MFA | MembershipGranted، PolicyChanged                                          |
+| Organization & Branch | سازمان، شعبه، ساعت و تنظیمات                                         | `organization.branch-created.v1`, `organization.branch-status-changed.v1` |
+| Customer & Household  | خانواده، عضو، رضایت، دسترسی خانوادگی و دعوت                          | `customer.household-created.v1`, `customer.household-member-created.v1`   |
+| Wallet                | موجودی فیزیکی کارت، تخصیص فعال خانواده/شعبه، history و ledger        | `wallet.card-assignment-changed.v1`, Wallet ledger events                 |
+| Payment & Orders      | سفارش، پرداخت، برگشت و تطبیق                                         | PaymentConfirmed، RefundCompleted                                         |
+| Device Integration    | کارت فیزیکی، دستگاه و sync                                           | DeviceTransactionImported، SyncFailed                                     |
+| Loyalty & CRM         | مأموریت، کمپین، کوپن و امتیاز                                        | MissionCompleted، RewardGranted                                           |
+| Notifications         | ارسال و وضعیت پیام                                                   | NotificationSent، DeliveryFailed                                          |
+| Realtime Gateway      | کانال‌های زنده و roomهای مجاز                                        | RealtimeProjectionUpdated                                                 |
+| Analytics/Read Model  | مدل‌های query و گزارش                                                | ReadModelRefreshed                                                        |
 
 سرویس‌ها می‌توانند در یک PostgreSQL مشترک schema جدا داشته باشند، اما مالکیت منطقی و نقش اتصال آن‌ها جدا است. جداکردن فیزیکی دیتابیس تصمیم مقیاس و ریسک است، نه مجوز دسترسی متقابل.
 
@@ -46,6 +47,8 @@
 `services/customer-household` مالک household، member و دسترسی خانوادگی است؛ Gateway و Wallet فقط با API خصوصی این سرویس اعتبارسنجی می‌کنند و هیچ جدول مشترکی نمی‌خوانند. Wallet برای هر `(householdId, branchId)` حداکثر یک کارت فعال و برای هر کارت حداکثر یک تخصیص فعال نگه می‌دارد. کارت نسخه‌ی اول مشترک خانواده است، نه عضو؛ انتقال household فقط در همان شعبه مجاز است و انتقال کارت بین شعبه‌ها workflow مستقل و فعلاً خارج از API است. تا زمانی که قرارداد مالی/واحد پول یا پیوند معتبر رویداد دستگاه آماده نشده، گزارش مبلغ شارژ/مصرف یا انتساب دستگاه به خانواده تولید نمی‌شود.
 
 سیاست عمر نشست مدیریتی مالک Identity & Access است و فقط از BFF در API Gateway به سه وب‌اپ می‌رسد. IAM مدت مطلق ۱ تا ۱۲ ساعت برای نشست‌های مدیریتی جدید را در `policy_state` نگه می‌دارد؛ cookie و رکورد session در Gateway یک expiry دارند. نشست مشتری بدون membership مدیریتی مستقل و ۳۰روزه می‌ماند. مدیر سراسری در هر ورود MFA می‌کند و proof به همان session و نسخه‌ی عامل فعال بسته است؛ تغییر session policy از API دارای مجوز، idempotency، audit و Outbox انجام می‌شود. [ADR-0020](decisions/0020-admin-session-duration-and-system-admin-capabilities.md) جزئیات را تعیین می‌کند.
+
+برای bootstrap مدیر سراسری، API Gateway شماره‌ی owner تنظیم‌شده در runtime را به شناسه‌ی opaque موجود resolve می‌کند؛ IAM فقط شناسه را از endpoint داخلیِ loopback و توکن مجزا می‌گیرد و هرگز جدول حساب Gateway را نمی‌خواند. این lookup فقط برای bootstrap CLI است و جایگزین authorization معمول درخواست‌ها نیست. [ADR-0021](decisions/0021-runflare-bound-system-admin-owner.md) جزئیات را تعیین می‌کند.
 
 ## ۴. قراردادهای ارتباطی
 

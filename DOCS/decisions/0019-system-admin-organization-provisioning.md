@@ -5,6 +5,7 @@
 - تصمیم‌گیر: مالک محصول/مدیر محصول
 - دامنه: Identity & Access، API Gateway و provisioning اولیه‌ی System Web
 - تصمیم مرتبط: تکمیل سیاست bootstrap در ADR-0011
+- انتخاب permissionهای نقش سراسری در این ADR با ADR-0021 supersede شده است؛ هدف قدیمی یعنی افزودن امن `organization.create` حفظ می‌شود.
 
 ## مسئله و زمینه
 
@@ -22,7 +23,7 @@
 
 - role سراسری و system-managed `system_admin` همه‌ی permissionهای `delegable` کاتالوگ به‌علاوه‌ی `organization.create` را دارد. این مجوز فقط در scope سراسری قرار می‌گیرد.
 - `organization.create` در کاتالوگ همچنان `delegable: false` است؛ نقش‌های tenant نمی‌توانند آن را دریافت کنند. مسیر عادی API و UI نیز نمی‌تواند role سیستمی را بسازد یا ویرایش کند.
-- `system.access.bootstrap` فقط در عضویت موقت bootstrap باقی می‌ماند و `system.access.impersonate` به‌صورت خودکار به مدیر سراسری داده نمی‌شود.
+- تصمیم قبلی برای کنارگذاشتن permissionهای `system.access.bootstrap` و `system.access.impersonate` از مدیر سراسری در ADR-0021 supersede شده است؛ کاتالوگ کامل از طریق همان bootstrap MFAدار اعمال می‌شود.
 - finalize فقط پس از MFA تازه و داخل transaction قفل‌شده‌ی policy مجاز است. ایجاد نقش، افزودن permission جاافتاده، ارتقای membership، policy version، audit before/after و outbox اتمیک ثبت می‌شوند.
 - اگر role قدیمی دقیقاً permissionهای delegable قبلی را داشته باشد، finalize تنها `organization.create` را اضافه می‌کند. هر مجموعه‌ی permission دیگری ناسازگار تلقی می‌شود و fail-closed باقی می‌ماند.
 - این تغییر به migration schema نیاز ندارد؛ permission از قبل در کاتالوگ و جدول `role_permissions` موجود است. اصلاح دستی SQL مجاز نیست.

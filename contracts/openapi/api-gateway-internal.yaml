@@ -1,0 +1,56 @@
+openapi: 3.1.0
+info:
+  title: Funtino API Gateway Internal API
+  version: 1.0.0
+  description: >-
+    Loopback-only, service-authenticated endpoints used by backend runtime processes.
+servers:
+  - url: http://127.0.0.1:4000
+paths:
+  /internal/v1/system/bootstrap-owner:
+    get:
+      operationId: resolveConfiguredSystemAdminOwner
+      summary: Resolve the Runflare-configured owner to an opaque account ID
+      description: >-
+        Accepts requests only from loopback with the Identity & Access service ID
+        and dedicated bootstrap lookup token. The configured phone is read only
+        from API Gateway runtime environment and is never returned or logged.
+      security:
+        - systemAdminBootstrapLookupToken: []
+          funtinoServiceId: []
+      responses:
+        '200':
+          description: Existing account for the configured owner phone.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, data, meta]
+                properties:
+                  status:
+                    const: success
+                  data:
+                    type: object
+                    required: [userId]
+                    properties:
+                      userId:
+                        type: string
+                        format: uuid
+                  meta:
+                    type: object
+        '401':
+          description: Request was not authenticated as the local Identity & Access process.
+        '503':
+          description: Owner phone, owner account, or lookup credential is not configured.
+components:
+  securitySchemes:
+    systemAdminBootstrapLookupToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+      description: Runtime-only secret; never expose it to a browser or repository.
+    funtinoServiceId:
+      type: apiKey
+      in: header
+      name: x-funtino-service-id
+      description: Must be identity-access.

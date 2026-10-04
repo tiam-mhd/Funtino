@@ -24,26 +24,29 @@
 
 ## Bootstrap مدیر سراسری
 
-Bootstrap endpoint عمومی ندارد و فقط با CLI آفلاین انجام می‌شود:
+Bootstrap endpoint عمومی ندارد و فقط با CLI تعاملی در container Backend انجام می‌شود. مقصد از شماره‌ی canonical E.164 تنظیم‌شده در `SYSTEM_ADMIN_OWNER_PHONE_E164` resolve می‌شود؛ CLI دیگر UUID قابل‌انتخاب نمی‌پذیرد. Gateway شماره را در store مالک هویت جست‌وجو می‌کند و فقط شناسه‌ی opaque را از endpoint loopback با token اختصاصی برمی‌گرداند؛ IAM مستقیم به جدول Gateway وصل نمی‌شود.
 
-1. ابتدا حساب کاربر با OTP ساخته/تأیید شود و UUID کاربر از owner هویت دریافت شود؛ IAM برای اعتبارسنجی آن به DB Gateway وصل نمی‌شود.
-2. اپراتور مجاز در terminal تعاملی، با flag موقت `IDENTITY_ACCESS_BOOTSTRAP_ENABLED=true` و ticket/شناسه و دلیل ممیزی، فرمان prepare را برای همان invocation اجرا کند: `pnpm --filter @funtino/identity-access run iam:bootstrap prepare <user-uuid> <operator-label> <audit-reason>`. بین نام script و `prepare` از `--` استفاده نکنید؛ pnpm آن را به‌عنوان آرگومان CLI ارسال می‌کند.
-3. role موقت فقط ۲۴ ساعت اعتبار دارد. کاربر وارد System Web شود، TOTP را enroll و recovery codeها را خارج از سامانه امن کند.
-4. اپراتور flag one-shot را فقط برای invocation نهایی تنظیم کند؛ finalize proof TOTP/recovery را بدون echo می‌گیرد، یک‌بارمصرف می‌کند و membership را به `system_admin` ارتقا می‌دهد: `pnpm --filter @funtino/identity-access run iam:bootstrap finalize <user-uuid> <operator-label> <audit-reason>`. دستور بدون `--` است تا `finalize` اولین آرگومان CLI باشد.
+1. در Backend Runflare، `SYSTEM_ADMIN_OWNER_PHONE_E164` را برای API Gateway روی شماره‌ی مالک بگذارید؛ حساب آن شماره باید قبلاً با OTP ثبت شده باشد. `SYSTEM_ADMIN_BOOTSTRAP_LOOKUP_TOKEN` را به‌صورت secret تصادفی حداقل ۳۲ نویسه در همان item تنظیم کنید؛ manifest آن را فقط به API Gateway و Identity & Access می‌دهد. مقدار واقعی را در terminal یا repository چاپ/ذخیره نکنید.
+2. از terminal تعاملی Runflare، با flag موقت و دلیل ممیزی، prepare را اجرا کنید؛ شماره یا UUID به command داده نمی‌شود:
 
-`system_admin` همه‌ی permissionهای قابل‌واگذاری کاتالوگ به‌علاوه‌ی `organization.create` و `system.session_policy.manage` را در scope سراسری می‌گیرد؛ این دو permission غیرقابل‌واگذاری‌اند. `system.access.bootstrap` و `system.access.impersonate` به نقش دائمی داده نمی‌شوند. نقش‌های قدیمی با یکی از مجموعه‌های دقیق شناخته‌شده، فقط پس از finalize و MFA تازه به مجموعه‌ی کامل نسخه‌ی جدید ارتقا می‌یابند و audit/outbox می‌نویسند؛ وضعیت‌های ناسازگار fail-closed هستند. جزئیات در [ADR-0019](../../DOCS/decisions/0019-system-admin-organization-provisioning.md) و [ADR-0020](../../DOCS/decisions/0020-admin-session-duration-and-system-admin-capabilities.md) آمده است.
+   `IDENTITY_ACCESS_BOOTSTRAP_ENABLED=true pnpm --filter @funtino/identity-access iam:bootstrap -- prepare "Tiam Mohammadi" "Initial system administrator bootstrap for Funtino"`
 
-`system_admin` و `system_admin_bootstrap` از دعوت، API عادی و UI قابل تخصیص نیستند. Bootstrap و تغییر role آن audit system-actor، policy version و outbox تولید می‌کند؛ membership موقت منقضی‌شده از authorization و عملیات MFA کنار گذاشته می‌شود و پیش از prepare مجدد به‌طور ممیزی‌شده revoke می‌شود. `IDENTITY_ACCESS_BOOTSTRAP_ENABLED` را در سرویس دائمی تنظیم نکنید؛ آن را فقط به فرایند CLI تعاملیِ one-shot بدهید و پس از هر اجرا حذف کنید. Repository مستقل IAM provision شده است؛ migration schema در هر startup طبق ADR-0015 خودکار است، اما تأیید backup/restore، keyring و runbook عملیاتی همچنان پیش‌نیاز پایلوت و بازکردن writeها هستند.
+3. اگر membership موقت ساخته شد، با همان شماره وارد System Web شوید، TOTP را enroll کنید و recovery codeها را امن نگه دارید. membership موقت ۲۴ ساعت اعتبار دارد. اگر خروجی `owner_admin_exists` بود، حساب از قبل مدیر سراسری است و می‌توان مستقیم finalize را اجرا کرد.
+4. با دلیل ممیزی، finalize را اجرا و TOTP یا recovery code را در prompt مخفی وارد کنید:
+
+   `IDENTITY_ACCESS_BOOTSTRAP_ENABLED=true pnpm --filter @funtino/identity-access iam:bootstrap -- finalize "Tiam Mohammadi" "Reconcile the Runflare-configured system owner"`
+
+`system_admin` همه‌ی کلیدهای کاتالوگ جاری را در scope سراسری می‌گیرد، از جمله `system.access.bootstrap` و `system.access.impersonate`; این کلیدها خودشان endpoint ایجاد نمی‌کنند. finalize نقش قبلی همین شماره را کامل می‌کند و membershipهای system admin متعلق به حساب‌های دیگر را در همان transaction با audit/outbox revoke می‌کند. roleهایی با permission ناشناخته یا state ناسازگار fail-closed می‌مانند. جزئیات در [ADR-0021](../../DOCS/decisions/0021-runflare-bound-system-admin-owner.md) آمده است.
+
+`system_admin` و `system_admin_bootstrap` از دعوت، API عادی و UI قابل تخصیص نیستند. `IDENTITY_ACCESS_BOOTSTRAP_ENABLED` را در محیط پایدار Runflare نگه ندارید؛ آن را فقط ابتدای یک invocation تعاملی تنظیم کنید. نشست مدیریتی از ۱ تا ۱۲ ساعت (پیش‌فرض ۱۲) است و MFA مدیر سراسری پس از login تا پایان همان session معتبر می‌ماند؛ تنظیم در System Web از ورود بعدی اعمال می‌شود.
+
+برای writeهای عادی role/staff/permission در production، مقدار `IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED=true` را در Runflare روی IAM تنظیم کنید. مقدار پیش‌فرض کد `false` می‌ماند؛ در صورت `false` پاسخ 503 با کد `IAM_MANAGEMENT_WRITES_DISABLED` به معنی بسته‌بودن همین گیت است. bootstrap one-off از این گیت جداست. بستن گیت با `false` rollback عملیاتی است.
 
 ### تنظیم مدت نشست مدیریتی
 
 `policy_state.management_session_ttl_hours` با migration نسخه‌دار پیش‌فرض ۱۲ ساعت می‌گیرد. مدیر دارای `system.session_policy.manage` می‌تواند در System Web مدت ۱ تا ۱۲ ساعت را انتخاب کند؛ تغییر از ورود بعدی کارکنان اعمال می‌شود و نشست‌های فعال و نشست مشتریان تغییر نمی‌کنند. دسترسی خواندن و تغییر تنظیم ثبت audit می‌شود؛ تغییر موفق با policy version و identity access Outbox commit می‌شود.
 
-برای مدیر فعلی که دقیقاً یکی از دو مجموعه‌ی permission قدیمی شناخته‌شده را دارد، بعد از انتشار از terminal تعاملی Backend، فقط یک‌بار finalize را با TOTP/recovery اجرا کنید. بدون جداکننده‌ی `--`:
-
-`IDENTITY_ACCESS_BOOTSTRAP_ENABLED=true pnpm --filter @funtino/identity-access run iam:bootstrap finalize <user-uuid> <operator-label> <audit-reason>`
-
-CLI یک `--` ابتدایی را هم برای سازگاری با wrapperهای pnpm نادیده می‌گیرد؛ مقدار bootstrap فقط در همان invocation باشد. هیچ خروجی command نباید شامل code یا secret باشد.
+اگر `prepare` وضعیت `owner_admin_exists` را برگرداند، شماره‌ی تنظیم‌شده از قبل مدیر است؛ همان دستور `finalize` بالا را با دلیل ممیزی و TOTP/recovery اجرا کنید. شناسه‌ی کاربر به CLI داده نمی‌شود و مدیر دیگری را نمی‌توان با آرگومان command انتخاب کرد. مقدار bootstrap فقط برای همان invocation فعال باشد و هیچ خروجی command نباید شامل code یا secret باشد.
 
 پس از finalize، برای بازکردن mutationهای عادی IAM باید گیت production را در محیط Runflare به‌صورت دستی و در پنجره‌ی rollout مجاز فعال کرد. این دو عمل جدا هستند: finalize فقط role را با MFA ممیزی‌شده ارتقا می‌دهد و گیت همچنان default-off می‌ماند.
 

@@ -13,12 +13,6 @@ import { PrismaService } from '../infrastructure/persistence/prisma/prisma.servi
 
 const BOOTSTRAP_ROLE_NAME = SYSTEM_ADMIN_BOOTSTRAP_ROLE_NAME;
 const SYSTEM_ADMIN_ROLE_NAME = 'system_admin';
-// These non-delegable operational permissions are explicitly held by the protected global admin role.
-// Bootstrap and impersonation remain separate privileges.
-const SYSTEM_ADMIN_REQUIRED_PERMISSION_KEYS = [
-  'organization.create',
-  'system.session_policy.manage',
-] as const;
 
 type ProtectedRole = {
   id: string;
@@ -34,21 +28,12 @@ function sortedPermissionKeys(role: ProtectedRole): string[] {
   return role.permissions.map(({ permissionKey }) => permissionKey).sort();
 }
 
-function legacySystemAdminPermissionKeys(): string[] {
-  return permissionCatalog
-    .filter((permission) => permission.delegable)
-    .map((permission) => permission.key)
-    .sort();
-}
-
-function previouslyCurrentSystemAdminPermissionKeys(): string[] {
-  return [...new Set([...legacySystemAdminPermissionKeys(), 'organization.create'])].sort();
+function allSystemAdminPermissionKeys(): string[] {
+  return permissionCatalog.map((permission) => permission.key).sort();
 }
 
 function systemAdminPermissionKeys(): string[] {
-  return [
-    ...new Set([...legacySystemAdminPermissionKeys(), ...SYSTEM_ADMIN_REQUIRED_PERMISSION_KEYS]),
-  ].sort();
+  return allSystemAdminPermissionKeys();
 }
 
 function systemAdminPermissionState(role: ProtectedRole): 'current' | 'legacy' | 'inconsistent' {
@@ -61,10 +46,8 @@ function systemAdminPermissionState(role: ProtectedRole): 'current' | 'legacy' |
     return 'inconsistent';
   const actual = sortedPermissionKeys(role).join('|');
   if (actual === systemAdminPermissionKeys().join('|')) return 'current';
-  if (
-    actual === legacySystemAdminPermissionKeys().join('|') ||
-    actual === previouslyCurrentSystemAdminPermissionKeys().join('|')
-  )
+  const knownPermissionKeys = new Set<string>(permissionCatalog.map(({ key }) => key));
+  if (role.permissions.every(({ permissionKey }) => knownPermissionKeys.has(permissionKey)))
     return 'legacy';
   return 'inconsistent';
 }
@@ -90,7 +73,7 @@ export class AccessBootstrapService {
     private readonly mfa: MfaService,
   ) {}
 
-  /** Offline-only phase one: grants no ordinary administrative permission. */
+  /** Phase one grants only the short-lived bootstrap permission. */
   async prepare(input: { userId: string; operatorLabel: string; reason: string }) {
     const membershipId = randomUUID();
     const roleId = randomUUID();
@@ -98,15 +81,27 @@ export class AccessBootstrapService {
     return this.prisma.$transaction(
       async (tx) => {
         await this.lockPolicy(tx);
-        const existingAdmin = await tx.staffMembership.findFirst({
+        const ownerAdmin = await tx.staffMembership.findFirst({
           where: {
+            userId: input.userId,
             scopeType: 'global',
             status: { not: 'revoked' },
             role: { is: { name: SYSTEM_ADMIN_ROLE_NAME, systemManaged: true } },
           },
+          include: { role: { include: { permissions: true } } },
         });
-        if (existingAdmin)
-          throw new ConflictException('A global system administrator already exists.');
+        if (ownerAdmin) {
+          const state = systemAdminPermissionState(ownerAdmin.role);
+          if (state === 'inconsistent') {
+            throw new ConflictException('The protected system administrator role is inconsistent.');
+          }
+          return {
+            status: 'owner_admin_exists' as const,
+            userId: input.userId,
+            membershipId: ownerAdmin.id,
+            role: SYSTEM_ADMIN_ROLE_NAME,
+          };
+        }
         const bootstrapRole = await tx.accessRole.findFirst({
           where: { scopeType: 'global', name: BOOTSTRAP_ROLE_NAME },
           include: { permissions: true },
@@ -137,6 +132,17 @@ export class AccessBootstrapService {
         });
         for (const occupied of occupiedMemberships) {
           if (!isBootstrapMembershipExpired(BOOTSTRAP_ROLE_NAME, occupied.createdAt, now)) {
+            if (occupied.userId === input.userId) {
+              return {
+                status: 'already_prepared' as const,
+                userId: input.userId,
+                membershipId: occupied.id,
+                role: BOOTSTRAP_ROLE_NAME,
+                expiresAt: new Date(
+                  occupied.createdAt.getTime() + BOOTSTRAP_MEMBERSHIP_TTL_MS,
+                ).toISOString(),
+              };
+            }
             throw new ConflictException('A bootstrap membership is already in progress.');
           }
           const revoked = await tx.staffMembership.update({
@@ -252,7 +258,7 @@ export class AccessBootstrapService {
     );
   }
 
-  /** Offline-only phase two. Consumes a fresh one-time MFA proof before promotion. */
+  /** Phase two consumes a fresh one-time MFA proof before promotion. */
   async finalize(input: {
     userId: string;
     operatorLabel: string;
@@ -270,7 +276,16 @@ export class AccessBootstrapService {
       preparedMembership.role.name === SYSTEM_ADMIN_ROLE_NAME
         ? systemAdminPermissionState(preparedMembership.role)
         : null;
-    if (existingAdminState === 'current') {
+    const otherSystemAdmins = await this.prisma.staffMembership.findMany({
+      where: {
+        userId: { not: input.userId },
+        scopeType: 'global',
+        status: { not: 'revoked' },
+        role: { is: { name: SYSTEM_ADMIN_ROLE_NAME } },
+      },
+      select: { id: true },
+    });
+    if (existingAdminState === 'current' && otherSystemAdmins.length === 0) {
       return {
         status: 'already_finalized' as const,
         userId: input.userId,
@@ -334,10 +349,12 @@ export class AccessBootstrapService {
         }
 
         if (currentAdminState === 'current') {
+          const revokedCount = await this.revokeOtherSystemAdmins(tx, input);
           return {
-            status: 'already_finalized' as const,
+            status: revokedCount > 0 ? ('owner_bound' as const) : ('already_finalized' as const),
             userId: input.userId,
             role: SYSTEM_ADMIN_ROLE_NAME,
+            revokedAdministratorMemberships: revokedCount,
           };
         }
         if (currentAdminState === 'legacy') {
@@ -346,10 +363,17 @@ export class AccessBootstrapService {
             membership.role,
             input,
           );
+          const revokedCount = await this.revokeOtherSystemAdmins(tx, input);
           return {
-            status: changed ? ('permissions_reconciled' as const) : ('already_finalized' as const),
+            status:
+              revokedCount > 0
+                ? ('owner_bound' as const)
+                : changed
+                  ? ('permissions_reconciled' as const)
+                  : ('already_finalized' as const),
             userId: input.userId,
             role: role.name,
+            revokedAdministratorMemberships: revokedCount,
           };
         }
 
@@ -419,11 +443,13 @@ export class AccessBootstrapService {
             version: updated.version,
           },
         });
+        const revokedCount = await this.revokeOtherSystemAdmins(tx, input);
         return {
           status: 'finalized' as const,
           userId: input.userId,
           membershipId: membership.id,
           role: SYSTEM_ADMIN_ROLE_NAME,
+          revokedAdministratorMemberships: revokedCount,
         };
       },
       { isolationLevel: 'ReadCommitted', maxWait: 4_000, timeout: 10_000 },
@@ -463,6 +489,55 @@ export class AccessBootstrapService {
       afterState: roleSnapshot(updated),
     });
     return { role: updated, changed: true };
+  }
+
+  private async revokeOtherSystemAdmins(
+    tx: Prisma.TransactionClient,
+    input: { userId: string; operatorLabel: string; reason: string },
+  ): Promise<number> {
+    const memberships = await tx.staffMembership.findMany({
+      where: {
+        userId: { not: input.userId },
+        scopeType: 'global',
+        status: { not: 'revoked' },
+        role: { is: { name: SYSTEM_ADMIN_ROLE_NAME } },
+      },
+      include: { role: true },
+    });
+    for (const membership of memberships) {
+      const revoked = await tx.staffMembership.update({
+        where: { id: membership.id },
+        data: { status: 'revoked', version: { increment: 1 } },
+      });
+      await this.journal.recordCommittedChange(tx, {
+        actorUserId: null,
+        actorType: 'system',
+        actorLabel: input.operatorLabel,
+        correlationId: randomUUID(),
+        changeType: 'membership.revoked',
+        targetType: 'membership',
+        targetId: membership.id,
+        scope: { type: 'global' },
+        reason: input.reason,
+        beforeState: {
+          kind: 'membership',
+          id: membership.id,
+          status: membership.status,
+          scope: { type: 'global' },
+          roleId: membership.roleId,
+          version: membership.version,
+        },
+        afterState: {
+          kind: 'membership',
+          id: revoked.id,
+          status: 'revoked',
+          scope: { type: 'global' },
+          roleId: membership.roleId,
+          version: revoked.version,
+        },
+      });
+    }
+    return memberships.length;
   }
 
   private async lockPolicy(tx: Prisma.TransactionClient): Promise<void> {

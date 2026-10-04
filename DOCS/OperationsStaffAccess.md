@@ -39,6 +39,8 @@
 
 مطابق ADR-0011، تمام mutationهای IAM در production، از جمله پذیرش دعوت، یک release gate مستقل دارند و به‌صورت پیش‌فرض بسته‌اند؛ فقط مقدار دقیق `IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED=true` در release window تاییدشده آن‌ها را باز می‌کند. این gate اعتبارسنجی زنده‌ی Owner، permission/delegation/MFA و audit هر command را دور نمی‌زند. فقط lifecycle عامل MFA خود کاربر از kill switch جداست تا enrollment و بازیابی ممکن بماند. readiness وضعیت gate مدیریتی و scope tenant را جدا گزارش می‌دهد؛ بستن flag به `false` rollback عملیاتی است.
 
+مدیر سراسری فقط از one-off CLI ساخته یا reconcile می‌شود. Gateway مقصد را از `SYSTEM_ADMIN_OWNER_PHONE_E164` در runtime خودش resolve می‌کند؛ IAM UUID نمی‌پذیرد و شماره را در دیتابیس خود نگه نمی‌دارد. finalize با TOTP/recovery تمام کلیدهای کاتالوگ را می‌دهد و عضویت system-admin دیگر را در همان تراکنش revoke و audit می‌کند. دستورها و متغیرهای Runflare در [ADR-0021](decisions/0021-runflare-bound-system-admin-owner.md) و [راهنمای IAM](../services/identity-access/README.md) آمده‌اند.
+
 ## اعتبارسنجی و محدودیت انتشار
 
 - Operations Web: TypeScript، ESLint و production build بررسی می‌شوند؛ چهار تست API client مسیر scope، pagination، پذیرش بدون شماره‌ی client و version/idempotency را پوشش می‌دهند. Gateway نیز ۴۰/۴۰ و Identity & Access برابر ۴۴/۴۴ تست واحد جاری را پاس کرده‌اند.

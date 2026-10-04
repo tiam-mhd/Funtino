@@ -178,6 +178,7 @@ function finalizationFixture(
     },
     staffMembership: {
       findFirst: async () => membership,
+      findMany: async () => [],
       update: async ({ data }: { data: { roleId: string; version: { increment: number } } }) => {
         membership.roleId = data.roleId;
         membership.version += data.version.increment;
@@ -192,6 +193,7 @@ function finalizationFixture(
     $transaction: async <T>(work: (transaction: typeof tx) => Promise<T>) => work(tx),
     staffMembership: {
       findFirst: async () => membership,
+      findMany: async () => [],
     },
   } as unknown as PrismaService;
   const journal = {
@@ -269,7 +271,7 @@ test('finalize rejects an expired bootstrap before consuming an MFA proof', asyn
   assert.equal(fixture.mfaVerifications, 0);
 });
 
-test('finalize grants the protected administrator the full operational catalog and organization creation', async () => {
+test('finalize grants the protected administrator every permission in the current catalog', async () => {
   const fixture = finalizationFixture(bootstrapRole);
   const result = await fixture.service.finalize({
     userId,
@@ -279,19 +281,14 @@ test('finalize grants the protected administrator the full operational catalog a
     method: 'totp',
   });
 
-  const expectedPermissionKeys = [
-    ...permissionCatalog
-      .filter((permission) => permission.delegable)
-      .map((permission) => permission.key),
-    'organization.create',
-  ].sort();
+  const expectedPermissionKeys = permissionCatalog.map((permission) => permission.key).sort();
   const actualPermissionKeys = (fixture.adminRole!.permissions as Array<{ permissionKey: string }>)
     .map(({ permissionKey }) => permissionKey)
     .sort();
   assert.equal(result.status, 'finalized');
   assert.deepEqual(actualPermissionKeys, expectedPermissionKeys);
-  assert.equal(actualPermissionKeys.includes('system.access.bootstrap'), false);
-  assert.equal(actualPermissionKeys.includes('system.access.impersonate'), false);
+  assert.equal(actualPermissionKeys.includes('system.access.bootstrap'), true);
+  assert.equal(actualPermissionKeys.includes('system.access.impersonate'), true);
   assert.equal(
     permissionCatalog.find((permission) => permission.key === 'organization.create')?.delegable,
     false,
@@ -304,7 +301,7 @@ test('finalize grants the protected administrator the full operational catalog a
   assert.equal(fixture.mfaVerifications, 1);
 });
 
-test('finalize reconciles only the exact previous system admin permission set with fresh MFA and audit', async () => {
+test('finalize reconciles a known current-catalog subset with fresh MFA and audit', async () => {
   const legacyKeys = permissionCatalog
     .filter((permission) => permission.delegable)
     .map((permission) => permission.key);
@@ -327,12 +324,12 @@ test('finalize reconciles only the exact previous system admin permission set wi
     ['role.updated'],
   );
   assert.equal(afterState.permissionKeys.includes('organization.create'), true);
-  assert.equal(afterState.permissionKeys.includes('system.access.bootstrap'), false);
-  assert.equal(afterState.permissionKeys.includes('system.access.impersonate'), false);
+  assert.equal(afterState.permissionKeys.includes('system.access.bootstrap'), true);
+  assert.equal(afterState.permissionKeys.includes('system.access.impersonate'), true);
 });
 
-test('finalize refuses to change a system admin role with an unknown permission set', async () => {
-  const invalidRole = makeSystemAdminRole(['organization.read']);
+test('finalize refuses to change a system admin role with an unknown permission key', async () => {
+  const invalidRole = makeSystemAdminRole(['unknown.permission']);
   const fixture = finalizationFixture(invalidRole, invalidRole);
   await assert.rejects(
     fixture.service.finalize({

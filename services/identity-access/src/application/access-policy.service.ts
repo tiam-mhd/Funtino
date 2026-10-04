@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { createSafeErrorDiagnostic, writeStructuredLog } from '@funtino/backend-core';
 import type { Prisma } from '../../generated/prisma/index.js';
 import {
   evaluateAuthorizationAcrossMemberships,
@@ -138,38 +139,67 @@ export class AccessPolicyService {
   }
 
   async currentMemberships(userId: string) {
-    return this.inSnapshot(async (tx) => {
-      const [memberships, policy] = await Promise.all([
-        tx.staffMembership.findMany({
-          where: { userId, status: { not: 'revoked' } },
-          include: { role: { include: { permissions: true } } },
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        }),
-        tx.policyState.findUnique({ where: { id: 1 } }),
-      ]);
-      const policyVersion = this.requirePolicyVersion(policy?.version);
-      return {
-        data: memberships
-          .filter(
-            (membership) =>
-              !isBootstrapMembershipExpired(membership.role.name, membership.createdAt),
-          )
-          .map((membership) => ({
-            id: membership.id,
-            status: membership.status,
-            scope: scopeFromColumns(
-              membership.scopeType,
-              membership.organizationId,
-              membership.branchId,
-            ),
-            role: summarizeRole(membership.role),
-            version: membership.version,
-          })),
-        policyVersion,
-        catalogVersion: permissionCatalogVersion,
-        managementSessionTtlHours: policy?.managementSessionTtlHours ?? 12,
-      };
-    });
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const [memberships, policy] = await Promise.all([
+            tx.staffMembership.findMany({
+              where: { userId, status: { not: 'revoked' } },
+              include: { role: { include: { permissions: true } } },
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            }),
+            tx.policyState.findUnique({ where: { id: 1 } }),
+          ]);
+          if (!Number.isSafeInteger(policy?.version) || (policy?.version ?? 0) < 1) {
+            writeStructuredLog({
+              level: 'error',
+              event: 'identity_access.current_memberships.failed',
+              service: 'identity-access',
+              component: 'AccessPolicyService.currentMemberships',
+              stage: 'policy_state_lookup',
+              dependency: 'postgresql',
+              reason: 'policy_state_uninitialized',
+            });
+            throw new ServiceUnavailableException('The access policy source is not initialized.');
+          }
+          const policyVersion = this.requirePolicyVersion(policy?.version);
+          return {
+            data: memberships
+              .filter(
+                (membership) =>
+                  !isBootstrapMembershipExpired(membership.role.name, membership.createdAt),
+              )
+              .map((membership) => ({
+                id: membership.id,
+                status: membership.status,
+                scope: scopeFromColumns(
+                  membership.scopeType,
+                  membership.organizationId,
+                  membership.branchId,
+                ),
+                role: summarizeRole(membership.role),
+                version: membership.version,
+              })),
+            policyVersion,
+            catalogVersion: permissionCatalogVersion,
+            managementSessionTtlHours: policy?.managementSessionTtlHours ?? 12,
+          };
+        },
+        { isolationLevel: 'RepeatableRead', maxWait: 2_000, timeout: 4_000 },
+      );
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      writeStructuredLog({
+        level: 'error',
+        event: 'identity_access.current_memberships.failed',
+        service: 'identity-access',
+        component: 'AccessPolicyService.currentMemberships',
+        stage: 'database_snapshot',
+        dependency: 'postgresql',
+        error: createSafeErrorDiagnostic(error),
+      });
+      throw new ServiceUnavailableException('The access policy source is unavailable.');
+    }
   }
 
   async evaluate(

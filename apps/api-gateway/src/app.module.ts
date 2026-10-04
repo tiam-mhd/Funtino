@@ -15,6 +15,8 @@ import { OperationsScopeController } from './interfaces/http/operations-scope.co
 import { SystemOrganizationController } from './interfaces/http/system-organization.controller.js';
 import { SystemHealthController } from './interfaces/http/system-health.controller.js';
 import { SystemSessionPolicyController } from './interfaces/http/system-session-policy.controller.js';
+import { SystemBootstrapOwnerController } from './interfaces/http/system-bootstrap-owner.controller.js';
+import { IdentityAccessBootstrapLookupGuard } from './interfaces/http/identity-access-bootstrap-lookup.guard.js';
 import { OperationsCardsController } from './interfaces/http/operations-cards.controller.js';
 import { SessionGuard } from './interfaces/http/session.guard.js';
 import { TrustedOriginGuard } from './interfaces/http/trusted-origin.guard.js';
@@ -46,6 +48,7 @@ import { PrometheusTelemetryClient } from './infrastructure/observability/promet
     SystemOrganizationController,
     SystemHealthController,
     SystemSessionPolicyController,
+    SystemBootstrapOwnerController,
   ],
   providers: [
     PrismaService,
@@ -70,6 +73,7 @@ import { PrometheusTelemetryClient } from './infrastructure/observability/promet
     WalletClient,
     PrometheusTelemetryClient,
     SessionGuard,
+    IdentityAccessBootstrapLookupGuard,
     TrustedOriginGuard,
     OutboxRelay,
     WalletEventConsumer,

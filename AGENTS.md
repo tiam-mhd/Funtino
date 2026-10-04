@@ -43,6 +43,7 @@
 - PostgreSQL منبع حقیقت داده‌های عملیاتی و مالی است. Redis هرگز منبع حقیقت موجودی، پرداخت یا دفتر تراکنش نیست.
 - کارت و سامانه‌ی فیزیکی در شروع از طریق Adapter/Anti-Corruption Layer و ترجیحاً به‌صورت خواندنی متصل می‌شوند.
 - مجوز هر درخواست بر اساس نقش و محدوده‌ی سازمان/شعبه روی سرور بررسی می‌شود؛ پنهان‌کردن کنترل در رابط کافی نیست.
+- نقش سراسری `system_admin` تمام کلیدهای کاتالوگ فعلی را دارد و فقط برای حسابی از bootstrap یک‌باره‌ی MFAدار می‌شود که API Gateway از `SYSTEM_ADMIN_OWNER_PHONE_E164` در runtime Runflare resolve می‌کند؛ CLI UUID آزاد نمی‌پذیرد و IAM مستقیماً جدول Gateway را نمی‌خواند. مرجع تصمیم [ADR-0021](DOCS/decisions/0021-runflare-bound-system-admin-owner.md) است.
 - اطلاعات کودک و داده‌های حساس حداقلی جمع‌آوری می‌شوند و هر دسترسی مدیریتی حساس audit می‌شود.
 - هیچ راز، رمز، توکن یا داده‌ی واقعی مشتری در کد، تست، commit یا مستند عمومی قرار نمی‌گیرد.
 - تغییرات مالی باید append-only، قابل‌ممیزی، idempotent و قابل‌بازیابی باشند.
@@ -143,13 +144,13 @@ This project is indexed by GitNexus as **Funtino** (8830 symbols, 21053 relation
 
 ## CLI
 
-| Task | Read this skill file |
-| --- | --- |
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus-cli/SKILL.md` |
+| Task                                         | Read this skill file                               |
+| -------------------------------------------- | -------------------------------------------------- |
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus-exploring/SKILL.md`       |
+| Blast radius / "What breaks if I change X?"  | `.claude/skills/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?"             | `.claude/skills/gitnexus-debugging/SKILL.md`       |
+| Rename / extract / split / refactor          | `.claude/skills/gitnexus-refactoring/SKILL.md`     |
+| Tools, resources, schema reference           | `.claude/skills/gitnexus-guide/SKILL.md`           |
+| Index, status, clean, wiki CLI commands      | `.claude/skills/gitnexus-cli/SKILL.md`             |
 
 <!-- gitnexus:end -->
