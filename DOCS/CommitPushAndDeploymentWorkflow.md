@@ -20,7 +20,7 @@ Source monorepo منبع حقیقت است. Runtime repositoryها snapshot قا
 | apps/api-gateway، apps/realtime-gateway، هفت service موجود در services/*، packages/backend-core، packages/event-contracts، scripts/worker-startup.mjs و scripts/runtime-bundle | backend / funtino-backend-runtime | 4000 تا 4080 طبق manifest | Funtino Backend |
 | infra/docker-compose.yml یا providerهای managed | بدون Git deployment | PostgreSQL، RabbitMQ، Redis | itemهای داده‌ی مستقل |
 
-فرانت سه host مستقل را به پورت‌های 3000 تا 3002 route می‌کند. Backend، api.funtino.ir را به 4000 و realtime.funtino.ir را به 4010 route می‌کند. پورت‌های 4020 تا 4080 فقط route خصوصی دارند. endpointهای عمومی HTTPS هستند؛ مسیر Gateway به IAM از ClusterIP name/Port واقعی Runflare طبق ADR-0017 استفاده می‌کند.
+فرانت سه host مستقل را به پورت‌های 3000 تا 3002 route می‌کند. Backend، api.funtino.ir را به 4000 و realtime.funtino.ir را به 4010 route می‌کند. پورت‌های 4020 تا 4080 فقط route خصوصی دارند. endpointهای عمومی HTTPS هستند؛ processهای Backend برای ارتباط داخلی از ClusterIP name/Port واقعی Runflare طبق ADR-0018 استفاده می‌کنند.
 
 هر تغییر app به bundle والد می‌رود. تغییر design-system، backend-core یا event-contracts bundle مصرف‌کننده را کامل می‌سازد. تغییر root toolchain، lockfile یا contract مشترک که هر دو را تحت تأثیر می‌گذارد، هر دو snapshot را تولید می‌کند. تغییر مستندات صرفاً مستقر نمی‌شود.
 

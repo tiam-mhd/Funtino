@@ -31,7 +31,7 @@
 - Dockerfile هر repository مستقل، root اجرایی، install/build/start و health check را تعیین می‌کند؛ هر دو image روی Node.js 22 و pnpm 10.12.4 pin می‌شوند.
 - هر child فقط کلیدهای محیطی allow-list شده‌ی خودش را می‌گیرد. `NEXT_PUBLIC_*` فقط برای build فرانت است؛ secretهای backend فقط runtime environment هستند.
 - پنج Worker مشخص‌شده در ADR-0015 فقط با runner فعلی و پیش از شروع app migration اجرا می‌کنند. API Gateway، Realtime، Device و Notifications migration را در startup اجرا نمی‌کنند.
-- HTTPS برای endpointهای عمومی و hostnameهای production برقرار می‌ماند. فراخوانی Gateway به Identity & Access از ClusterIP خصوصی Runflare و نام/Port ثبت‌شده در Runflare استفاده می‌کند؛ اگر آن route به شکل `http:80 -> 4040` ساخته شده باشد، فقط این فراخوانی طبق قاعده‌ی محدود ADR-0017 مجاز است. نام شبکه و mapping واقعی باید از پنل خوانده شود؛ hostname سفارشی حدسی قابل استفاده نیست.
+- HTTPS برای endpointهای عمومی و hostnameهای production برقرار می‌ماند. ارتباط داخلی processهای Backend از ClusterIP خصوصی Runflare و نام/Port واقعی ثبت‌شده در Runflare استفاده می‌کند، طبق validation محدود ADR-0018؛ hostname سفارشی حدسی قابل استفاده نیست.
 - مرحله‌ی گذار، rollback و حذف ۱۲ item قدیمی را خودکار نمی‌کند. itemها تا تکمیل route، environment، migration، smoke و rollback واقعی حفظ می‌شوند.
 
 ## پیامدها و trade-offها

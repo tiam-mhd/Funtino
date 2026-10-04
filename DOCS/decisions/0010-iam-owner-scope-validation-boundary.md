@@ -2,6 +2,7 @@
 
 - تاریخ: 2026-10-01
 - وضعیت: accepted
+- یادداشت تکمیلی: فقط شرط transport مربوط به URL owner در این ADR با [ADR-0018](0018-backend-clusterip-service-urls.md) به‌روزرسانی شده است؛ مرز مالکیت scope و permission تغییر نکرده است.
 - تصمیم‌گیر: مالک محصول (تأیید گزینه‌ی ۱)
 - دامنه: Identity & Access، Organization & Branch، API Gateway و Operations Web
 
@@ -30,8 +31,8 @@
 - scope معتبر باید متعلق به همان organization و در وضعیت فعال باشد؛ برای scope شعبه، خود branch نیز باید فعال و متعلق به همان organization باشد. پاسخ معتبر باید شناسه‌های درخواستی و versionهای مثبت owner را داشته باشد.
 - پاسخ `valid:false` به‌عنوان رد مجوز عمومی ثبت‌شده در audit بازگردانده می‌شود. timeout، قطع سرویس، credential نامعتبر، پاسخ malformed یا شناسه/version ناسازگار به `503` و عدم تغییر داده منجر می‌شود. هیچ خطای owner باعث fallback به UUID opaque در production نمی‌شود.
 - اعتبارسنجی از داخل مرز تراکنش IAM و بعد از احراز permission/delegation اجرا می‌شود؛ timeout شبکه ۲ ثانیه است و در هر شکست، transaction و idempotency mutation commit نمی‌شوند. داده‌ی owner در IAM کپی نمی‌شود.
-- token با هویت `identity-access` فقط مجاز به `POST /internal/v1/scopes/validate` است؛ دسترسی آن به routeهای دیگر owner رد می‌شود. token آن با Gateway و Device Integration مجزا می‌ماند. URL مالک در production باید HTTPS باشد و درخواست tokenدار redirect را دنبال نمی‌کند.
-- رفتار nonproduction مطابق ADR-0008 حفظ می‌شود: scopeهای opaque برای توسعه/آزمون پذیرفته می‌شوند و اثبات وجود resource نیستند. در production، tenant write فقط در صورت پیکربندی معتبر HTTPS برای `ORGANIZATION_BRANCH_URL` و `ORGANIZATION_BRANCH_IDENTITY_ACCESS_TOKEN` فعال است؛ خود هر درخواست همچنان owner را زنده صدا می‌زند.
+- token با هویت `identity-access` فقط مجاز به `POST /internal/v1/scopes/validate` است؛ دسترسی آن به routeهای دیگر owner رد می‌شود. token آن با Gateway و Device Integration مجزا می‌ماند. URL مالک در production باید HTTPS یا ClusterIP محدود طبق ADR-0018 باشد و درخواست tokenدار redirect را دنبال نمی‌کند.
+- رفتار nonproduction مطابق ADR-0008 حفظ می‌شود: scopeهای opaque برای توسعه/آزمون پذیرفته می‌شوند و اثبات وجود resource نیستند. در production، tenant write فقط در صورت پیکربندی معتبر `ORGANIZATION_BRANCH_URL` با transport مجاز ADR-0018 و `ORGANIZATION_BRANCH_IDENTITY_ACCESS_TOKEN` فعال است؛ خود هر درخواست همچنان owner را زنده صدا می‌زند.
 - این ADR فقط مرز mutationهای IAM را تعیین می‌کند. Gateway و سرویس مالک همچنان باید برای هر عملیات عمومی، permission و وضعیت زنده‌ی resource را در محدوده‌ی خود بررسی کنند؛ پاسخ IAM جایگزین کنترل domain در owner نیست.
 
 ## پیامدها و rollback

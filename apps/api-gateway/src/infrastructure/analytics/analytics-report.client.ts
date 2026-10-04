@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '@funtino/backend-core';
+import { DomainError, isRunflareClusterIpServiceBaseUrl } from '@funtino/backend-core';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -76,8 +76,18 @@ export class AnalyticsReportClient {
     if (!baseUrl || !token || token.length < 32) throw new DomainError('DEPENDENCY_UNAVAILABLE', 'سرویس گزارش‌دهی پیکربندی نشده است.');
     let url: URL;
     try {
-      url = new URL(path, baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
-      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || (process.env.NODE_ENV === 'production' && url.protocol !== 'https:')) throw new Error();
+      const base = new URL(baseUrl);
+      if (
+        !['http:', 'https:'].includes(base.protocol) ||
+        base.username ||
+        base.password ||
+        (process.env.NODE_ENV === 'production' &&
+          base.protocol !== 'https:' &&
+          !isRunflareClusterIpServiceBaseUrl(base))
+      ) {
+        throw new Error();
+      }
+      url = new URL(path, base);
     } catch {
       throw new DomainError('DEPENDENCY_UNAVAILABLE', 'نشانی سرویس گزارش‌دهی معتبر نیست.');
     }
@@ -95,6 +105,7 @@ export class AnalyticsReportClient {
       response = await this.fetcher(url, {
         method: options.method ?? 'GET',
         headers,
+        redirect: 'error',
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
         signal: AbortSignal.timeout(7_000),
       });

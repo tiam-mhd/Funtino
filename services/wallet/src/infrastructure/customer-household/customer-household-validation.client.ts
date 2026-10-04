@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { isRunflareClusterIpServiceBaseUrl } from '@funtino/backend-core';
 import { z } from 'zod';
 import type { HouseholdValidator } from '../../application/ports/household-validator.port.js';
 
@@ -29,7 +30,9 @@ export class CustomerHouseholdValidationClient implements HouseholdValidator {
         baseUrl.password ||
         baseUrl.search ||
         baseUrl.hash ||
-        (process.env.NODE_ENV === 'production' && baseUrl.protocol !== 'https:')
+        (process.env.NODE_ENV === 'production' &&
+          baseUrl.protocol !== 'https:' &&
+          !isRunflareClusterIpServiceBaseUrl(baseUrl))
       ) {
         throw new Error('invalid owner URL');
       }

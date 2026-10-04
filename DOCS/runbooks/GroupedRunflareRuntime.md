@@ -95,7 +95,7 @@ Runflare network settings می‌تواند چند network را برای یک س
 | wallet private route              |        4070 | داخلی                           |
 | customer household private route  |        4080 | داخلی                           |
 
-قبل از rollout، برای هر route ثبت کن: Runflare network name، external Port، Target Port، domain/hostname، ClusterIP یا public exposure، protocol و مصرف‌کنندگان. برای endpoint عمومی از HTTPS استفاده کن. برای Gateway به Identity & Access، اگر پنل route خصوصی IAM را به‌صورت `http:80 -> 4040` نشان می‌دهد، مقدار `IDENTITY_ACCESS_URL` باید `http://<network-name>:80` باشد؛ `IdentityAccessClient` فقط hostname تک‌برچسبی `*-service` با Port 80 را در production می‌پذیرد. نام دقیق را از صفحه‌ی Networks بردار و در Environment آیتم بگذار؛ از `*.internal.funtino.ir` استفاده نکن مگر DNS و TLS آن واقعاً ساخته شده باشد. URLهای دیگر backend را تا به‌روزرسانی client مربوطه به HTTP تغییر نده. هیچ ClusterIP داخلی را به اینترنت عمومی/NodePort expose نکن. این استثنا و مرز اعتماد در [ADR-0017](../decisions/0017-runflare-clusterip-service-urls.md) ثبت شده است.
+قبل از rollout، برای هر route ثبت کن: Runflare network name، external Port، Target Port، domain/hostname، ClusterIP یا public exposure، protocol و مصرف‌کنندگان. برای endpoint عمومی از HTTPS استفاده کن. URLهای ارتباط داخلی Backend از نام دقیق ClusterIP و Port 80 استفاده می‌کنند؛ در production فقط HTTPS یا hostname تک‌برچسبی `*-service` روی Port 80 بدون credential/path/query/fragment مجاز است و redirect دنبال نمی‌شود. نام را از صفحه‌ی Networks بردار و در Environment آیتم بگذار؛ از `*.internal.funtino.ir` استفاده نکن مگر DNS و TLS آن واقعاً ساخته شده باشد. هیچ ClusterIP داخلی را به اینترنت عمومی/NodePort expose نکن. این استثنا و مرز اعتماد در [ADR-0018](../decisions/0018-backend-clusterip-service-urls.md) ثبت شده است.
 
 فقط API، Realtime و سه web app exposure عمومی می‌گیرند. Worker network عمومی یا NodePort نمی‌گیرد. Realtime Socket.IO روی domain خودش فعال شود. [تنظیم WebSocket در Runflare](https://runflare.com/docs/how-to-setup-websocket/)
 
@@ -137,7 +137,7 @@ ORDER BY backend_start;
 
 1. دو Runflare Docker item را از branch مربوط به دو snapshot وصل کن؛ repository source مستقیم متصل نشود.
 2. ابتدا منابع هر item را برآورد کن. Backend ۹ process، Prisma poolها و هم‌زمانی مصرف‌کنندگان queue را با بار واقعی بسنج؛ هیچ process به‌صورت مستقل scale نمی‌شود.
-3. Environment/Secret را بر پایه‌ی allow-list‌ها وارد کن؛ `IDENTITY_ACCESS_URL` را با نام ClusterIP و Port واقعی IAM تنظیم کن، بقیه‌ی URLها را طبق پروتکل پشتیبانی‌شده‌ی client خودشان نگه دار، و health token، CORS و cookie domain را با محیط هماهنگ کن.
+3. Environment/Secret را بر پایه‌ی allow-list‌ها وارد کن؛ همه‌ی URLهای داخلی processهای Backend را با نام دقیق ClusterIP مقصد روی Port 80 تنظیم کن، و health token، CORS و cookie domain را با محیط هماهنگ کن. برای production فقط HTTPS یا URL محدود ClusterIP طبق ADR-0018 پذیرفته می‌شود.
 4. هفت internal route، دو route عمومی backend و سه route frontend را بساز؛ WebSocket Realtime را فعال کن.
 5. image build/start، health هر ۱۲ process، API، سه web، اتصال workerها به RabbitMQ/DB، مسیرهای ClusterIP بین backendها، HTTPS عمومی، session/CORS، Socket.IO reconnect و telemetry را در staging بررسی کن.
 6. backup PostgreSQL و restore واقعی را قبل از تغییر production domain آماده کن.

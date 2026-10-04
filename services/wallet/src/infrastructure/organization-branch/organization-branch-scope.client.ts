@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { isRunflareClusterIpServiceBaseUrl } from '@funtino/backend-core';
 import type { BranchScopeValidator } from '../../application/ports/branch-scope-validator.port.js';
 
 @Injectable()
@@ -19,7 +20,9 @@ export class OrganizationBranchScopeClient implements BranchScopeValidator {
         baseUrl.password ||
         baseUrl.search ||
         baseUrl.hash ||
-        (process.env.NODE_ENV === 'production' && baseUrl.protocol !== 'https:')
+        (process.env.NODE_ENV === 'production' &&
+          baseUrl.protocol !== 'https:' &&
+          !isRunflareClusterIpServiceBaseUrl(baseUrl))
       ) {
         throw new Error('invalid owner URL');
       }

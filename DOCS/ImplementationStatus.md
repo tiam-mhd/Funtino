@@ -80,7 +80,7 @@
 ## IAM و اعتبارسنجی scope مالک — 2026-10-01
 
 - مالک محصول گزینه‌ی ۱ ADR-0010 را انتخاب کرد: IAM تنها مرجع مجوز actor، membership، delegation و MFA است؛ Organization & Branch فقط وجود/active state/parentage منبع را تأیید می‌کند و permission یا membership را کپی نمی‌کند.
-- IAM در production پس از authorization هر mutation tenant را با `POST /internal/v1/scopes/validate` و credential مستقل بررسی می‌کند. scope نامعتبر audit و رد می‌شود؛ timeout، خطای شبکه، پیکربندی/پاسخ نامعتبر یا شناسه/version ناسازگار `503` می‌دهد و هیچ mutation/idempotency رکوردی commit نمی‌شود. timeout دو ثانیه است؛ URL production باید HTTPS باشد و redirect دنبال نمی‌شود.
+- IAM در production پس از authorization هر mutation tenant را با `POST /internal/v1/scopes/validate` و credential مستقل بررسی می‌کند. scope نامعتبر audit و رد می‌شود؛ timeout، خطای شبکه، پیکربندی/پاسخ نامعتبر یا شناسه/version ناسازگار `503` می‌دهد و هیچ mutation/idempotency رکوردی commit نمی‌شود. timeout دو ثانیه است؛ URL production باید HTTPS یا ClusterIP محدود طبق ADR-0018 باشد و redirect دنبال نمی‌شود.
 - token سرویس `identity-access` در owner فقط برای همین POST مجاز است. readiness configured بودن validator را گزارش می‌کند؛ دسترس‌پذیری owner در هر درخواست بررسی می‌شود. ۵۸ تست IAM و چهار تست allow-list سرویس owner موفق‌اند؛ قراردادها و قالب فایل‌های کد نیز معتبرند. nonproduction همچنان opaque UUID را صرفاً برای توسعه/آزمون می‌پذیرد.
 - migration لازم نیست؛ schema تغییر نکرده است. secret واقعی، deployment، staging و E2E چند tenant اجرا نشده‌اند؛ بنابراین انتخاب ADR و اتصال source به معنی مجوز یا تأیید production نیست.
 

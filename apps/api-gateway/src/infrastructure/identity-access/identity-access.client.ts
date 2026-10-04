@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   createSafeErrorDiagnostic,
   DomainError,
+  isRunflareClusterIpServiceBaseUrl,
   writeStructuredLog,
 } from '@funtino/backend-core';
 import { z, type ZodType } from 'zod';
@@ -774,7 +775,7 @@ export class IdentityAccessClient {
       if (
         process.env.NODE_ENV === 'production' &&
         parsedBaseUrl.protocol !== 'https:' &&
-        !isRunflareClusterIpBaseUrl(parsedBaseUrl)
+        !isRunflareClusterIpServiceBaseUrl(parsedBaseUrl)
       ) {
         throw new Error('Production HTTP is allowed only for a Runflare ClusterIP service URL.');
       }
@@ -868,16 +869,4 @@ export class IdentityAccessClient {
       throw new DomainError('DEPENDENCY_UNAVAILABLE', 'پاسخ سرویس مدیریت دسترسی قابل خواندن نیست.');
     }
   }
-}
-
-function isRunflareClusterIpBaseUrl(url: URL): boolean {
-  const hostname = url.hostname.toLowerCase();
-  return (
-    url.protocol === 'http:' &&
-    /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-service$/.test(hostname) &&
-    (url.port === '' || url.port === '80') &&
-    url.pathname === '/' &&
-    !url.search &&
-    !url.hash
-  );
 }

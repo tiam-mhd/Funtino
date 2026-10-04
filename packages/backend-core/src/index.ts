@@ -11,6 +11,7 @@ import {
   createSafeErrorDiagnostic,
   writeStructuredLog,
 } from './observability/structured-diagnostics.js';
+export { isRunflareClusterIpServiceBaseUrl } from './network/runflare-cluster-ip-url.js';
 export { installHttpTelemetry } from './observability/http-telemetry.js';
 export type { HttpTelemetryOptions } from './observability/http-telemetry.js';
 export {

@@ -1,4 +1,5 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { isRunflareClusterIpServiceBaseUrl } from '@funtino/backend-core';
 import { z } from 'zod';
 import type {
   OrganizationScopeOwner,
@@ -30,7 +31,9 @@ function runtimeConfiguration(): RuntimeConfiguration | null {
     const parsed = new URL(rawBaseUrl);
     if (
       (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
-      (process.env.NODE_ENV === 'production' && parsed.protocol !== 'https:') ||
+      (process.env.NODE_ENV === 'production' &&
+        parsed.protocol !== 'https:' &&
+        !isRunflareClusterIpServiceBaseUrl(parsed)) ||
       parsed.username ||
       parsed.password ||
       parsed.pathname !== '/' ||

@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { isRunflareClusterIpServiceBaseUrl } from '@funtino/backend-core';
 import type { BranchScopeValidator } from '../../application/ports/branch-scope-validator.port.js';
 
 @Injectable()
@@ -9,10 +10,30 @@ export class OrganizationBranchScopeClient implements BranchScopeValidator {
     if (!baseUrl || !token || token.length < 32 || token.length > 512)
       throw new ServiceUnavailableException('Organization/branch validation is not configured.');
 
+    try {
+      const parsed = new URL(baseUrl);
+      if (
+        (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+        parsed.username ||
+        parsed.password ||
+        parsed.pathname !== '/' ||
+        parsed.search ||
+        parsed.hash ||
+        (process.env.NODE_ENV === 'production' &&
+          parsed.protocol !== 'https:' &&
+          !isRunflareClusterIpServiceBaseUrl(parsed))
+      ) {
+        throw new Error('Invalid Organization & Branch URL.');
+      }
+    } catch {
+      throw new ServiceUnavailableException('Organization/branch validation is not configured.');
+    }
+
     let response: Response;
     try {
       response = await fetch(`${baseUrl}/internal/v1/scopes/validate`, {
         method: 'POST',
+        redirect: 'error',
         headers: {
           'content-type': 'application/json',
           'x-funtino-service-id': 'device-integration',

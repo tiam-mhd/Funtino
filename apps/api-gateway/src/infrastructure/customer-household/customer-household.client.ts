@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '@funtino/backend-core';
+import { DomainError, isRunflareClusterIpServiceBaseUrl } from '@funtino/backend-core';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -117,7 +117,9 @@ export class CustomerHouseholdClient {
         base.search ||
         base.hash ||
         base.pathname !== '/' ||
-        (process.env.NODE_ENV === 'production' && base.protocol !== 'https:')
+        (process.env.NODE_ENV === 'production' &&
+          base.protocol !== 'https:' &&
+          !isRunflareClusterIpServiceBaseUrl(base))
       ) {
         throw new Error('Invalid Customer & Household URL');
       }

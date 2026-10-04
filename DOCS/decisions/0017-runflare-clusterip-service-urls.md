@@ -4,6 +4,7 @@
 - تاریخ: 2026-10-04
 - دامنه: URL وابستگی Gateway به Identity & Access در runtime bundle خصوصی Runflare
 - تصمیم مرتبط: این ADR بخش HTTPS داخلی از ADR-0016 را محدود و دقیق می‌کند.
+- وضعیت اجرا: دامنه‌ی محدود اولیه‌ی این تصمیم با [ADR-0018](0018-backend-clusterip-service-urls.md) به ارتباط خصوصی بین همه‌ی processهای Backend گسترش یافته است.
 
 ## مسئله و شواهد
 
@@ -13,10 +14,10 @@
 
 - ارتباط API Gateway با Identity & Access در همان Runflare project از ClusterIP خصوصی process مقصد انجام می‌شود.
 - اگر صفحه‌ی Runflare برای آن ClusterIP نگاشت `http:80 -> <Target Port>` نشان دهد، مقدار URL به شکل `http://<network-name>:80` تنظیم می‌شود. `network-name` باید دقیقاً از پنل همان محیط برداشته شود؛ مقدار فرضی مانند `*.internal.funtino.ir` منبع معتبر نیست.
-- در production، `IdentityAccessClient` فقط URLهای HTTPS معمول را می‌پذیرد یا HTTP را وقتی می‌پذیرد که hostname یک label با پسوند `-service` باشد، effective port برابر 80 باشد، credential، path پایه، query و fragment نداشته باشد. redirect خودکار نیز رد می‌شود تا credential سرویس به مقصد دیگری forward نشود.
+- در production، `IdentityAccessClient` فقط URLهای HTTPS معمول را می‌پذیرد یا HTTP را وقتی می‌پذیرد که hostname یک label با پسوند `-service` باشد، effective port برابر 80 باشد، credential، path پایه، query و fragment نداشته باشد. این validation اکنون از helper مشترک backend-core استفاده می‌کند.
 - این استثنا فقط برای hostnameهای ClusterIP خصوصی است. endpointهای عمومی، custom domain، NodePort و URLهای HTTP دیگر همچنان ممنوع‌اند؛ آن‌ها باید HTTPS داشته باشند.
 - ClusterIPهای backend نباید exposure عمومی یا NodePort بگیرند. token سرویس همچنان secret مجزای runtime است و در URL قرار نمی‌گیرد.
-- این استثنا فعلاً فقط برای `IDENTITY_ACCESS_URL` در API Gateway پیاده شده است؛ URLهای دیگر backend را تا وقتی client مربوطه همین validation را نگرفته به HTTP تغییر نده.
+- هنگام ثبت این ADR، استثنا فقط برای `IDENTITY_ACCESS_URL` پیاده شده بود. دامنه‌ی فعلی و clientهای دیگری که از همان سیاست استفاده می‌کنند در ADR-0018 آمده‌اند.
 
 ## پیامدها و ریسک
 

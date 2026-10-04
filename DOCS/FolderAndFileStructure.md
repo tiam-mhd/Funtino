@@ -213,6 +213,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
       event-contracts/
       backend-core/
         src/
+          network/
           observability/
         tests/
       openapi-types/
