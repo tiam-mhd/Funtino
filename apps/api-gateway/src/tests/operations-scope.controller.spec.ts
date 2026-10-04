@@ -15,6 +15,8 @@ import type { OrganizationBranchClient } from '../infrastructure/organization-br
 const userId = '11111111-1111-4111-8111-111111111111';
 const organizationId = '22222222-2222-4222-8222-222222222222';
 const branchId = '33333333-3333-4333-8333-333333333333';
+const inheritedBranchId = '99999999-9999-4999-8999-999999999999';
+const suspendedBranchId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const inactiveOrganizationId = '44444444-4444-4444-8444-444444444444';
 const correlationId = '55555555-5555-4555-8555-555555555555';
 
@@ -113,7 +115,10 @@ function makeController(
 ) {
   return new OperationsScopeController(
     access as IdentityAccessClient,
-    owner as OrganizationBranchClient,
+    {
+      listOrganizationBranches: async () => ({ items: [], nextCursor: null }),
+      ...owner,
+    } as OrganizationBranchClient,
     { recordOperationsScopeSelection: recordSelection } as unknown as AuthService,
   );
 }
@@ -146,28 +151,130 @@ test('scope list contains only active tenant memberships whose owner records and
         ownerReads.push(`branch:${parentId}:${id}`);
         return branch(id, parentId) as never;
       },
+      listOrganizationBranches: async (id) => {
+        ownerReads.push(`branches:${id}`);
+        return {
+          items: [
+            branch(branchId, id),
+            branch(inheritedBranchId, id),
+            branch(suspendedBranchId, id, 'suspended'),
+          ] as never,
+          nextCursor: null,
+        };
+      },
     },
   );
 
   const result = await instance.listScopes({ id: userId }, request());
   assert.equal(result.data.policyVersion, 7);
   assert.deepEqual(
-    result.data.items.map((item) => item.scope),
+    result.data.items
+      .map((item) => item.scope)
+      .map((scope) => JSON.stringify(scope))
+      .sort(),
     [
       { type: 'organization', organizationId },
       { type: 'branch', organizationId, branchId },
-    ],
+      { type: 'branch', organizationId, branchId: inheritedBranchId },
+    ]
+      .map((scope) => JSON.stringify(scope))
+      .sort(),
   );
   assert.equal(result.data.items[0]?.organization.name, `مجموعه ${organizationId.slice(0, 4)}`);
   assert.deepEqual(
     ownerReads.sort(),
     [
-      `branch:${organizationId}:${branchId}`,
       `organization:${inactiveOrganizationId}`,
       `organization:${organizationId}`,
-      `organization:${organizationId}`,
+      `branches:${organizationId}`,
     ].sort(),
   );
+});
+
+test('organization scope listing follows the owner branch cursor through every page', async () => {
+  const firstPage = Array.from({ length: 100 }, (_, index) =>
+    branch(`10000000-0000-4000-8000-${String(index).padStart(12, '0')}`, organizationId),
+  );
+  const finalBranchId = '20000000-0000-4000-8000-000000000000';
+  const requestedCursors: Array<string | undefined> = [];
+  const instance = makeController(
+    {
+      currentAccessContext: async () =>
+        context([membership({ type: 'organization', organizationId })]),
+    },
+    {
+      getOrganization: async (id) => organization(id) as never,
+      listOrganizationBranches: async (_id, page) => {
+        requestedCursors.push(page?.cursor);
+        return page?.cursor
+          ? { items: [branch(finalBranchId, organizationId)] as never, nextCursor: null }
+          : { items: firstPage as never, nextCursor: firstPage.at(-1)?.id ?? null };
+      },
+    },
+  );
+
+  const result = await instance.listScopes({ id: userId }, request());
+  assert.deepEqual(requestedCursors, [undefined, firstPage.at(-1)?.id]);
+  assert.equal(result.data.items.length, 102);
+  assert.ok(
+    result.data.items.some(
+      (item) => item.scope.type === 'branch' && item.scope.branchId === finalBranchId,
+    ),
+  );
+});
+
+test('organization scope listing fails closed when the owner cursor is malformed', async () => {
+  const instance = makeController(
+    {
+      currentAccessContext: async () =>
+        context([membership({ type: 'organization', organizationId })]),
+    },
+    {
+      getOrganization: async (id) => organization(id) as never,
+      listOrganizationBranches: async () => ({
+        items: [branch(branchId, organizationId)] as never,
+        nextCursor: branchId,
+      }),
+    },
+  );
+
+  await assert.rejects(
+    instance.listScopes({ id: userId }, request()),
+    (error: unknown) => error instanceof DomainError && error.code === 'DEPENDENCY_UNAVAILABLE',
+  );
+});
+
+test('a branch inherited from an active organization membership can be selected and is audited', async () => {
+  let audit: unknown[] | undefined;
+  const instance = makeController(
+    {
+      currentAccessContext: async () =>
+        context([membership({ type: 'organization', organizationId })]),
+    },
+    {
+      getOrganization: async (id) => organization(id) as never,
+      getOrganizationBranch: async (parentId, id) => branch(id, parentId) as never,
+    },
+    async (...args) => {
+      audit = args;
+    },
+  );
+
+  const result = await instance.selectScope(
+    { id: userId },
+    { scope: { type: 'branch', organizationId, branchId: inheritedBranchId } },
+    request(),
+  );
+  assert.deepEqual(result.data.scope, {
+    type: 'branch',
+    organizationId,
+    branchId: inheritedBranchId,
+  });
+  assert.deepEqual(audit, [
+    userId,
+    { type: 'branch', organizationId, branchId: inheritedBranchId },
+    correlationId,
+  ]);
 });
 
 test('branch selection rejects client-supplied scopes that are not in the current IAM membership context', async () => {

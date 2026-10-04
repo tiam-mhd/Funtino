@@ -2,12 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import {
+  activeScopeOptions,
+  loadAllScopeOptions,
+  resolveSelectedScope,
+  type Scope,
+  type ScopeBranchOption,
+  type ScopeOptionPage,
+  type ScopeOrganizationOption,
+} from './scope-options';
 import styles from './AccessManagement.module.css';
 
-type Scope =
-  | { type: 'global' }
-  | { type: 'organization'; organizationId: string }
-  | { type: 'branch'; organizationId: string; branchId: string };
 type Role = {
   id: string;
   name: string;
@@ -89,7 +94,6 @@ type ScopedInvitationPage = {
   policyVersion: number;
 };
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const iranPhonePattern = /^\+?[1-9][0-9]{7,14}$/;
 
 function scopeQuery(scope: Scope): string {
@@ -99,10 +103,10 @@ function scopeQuery(scope: Scope): string {
   return query.toString();
 }
 
-function scopeLabel(scope: Scope): string {
+function scopeLabel(scope: Scope, organizationName?: string, branchName?: string): string {
   if (scope.type === 'global') return 'سراسری';
-  if (scope.type === 'organization') return `مجموعه ${scope.organizationId}`;
-  return `شعبه ${scope.branchId}`;
+  if (scope.type === 'organization') return `مجموعه ${organizationName ?? scope.organizationId}`;
+  return `شعبه ${branchName ?? scope.branchId} · مجموعه ${organizationName ?? scope.organizationId}`;
 }
 
 function invitationScopeLabel(invitation: Invitation): string {
@@ -154,40 +158,120 @@ export function AccessManagement() {
   const [overridePermission, setOverridePermission] = useState('');
   const [overrideEffect, setOverrideEffect] = useState<'allow' | 'deny'>('deny');
   const [overrideExpiry, setOverrideExpiry] = useState('');
+  const [organizations, setOrganizations] = useState<ScopeOrganizationOption[]>([]);
+  const [branches, setBranches] = useState<ScopeBranchOption[]>([]);
+  const [organizationsLoading, setOrganizationsLoading] = useState(true);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [organizationsError, setOrganizationsError] = useState('');
+  const [branchesError, setBranchesError] = useState('');
+  const [branchListRefresh, setBranchListRefresh] = useState(0);
+
+  const loadOrganizations = useCallback(async () => {
+    setOrganizationsLoading(true);
+    setOrganizationsError('');
+    try {
+      const items = await loadAllScopeOptions<ScopeOrganizationOption>((cursor, pageSize) => {
+        const query = new URLSearchParams({ pageSize: String(pageSize) });
+        if (cursor) query.set('cursor', cursor);
+        return apiRequest<ScopeOptionPage<ScopeOrganizationOption>>(
+          `/api/v1/system/organizations?${query.toString()}`,
+        );
+      });
+      const selectable = activeScopeOptions(items);
+      setOrganizations(selectable);
+      setOrganizationId((current) =>
+        selectable.some((organization) => organization.id === current) ? current : '',
+      );
+    } catch (caught) {
+      setOrganizationsError(messageFor(caught));
+    } finally {
+      setOrganizationsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadOrganizations();
+  }, [loadOrganizations]);
+
+  useEffect(() => {
+    if (scopeType !== 'branch' || !organizationId) {
+      setBranches([]);
+      setBranchId('');
+      setBranchesError('');
+      setBranchesLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setBranchesError('');
+    setBranchesLoading(true);
+
+    void loadAllScopeOptions<ScopeBranchOption>((cursor, pageSize) => {
+      const query = new URLSearchParams({ pageSize: String(pageSize) });
+      if (cursor) query.set('cursor', cursor);
+      return apiRequest<ScopeOptionPage<ScopeBranchOption>>(
+        `/api/v1/system/organizations/${encodeURIComponent(organizationId)}/branches?${query.toString()}`,
+      );
+    })
+      .then((items) => {
+        if (!cancelled) setBranches(activeScopeOptions(items));
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled) setBranchesError(messageFor(caught));
+      })
+      .finally(() => {
+        if (!cancelled) setBranchesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [branchListRefresh, organizationId, scopeType]);
 
   const scope = useMemo<Scope | null>(() => {
-    if (scopeType === 'global') return { type: 'global' };
-    if (!uuidPattern.test(organizationId)) return null;
-    if (scopeType === 'organization') return { type: 'organization', organizationId };
-    if (!uuidPattern.test(branchId)) return null;
-    return { type: 'branch', organizationId, branchId };
-  }, [scopeType, organizationId, branchId]);
+    return resolveSelectedScope(scopeType, organizationId, branchId, organizations, branches);
+  }, [scopeType, organizationId, branchId, organizations, branches]);
+
+  const labelScope = useCallback(
+    (target: Scope) => {
+      if (target.type === 'global') return scopeLabel(target);
+      const organizationName = organizations.find(
+        (organization) => organization.id === target.organizationId,
+      )?.name;
+      const branchName =
+        target.type === 'branch'
+          ? branches.find((branch) => branch.id === target.branchId)?.name
+          : undefined;
+      return scopeLabel(target, organizationName, branchName);
+    },
+    [branches, organizations],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError('');
     setAuditError('');
     setNotice('');
+    setRoles([]);
+    setStaff([]);
+    setScopedInvitations([]);
+    setAudit([]);
+    setRoleEdits({});
+    setStaffRoleEdits({});
+    setOverrides({});
+    if (!scope) {
+      setError(
+        scopeType === 'branch'
+          ? 'یک مجموعه و شعبه‌ی فعال را از فهرست انتخاب کنید.'
+          : 'یک مجموعه‌ی فعال را از فهرست انتخاب کنید.',
+      );
+      setLoading(false);
+      return;
+    }
     const pendingPromise = apiRequest<{ data: Invitation[] }>(
       '/api/v1/operations/staff/invitations/pending',
     );
     const permissionPromise = apiRequest<Permission[]>('/api/v1/operations/permissions');
-    if (!scope) {
-      setError(
-        scopeType === 'branch'
-          ? 'شناسه‌ی معتبر مجموعه و شعبه را وارد کنید.'
-          : 'شناسه‌ی معتبر مجموعه را وارد کنید.',
-      );
-      const [pending, permissionResult] = await Promise.allSettled([
-        pendingPromise,
-        permissionPromise,
-      ]);
-      if (pending.status === 'fulfilled') setPendingInvitations(pending.value.data);
-      if (permissionResult.status === 'fulfilled') setPermissions(permissionResult.value);
-      setScopedInvitations([]);
-      setLoading(false);
-      return;
-    }
     const query = scopeQuery(scope);
     const results = await Promise.allSettled([
       apiRequest<Role[]>(`/api/v1/operations/roles?${query}`),
@@ -231,8 +315,19 @@ export function AccessManagement() {
   }, [scope, scopeType]);
 
   useEffect(() => {
+    if (!scope) {
+      setRoles([]);
+      setStaff([]);
+      setScopedInvitations([]);
+      setAudit([]);
+      setRoleEdits({});
+      setStaffRoleEdits({});
+      setOverrides({});
+      setAuditError('');
+      return;
+    }
     void loadData();
-  }, [loadData]);
+  }, [loadData, scope]);
 
   useEffect(() => {
     const template = templates.find((item) => item.key === selectedTemplate);
@@ -257,7 +352,7 @@ export function AccessManagement() {
     event.preventDefault();
     const targetScope = scope;
     if (!targetScope) {
-      setError('شناسه‌ی محدوده معتبر نیست.');
+      setError('ابتدا یک محدوده‌ی فعال را از فهرست انتخاب کنید.');
       return;
     }
     await perform('نقش با موفقیت ثبت شد.', async () => {
@@ -303,7 +398,7 @@ export function AccessManagement() {
     event.preventDefault();
     const targetScope = scope;
     if (!targetScope) {
-      setError('شناسه‌ی محدوده معتبر نیست.');
+      setError('ابتدا یک محدوده‌ی فعال را از فهرست انتخاب کنید.');
       return;
     }
     const normalizedPhone = invitePhone
@@ -491,7 +586,7 @@ export function AccessManagement() {
       <section className={styles.scopePanel} aria-labelledby="scope-heading">
         <div>
           <p className={styles.eyebrow}>محدوده‌ی کاری</p>
-          <h2 id="scope-heading">مشاهده‌ی امن و محدودشده</h2>
+          <h2 id="scope-heading">انتخاب مجموعه یا شعبه</h2>
         </div>
         <label>
           سطح محدوده
@@ -506,27 +601,77 @@ export function AccessManagement() {
         </label>
         {scopeType !== 'global' && (
           <label>
-            شناسه‌ی مجموعه
-            <input
-              dir="ltr"
+            مجموعه
+            <select
               value={organizationId}
-              onChange={(event) => setOrganizationId(event.target.value.trim())}
-              placeholder="UUID مجموعه"
-              autoComplete="off"
-            />
+              onChange={(event) => {
+                setOrganizationId(event.target.value);
+                setBranchId('');
+              }}
+              disabled={organizationsLoading || Boolean(organizationsError)}
+              required
+            >
+              <option value="">
+                {organizationsLoading ? 'در حال دریافت مجموعه‌ها…' : 'انتخاب مجموعه'}
+              </option>
+              {!organizationsLoading && organizations.length === 0 && !organizationsError && (
+                <option value="" disabled>
+                  مجموعه‌ی فعالی برای مدیریت پیدا نشد
+                </option>
+              )}
+              {organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name}
+                </option>
+              ))}
+            </select>
           </label>
         )}
         {scopeType === 'branch' && (
           <label>
-            شناسه‌ی شعبه
-            <input
-              dir="ltr"
+            شعبه
+            <select
               value={branchId}
-              onChange={(event) => setBranchId(event.target.value.trim())}
-              placeholder="UUID شعبه"
-              autoComplete="off"
-            />
+              onChange={(event) => setBranchId(event.target.value)}
+              disabled={!organizationId || branchesLoading || Boolean(branchesError)}
+              required
+            >
+              <option value="">
+                {branchesLoading
+                  ? 'در حال دریافت شعب…'
+                  : branches.length > 0
+                    ? 'انتخاب شعبه'
+                    : organizationId
+                      ? 'شعبه‌ی فعالی موجود نیست'
+                      : 'ابتدا مجموعه را انتخاب کنید'}
+              </option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name} · {branch.city}
+                </option>
+              ))}
+            </select>
           </label>
+        )}
+        {scopeType === 'branch' && organizationId && (
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={() => setBranchListRefresh((current) => current + 1)}
+            disabled={branchesLoading}
+          >
+            {branchesLoading ? 'در حال دریافت شعب…' : 'تازه‌سازی فهرست شعب'}
+          </button>
+        )}
+        {scopeType !== 'global' && (
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={() => void loadOrganizations()}
+            disabled={organizationsLoading}
+          >
+            {organizationsLoading ? 'در حال دریافت…' : 'تازه‌سازی فهرست مجموعه‌ها'}
+          </button>
         )}
         <button
           type="button"
@@ -537,15 +682,44 @@ export function AccessManagement() {
           بارگذاری محدوده
         </button>
         <span className={styles.scopeSummary}>
-          {scope ? scopeLabel(scope) : 'برای مشاهده، شناسه‌های معتبر را وارد کنید.'}
+          {scope
+            ? labelScope(scope)
+            : scopeType === 'branch' && branchesLoading
+              ? 'در حال دریافت شعب فعال…'
+              : scopeType === 'global'
+                ? 'دسترسی سراسری سامانه'
+                : 'یک مجموعه‌ی فعال را انتخاب کنید.'}
         </span>
       </section>
 
-      <p className={styles.warning} role="note">
-        اعتبارسنجی مالکیت مجموعه و شعبه هنوز به سرویس Organization/Branch متصل نیست. شناسه‌های
-        واردشده در این مرحله opaque هستند؛ تغییرات محدوده‌ی سازمان/شعبه در production عمداً با خطای
-        fail-closed مسدود می‌شوند و داده‌ی این محیط نباید به production منتقل شود.
-      </p>
+      {scopeType !== 'global' &&
+        !organizationsLoading &&
+        organizations.length === 0 &&
+        !organizationsError && (
+          <p className={styles.notice} role="status">
+            مجموعه‌ی فعالی برای واگذاری دسترسی پیدا نشد. ابتدا از بخش «مجموعه‌ها» مجموعه را ایجاد یا
+            فعال کنید.
+          </p>
+        )}
+      {scopeType !== 'global' && organizationsError && (
+        <p className={styles.error} role="alert">
+          دریافت فهرست مجموعه‌ها ناموفق بود: {organizationsError}
+        </p>
+      )}
+      {scopeType === 'branch' && branchesError && (
+        <p className={styles.error} role="alert">
+          دریافت فهرست شعب ناموفق بود: {branchesError}
+        </p>
+      )}
+      {scope?.type === 'organization' && (
+        <p className={styles.footerNote} role="note">
+          برای معرفی مدیر مجموعه، در بخش «نقش‌ها و مجوزها» الگوی «مدیر مجموعه» را انتخاب و نقش را
+          ایجاد کنید؛ سپس از فرم دعوت کارکنان شماره‌ی مدیر را وارد کنید. محدوده‌ی مجموعه همه‌ی
+          مجوزهای tenant قابل‌واگذاری در کاتالوگ فعلی را روی خود مجموعه و شعب فعال فعلی و آینده‌ی آن
+          اعمال می‌کند؛ دسترسی‌های سراسری سامانه به این نقش داده نمی‌شود. عضویت پس از پذیرش دعوت با
+          شماره‌ی تأییدشده فعال می‌شود.
+        </p>
+      )}
 
       {error && (
         <p className={styles.error} role="alert">
@@ -672,7 +846,7 @@ export function AccessManagement() {
                 value={selectedTemplate}
                 onChange={(event) => setSelectedTemplate(event.target.value)}
               >
-                <option value="">انتخاب الگوی کم‌دسترسی (اختیاری)</option>
+                <option value="">انتخاب الگوی نقش (اختیاری)</option>
                 {templates.map((template) => (
                   <option value={template.key} key={template.key}>
                     {template.name}
@@ -923,7 +1097,7 @@ export function AccessManagement() {
                   <div>
                     <h3>{member.role.name}</h3>
                     <small>
-                      {member.maskedPhone ?? member.userId} · {scopeLabel(member.scope)}
+                      {member.maskedPhone ?? member.userId} · {labelScope(member.scope)}
                     </small>
                   </div>
                   <span

@@ -225,7 +225,7 @@ paths:
     get:
       x-funtino-availability: implemented
       operationId: listCurrentOperationsScopes
-      description: Returns only active organization or branch scopes derived from the current user's active IAM memberships and confirmed active owner-service records. Response is private and never cached.
+      description: Returns the user's active organization memberships and their active child branches, plus directly assigned active branch memberships, after confirming the organization/branch owner records. An organization membership makes its active child branches selectable; each operation still checks the exact permission and scope. Response is private and never cached.
       responses:
         '200':
           description: Current active scopes available to the authenticated operations user.
@@ -241,7 +241,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: selectCurrentOperationsScope
-      description: Revalidates that the requested tenant scope belongs to an active IAM membership and is backed by an active organization and, for branch scopes, an active branch with the requested parent. Successful user selections are audited. Every subsequent data request must still be independently authorized for its exact scope and permission.
+      description: Revalidates that the requested tenant scope is covered by an active IAM membership (including a child branch covered by an organization membership) and is backed by an active organization and, for branch scopes, an active branch with the requested parent. Successful user selections are audited. Every subsequent data request must still be independently authorized for its exact scope and permission.
       requestBody:
         required: true
         content:

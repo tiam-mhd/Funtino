@@ -301,7 +301,7 @@
 
 ### S2 — کاربران، membership و policy
 
-وضعیت 2026-10-01: پنل system و APIهای مدیریت role، staff، فهرست/ایجاد/پذیرش/لغو invite، override و audit به Identity & Access متصل‌اند؛ audit حساس به step-up تازه‌ی نشست نیاز دارد. IAM پس از permission/delegation/MFA از API زنده‌ی owner برای اعتبارسنجی وجود و active state scope استفاده می‌کند. در production نبودن تنظیمات یا عدم دسترسی owner هر mutation را fail-closed می‌کند؛ nonproduction همچنان scopeهای opaque را فقط برای توسعه/آزمون می‌پذیرد. اجرای staging/E2E و deployment مستقل باقی است.
+وضعیت 2026-10-05: پنل system و APIهای مدیریت role، staff، فهرست/ایجاد/پذیرش/لغو invite، override و audit به Identity & Access متصل‌اند؛ audit حساس به step-up تازه‌ی نشست نیاز دارد. صفحه‌ی دسترسی System فهرست مجاز مجموعه‌ها و شعب فعال را برای انتخاب scope نشان می‌دهد و واگذاری مدیر مجموعه را با الگوی کامل `organization_manager` و دعوت شماره‌محور راهبری می‌کند؛ مدیر مجموعه scope خود مجموعه و شعب فعال فعلی/آینده‌ی آن را در Operations Web انتخاب می‌کند. عضویت مجموعه روی شعب آن اعمال می‌شود و مجوز global سامانه را واگذار نمی‌کند. IAM پس از permission/delegation/MFA از API زنده‌ی owner برای اعتبارسنجی وجود و active state scope استفاده می‌کند. در production نبودن تنظیمات یا عدم دسترسی owner هر mutation را fail-closed می‌کند؛ nonproduction همچنان scopeهای opaque را فقط برای توسعه/آزمون می‌پذیرد. اجرای staging/E2E و deployment مستقل باقی است.
 
 - جست‌وجوی کاربر؛
 - عضویت در سازمان و شعبه؛

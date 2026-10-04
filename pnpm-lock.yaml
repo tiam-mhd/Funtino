@@ -204,6 +204,10 @@ importers:
       react-dom:
         specifier: 19.1.0
         version: 19.1.0(react@19.1.0)
+    devDependencies:
+      tsx:
+        specifier: 4.19.3
+        version: 4.19.3
 
   packages/backend-core:
     dependencies:

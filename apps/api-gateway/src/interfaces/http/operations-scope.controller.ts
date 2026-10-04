@@ -31,6 +31,8 @@ const tenantScopeSchema = z.discriminatedUnion('type', [
 ]);
 const scopeSelectionSchema = z.object({ scope: tenantScopeSchema }).strict();
 const scopePageSize = 8;
+const inheritedBranchPageSize = 100;
+const maxInheritedBranchPages = 100;
 
 type TenantScope = z.infer<typeof tenantScopeSchema>;
 type ScopeCandidate = { scope: TenantScope };
@@ -56,10 +58,29 @@ export class OperationsScopeController {
     const correlationId = requestCorrelationId(request);
     const context = await this.identityAccess.currentAccessContext(user.id, correlationId);
     const candidates = this.candidates(context);
+    const organizationScopes = candidates.filter(
+      (candidate): candidate is { scope: Extract<TenantScope, { type: 'organization' }> } =>
+        candidate.scope.type === 'organization',
+    );
+    const organizationIds = new Set(
+      organizationScopes.map((candidate) => candidate.scope.organizationId.toLowerCase()),
+    );
     const items: OperationsScopeOption[] = [];
+    for (let index = 0; index < organizationScopes.length; index += scopePageSize) {
+      const batch = organizationScopes.slice(index, index + scopePageSize);
+      const inheritedOptions = await Promise.all(
+        batch.map((candidate) => this.listOrganizationScopeOptions(candidate.scope)),
+      );
+      items.push(...inheritedOptions.flat());
+    }
+    const directBranchScopes = candidates.filter(
+      (candidate): candidate is { scope: Extract<TenantScope, { type: 'branch' }> } =>
+        candidate.scope.type === 'branch' &&
+        !organizationIds.has(candidate.scope.organizationId.toLowerCase()),
+    );
 
-    for (let index = 0; index < candidates.length; index += scopePageSize) {
-      const batch = candidates.slice(index, index + scopePageSize);
+    for (let index = 0; index < directBranchScopes.length; index += scopePageSize) {
+      const batch = directBranchScopes.slice(index, index + scopePageSize);
       const resolved = await Promise.all(batch.map(({ scope }) => this.resolveActiveScope(scope)));
       items.push(...resolved.filter((item): item is OperationsScopeOption => item !== null));
     }
@@ -89,7 +110,17 @@ export class OperationsScopeController {
   ) {
     const correlationId = requestCorrelationId(request);
     const context = await this.identityAccess.currentAccessContext(user.id, correlationId);
-    const candidate = this.candidates(context).find(({ scope }) => sameScope(scope, body.scope));
+    const candidates = this.candidates(context);
+    const directCandidate = candidates.find(({ scope }) => sameScope(scope, body.scope));
+    const inheritedFromOrganization =
+      body.scope.type === 'branch' &&
+      candidates.some(
+        ({ scope }) =>
+          scope.type === 'organization' &&
+          scope.organizationId.toLowerCase() === body.scope.organizationId.toLowerCase(),
+      );
+    const candidate =
+      directCandidate ?? (inheritedFromOrganization ? { scope: body.scope } : undefined);
     if (!candidate) {
       throw new DomainError('FORBIDDEN', 'به این مجموعه یا شعبه دسترسی فعال ندارید.');
     }
@@ -116,6 +147,74 @@ export class OperationsScopeController {
       unique.set(scopeKey(scope), candidate);
     }
     return [...unique.values()];
+  }
+
+  private async listOrganizationScopeOptions(
+    scope: Extract<TenantScope, { type: 'organization' }>,
+  ): Promise<OperationsScopeOption[]> {
+    let organization: Awaited<ReturnType<OrganizationBranchClient['getOrganization']>>;
+    try {
+      organization = await this.organizationBranch.getOrganization(scope.organizationId);
+    } catch (error) {
+      if (error instanceof DomainError && error.code === 'NOT_FOUND') return [];
+      throw error;
+    }
+    if (organization.status !== 'active') return [];
+
+    const options: OperationsScopeOption[] = [
+      { scope, organization: { id: organization.id, name: organization.name } },
+    ];
+    const seenCursors = new Set<string>();
+    const seenBranchIds = new Set<string>();
+    let cursor: string | undefined;
+
+    for (let pageNumber = 0; pageNumber < maxInheritedBranchPages; pageNumber += 1) {
+      const page = await this.organizationBranch.listOrganizationBranches(scope.organizationId, {
+        pageSize: inheritedBranchPageSize,
+        ...(cursor ? { cursor } : {}),
+      });
+
+      for (const branch of page.items) {
+        const branchId = branch.id.toLowerCase();
+        if (
+          seenBranchIds.has(branchId) ||
+          branch.organizationId.toLowerCase() !== scope.organizationId.toLowerCase()
+        ) {
+          throw new DomainError(
+            'DEPENDENCY_UNAVAILABLE',
+            'فهرست شعب سازمان با قرارداد مالک داده سازگار نیست.',
+          );
+        }
+        seenBranchIds.add(branchId);
+        if (branch.status === 'active') {
+          options.push({
+            scope: { type: 'branch', organizationId: scope.organizationId, branchId: branch.id },
+            organization: { id: organization.id, name: organization.name },
+            branch: { id: branch.id, name: branch.name, city: branch.city },
+          });
+        }
+      }
+
+      const nextCursor = page.nextCursor;
+      if (nextCursor === null) return options;
+      const normalizedCursor = nextCursor.toLowerCase();
+      const lastBranchId = page.items.at(-1)?.id.toLowerCase();
+      if (
+        page.items.length !== inheritedBranchPageSize ||
+        lastBranchId !== normalizedCursor ||
+        seenCursors.has(normalizedCursor) ||
+        normalizedCursor === cursor?.toLowerCase()
+      ) {
+        throw new DomainError(
+          'DEPENDENCY_UNAVAILABLE',
+          'صفحه‌بندی فهرست شعب مالک داده معتبر نیست.',
+        );
+      }
+      seenCursors.add(normalizedCursor);
+      cursor = nextCursor;
+    }
+
+    throw new DomainError('DEPENDENCY_UNAVAILABLE', 'تعداد صفحه‌های فهرست شعب بیش از حد مجاز است.');
   }
 
   private async resolveActiveScope(scope: TenantScope): Promise<OperationsScopeOption | null> {
