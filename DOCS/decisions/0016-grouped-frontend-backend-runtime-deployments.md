@@ -27,6 +27,7 @@
 - runtime frontend سه process را اجرا می‌کند: `customer-web` روی 3000، `operations-web` روی 3001 و `system-web` روی 3002.
 - runtime backend نه process را اجرا می‌کند: API Gateway روی 4000، Realtime Gateway روی 4010، Device Integration روی 4020، Notifications روی 4030، Identity & Access روی 4040، Organization & Branch روی 4050، Analytics Read Model روی 4060، Wallet روی 4070 و Customer & Household روی 4080.
 - هر bundle یک supervisor صریح دارد. اگر هر child خارج شود، supervisor باقی childها را متوقف می‌کند و با کد غیرصفر خارج می‌شود تا restart و health failure در سطح کل bundle دیده شود. restart loop داخلی پنهان ساخته نمی‌شود.
+- Supervisor ترتیب manifest را رعایت می‌کند و process بعدی را فقط پس از پاسخ HTTP موفق readiness قبلی شروع می‌کند. Backend ابتدا پنج Worker دارای migration startup را بالا می‌آورد؛ processهای وابسته بعد از آن‌ها و API Gateway عمومی در آخر شروع می‌شوند. شکست readiness یا پایان مهلت هر process، startup کل bundle را fail-closed می‌کند.
 - Dockerfile هر repository مستقل، root اجرایی، install/build/start و health check را تعیین می‌کند؛ هر دو image روی Node.js 22 و pnpm 10.12.4 pin می‌شوند.
 - هر child فقط کلیدهای محیطی allow-list شده‌ی خودش را می‌گیرد. `NEXT_PUBLIC_*` فقط برای build فرانت است؛ secretهای backend فقط runtime environment هستند.
 - پنج Worker مشخص‌شده در ADR-0015 فقط با runner فعلی و پیش از شروع app migration اجرا می‌کنند. API Gateway، Realtime، Device و Notifications migration را در startup اجرا نمی‌کنند.

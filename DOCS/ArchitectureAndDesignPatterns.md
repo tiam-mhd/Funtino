@@ -196,7 +196,7 @@ Controller یا consumer فقط ورودی را parse و use case را اجرا 
 - endpoint عمومی بدون scope و audit لازم؛
 - استفاده از map/gradient تزئینی به‌جای داده‌ی واقعی؛
 - ذخیره‌ی فایل کاربر روی filesystem محلی سرویس؛
-- اجرای چند سرویس مستقل در یک Deployment بدون manifest، supervisor، environment allow-list و health جامع.
+- اجرای چند سرویس مستقل در یک Deployment بدون manifest، supervisor، environment allow-list و health جامع؛ ترتیب شروع processها باید readiness قبلی را تأیید کند.
 
 ## ۹. جریان احراز هویت و مجوز
 

@@ -4,12 +4,12 @@
 
 ADR-0016 نگاشت ۱۲ application deployment قبلی را با دو runtime bundle جایگزین کرده است. این تصمیم تنها تعداد imageهای برنامه را تغییر می‌دهد؛ سه frontend، دو gateway و هفت worker همچنان processها و مرزهای منطقی جدا دارند.
 
-| لایه | repository / item | محتوا |
-|---|---|---|
-| Source | ریشه‌ی Funtino در Git محلی | monorepo کامل؛ منبع تغییر و ورودی GitNexus |
-| Frontend runtime | funtino-frontend-runtime | customer-web، operations-web، system-web و design-system؛ سه process |
-| Backend runtime | funtino-backend-runtime | دو gateway، هفت service، backend-core، event-contracts و startup runner؛ نه process |
-| Data | itemهای جدا در Runflare، بدون Git | PostgreSQL، RabbitMQ و Redis |
+| لایه             | repository / item                 | محتوا                                                                               |
+| ---------------- | --------------------------------- | ----------------------------------------------------------------------------------- |
+| Source           | ریشه‌ی Funtino در Git محلی        | monorepo کامل؛ منبع تغییر و ورودی GitNexus                                          |
+| Frontend runtime | funtino-frontend-runtime          | customer-web، operations-web، system-web و design-system؛ سه process                |
+| Backend runtime  | funtino-backend-runtime           | دو gateway، هفت service، backend-core، event-contracts و startup runner؛ نه process |
+| Data             | itemهای جدا در Runflare، بدون Git | PostgreSQL، RabbitMQ و Redis                                                        |
 
 دو deployment repository کنار source و به‌صورت Git repository مستقل قرار می‌گیرند؛ داخل source submodule یا nested repository نیستند. Snapshot از source ساخته می‌شود و محل توسعه‌ی feature نیست. وجود Git محلی یا snapshot به‌تنهایی remote، GitHub، Auto Pull یا اتصال Runflare را ایجاد نمی‌کند.
 
@@ -17,20 +17,20 @@ ADR-0002 تصمیم اولیه‌ی یک repository به‌ازای هر item ر
 
 ## مرز process، port و routing
 
-| Bundle | Process | Port | Routing هدف |
-|---|---|---:|---|
-| Frontend | Customer Web | 3000 | app.funtino.ir |
-| Frontend | Operations Web | 3001 | web.funtino.ir |
-| Frontend | System Web | 3002 | admin.funtino.ir |
-| Backend | API Gateway | 4000 | api.funtino.ir، عمومی |
-| Backend | Realtime Gateway | 4010 | realtime.funtino.ir، عمومی با Socket.IO/WebSocket |
-| Backend | Device Integration | 4020 | شبکه‌ی داخلی |
-| Backend | Notifications | 4030 | شبکه‌ی داخلی |
-| Backend | Identity & Access | 4040 | شبکه‌ی داخلی |
-| Backend | Organization & Branch | 4050 | شبکه‌ی داخلی |
-| Backend | Analytics Read Model | 4060 | شبکه‌ی داخلی |
-| Backend | Wallet | 4070 | شبکه‌ی داخلی |
-| Backend | Customer & Household | 4080 | شبکه‌ی داخلی |
+| Bundle   | Process               | Port | Routing هدف                                       |
+| -------- | --------------------- | ---: | ------------------------------------------------- |
+| Frontend | Customer Web          | 3000 | app.funtino.ir                                    |
+| Frontend | Operations Web        | 3001 | web.funtino.ir                                    |
+| Frontend | System Web            | 3002 | admin.funtino.ir                                  |
+| Backend  | API Gateway           | 4000 | api.funtino.ir، عمومی                             |
+| Backend  | Realtime Gateway      | 4010 | realtime.funtino.ir، عمومی با Socket.IO/WebSocket |
+| Backend  | Device Integration    | 4020 | شبکه‌ی داخلی                                      |
+| Backend  | Notifications         | 4030 | شبکه‌ی داخلی                                      |
+| Backend  | Identity & Access     | 4040 | شبکه‌ی داخلی                                      |
+| Backend  | Organization & Branch | 4050 | شبکه‌ی داخلی                                      |
+| Backend  | Analytics Read Model  | 4060 | شبکه‌ی داخلی                                      |
+| Backend  | Wallet                | 4070 | شبکه‌ی داخلی                                      |
+| Backend  | Customer & Household  | 4080 | شبکه‌ی داخلی                                      |
 
 هر process روی port فعلی خودش و host برابر 0.0.0.0 گوش می‌دهد. برای هر target port باید network/route مختص همان process ساخته شود و هر domain به network متناظر وصل شود. مستند Runflare امکان افزودن چند network، انتقال Port به Target Port و اتصال domain به network انتخاب‌شده را توضیح می‌دهد؛ نام دقیق network و TLS خصوصی باید در حساب واقعی ثبت و آزمایش شود. NodePort مستقیم برای دسترسی production انتخاب نشود. [تنظیمات شبکه‌ی Runflare](https://docs.runflare.com/general/network-settings/)
 
@@ -48,7 +48,7 @@ API Gateway، Realtime و سه وب‌اپ route عمومی دارند. هفت w
 
 Dockerfileها Node.js 22 و pnpm 10.12.4 را pin می‌کنند. NEXT_PUBLIC_API_BASE_URL و NEXT_PUBLIC_DATA_MODE مقادیر build-time غیرمحرمانه‌اند و در image فرانت مصرف می‌شوند. secretهای backend فقط runtime environment همان Runflare item هستند؛ در build args، source یا image قرار نمی‌گیرند.
 
-Supervisor برای هر bundle processهای تعریف‌شده در manifest را راه می‌اندازد و stdout/stderr را مستقیم به log container می‌فرستد. خروج هر child کل bundle را با exit code غیرصفر fail می‌کند و childهای دیگر را graceful متوقف می‌کند. restart loop جداگانه یا فرایند zombie پنهان مجاز نیست. healthcheck کانتینر اتصال TCP همه‌ی portهای manifest را کنترل می‌کند تا بالا نیامدن حتی یک app پنهان نماند. این healthcheck جای endpoint سلامت دامنه و telemetry هر process را نمی‌گیرد.
+Supervisor برای هر bundle processها را به ترتیب manifest و تک‌به‌تک راه می‌اندازد؛ تا وقتی endpoint HTTP readiness یک process پاسخ موفق ندهد، بعدی شروع نمی‌شود. Backend ابتدا پنج Worker دارای migration startup را آماده می‌کند، سپس processهای دیگر را بالا می‌آورد و API Gateway را آخر شروع می‌کند تا ترافیک عمومی زودتر از سرویس‌هایش پذیرفته نشود. Timeout یا شکست readiness و نیز خروج هر child کل bundle را fail می‌کند و childهای دیگر graceful متوقف می‌شوند؛ restart loop جداگانه یا فرایند zombie پنهان مجاز نیست. healthcheck کانتینر نیز endpoint readiness همه‌ی processها را کنترل می‌کند و جای telemetry دامنه را نمی‌گیرد.
 
 Environment هر child از system environment محدود و allow-list همان process ساخته می‌شود. API Gateway نباید secretهای runtime سرویس‌های دیگر را بگیرد؛ migration URLهای Worker فقط در startup runner خود همان Worker حضور دارند. NODE_ENV و APP_VERSION مشترک‌اند. envهای public فرانت هنگام build تزریق می‌شوند، نه از Secret runtime.
 
@@ -62,15 +62,15 @@ Migrationهای خارج از این پنج Worker با job/فرمان نسخه�
 
 ## اثر تغییر و انتشار
 
-| تغییر source | Runtimeهای لازم |
-|---|---|
-| یکی از سه web app یا design-system | Frontend |
-| یکی از دو gateway یا هفت service | Backend |
-| backend-core یا event-contracts | Backend |
-| package/config/contract مشترک میان backend و frontend | هر دو |
-| root toolchain، lockfile یا exporter مشترک | هر دو، اگر خروجی snapshot آن‌ها تغییر کند |
-| فقط DOCS | هیچ‌کدام، مگر Dockerfile/manifest/runtime config هم عوض شود |
-| migration | job مالک و compatibility release؛ workerهای استثنای ADR-0015 پیش از start |
+| تغییر source                                          | Runtimeهای لازم                                                           |
+| ----------------------------------------------------- | ------------------------------------------------------------------------- |
+| یکی از سه web app یا design-system                    | Frontend                                                                  |
+| یکی از دو gateway یا هفت service                      | Backend                                                                   |
+| backend-core یا event-contracts                       | Backend                                                                   |
+| package/config/contract مشترک میان backend و frontend | هر دو                                                                     |
+| root toolchain، lockfile یا exporter مشترک            | هر دو، اگر خروجی snapshot آن‌ها تغییر کند                                 |
+| فقط DOCS                                              | هیچ‌کدام، مگر Dockerfile/manifest/runtime config هم عوض شود               |
+| migration                                             | job مالک و compatibility release؛ workerهای استثنای ADR-0015 پیش از start |
 
 تا وقتی pipeline انتشار وجود ندارد، انتشار مجاز فقط controlled snapshot از source است. پیش از push برای هر repository باید remote fetch و divergence برابر 0 0 باشد، diff بررسی شود، stage با path روشن انجام شود و force-push ممنوع است. این task فقط snapshot و repository محلی را آماده می‌کند؛ push به GitHub و اتصال به Runflare بخش جداگانه‌ی انتشار است.
 

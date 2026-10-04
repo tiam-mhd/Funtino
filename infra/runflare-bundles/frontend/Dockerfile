@@ -27,14 +27,14 @@ RUN pnpm install --frozen-lockfile \
       --filter=@funtino/operations-web \
       --filter=@funtino/system-web \
       --concurrency=1 \
-    && node -e "const fs=require('node:fs'); for (const p of ['apps/customer-web/.next/BUILD_ID','apps/operations-web/.next/BUILD_ID','apps/system-web/.next/BUILD_ID']) fs.accessSync(p)"
+    && node -e "const fs=require('node:fs'); for (const p of ['apps/customer-web/.next/BUILD_ID','apps/operations-web/.next/BUILD_ID','apps/system-web/.next/BUILD_ID','runtime/supervisor.mjs','runtime/healthcheck.mjs','runtime/frontend.processes.json']) fs.accessSync(p)"
 
 ENV NODE_ENV=production
 ENV APP_VERSION=${APP_VERSION}
 
 EXPOSE 3000 3001 3002
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 CMD ["node", "runtime/healthcheck.mjs", "runtime/frontend.processes.json"]
+HEALTHCHECK --interval=30s --timeout=10s --start-period=4m --retries=3 CMD ["node", "runtime/healthcheck.mjs", "runtime/frontend.processes.json"]
 
 RUN chown -R node:node /app
 USER node

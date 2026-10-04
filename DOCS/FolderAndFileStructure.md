@@ -47,6 +47,7 @@
       runtime-bundle/
         supervisor.mjs
         healthcheck.mjs
+        supervisor.spec.mjs
         frontend.processes.json
         backend.processes.json
     tests/
@@ -66,10 +67,10 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 
 نگاشت اجرایی دو runtime در [CommitPushAndDeploymentWorkflow.md](CommitPushAndDeploymentWorkflow.md) canonical است. cloneهای deployment sibling زیر `D:\Tiam\Projects\Mohammadiig\Funtino-deployments` هستند و فقط دو خروجی زیر را نگه می‌دارند:
 
-| runtime bundle | source scope | deployment repository | پردازه‌ها |
-|---|---|---|---|
-| Frontend | سه web app و `packages/design-system` | `funtino-frontend-runtime` | Customer :3000، Operations :3001، System :3002 |
-| Backend | دو gateway، هفت service، `backend-core`، `event-contracts` و runner migration | `funtino-backend-runtime` | API :4000، Realtime :4010، Device :4020، Notifications :4030، IAM :4040، Organization :4050، Analytics :4060، Wallet :4070، Customer :4080 |
+| runtime bundle | source scope                                                                  | deployment repository      | پردازه‌ها                                                                                                                                  |
+| -------------- | ----------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Frontend       | سه web app و `packages/design-system`                                         | `funtino-frontend-runtime` | Customer :3000، Operations :3001، System :3002                                                                                             |
+| Backend        | دو gateway، هفت service، `backend-core`، `event-contracts` و runner migration | `funtino-backend-runtime`  | API :4000، Realtime :4010، Device :4020، Notifications :4030، IAM :4040، Organization :4050، Analytics :4060، Wallet :4070، Customer :4080 |
 
 `Funtino-platform.code-workspace` فقط نمای source و همین دو sibling deployment است. بازبودن چند folder در VS Code به‌معنای sync، commit مشترک یا push خودکار نیست. برای تشخیص repository مقصد و کنترل divergence از [قانون canonical انتشار](CommitPushAndDeploymentWorkflow.md) استفاده کن.
 
@@ -142,7 +143,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 - deployment repository نباید برای build به مسیر محلی monorepo یا working directory مخفی وابسته باشد.
 - shared package و contract مورد نیاز باید در snapshot بسته‌بندی یا به‌صورت package نسخه‌دار مصرف شود.
 - هر runtime deployment repository به فقط یک آیتم Runflare و یک branch استقرار متصل می‌شود.
-- چند process فقط از طریق manifest صریح و supervisor ریشه اجرا می‌شوند؛ خروج غیرمنتظره‌ی هر child کل container را fail می‌کند.
+- چند process فقط از طریق manifest صریح و supervisor ریشه اجرا می‌شوند؛ هر process پس از پاسخ موفق readiness process قبلی شروع می‌شود و خروج غیرمنتظره‌ی هر child کل container را fail می‌کند.
 - processهای دامنه و appها همچنان مرز کد، مالک داده، پورت و environment allow-list مستقل دارند؛ هم‌گروه‌سازی فقط مرز image/Runflare را تغییر می‌دهد.
 - در snapshotهای فعلی، Dockerfile و `.dockerignore` باید در root هر deployment repository باشند؛ build context همیشه همان root است.
 - Dockerfile باید نصب package manager، install قفل‌شده، build، port، health check و start را مشخص کند؛ این مراحل نباید به commandهای مخفی پنل یا مسیر parent وابسته باشند.

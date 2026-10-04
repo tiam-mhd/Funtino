@@ -243,7 +243,7 @@
 - پیش از stage برای هر clone باید `git fetch origin main` و `git rev-list --left-right --count HEAD...origin/main` اجرا شود؛ ادامه فقط با وضعیت `0 0` مجاز است. remote ahead یا non-fast-forward باید متوقف و گزارش شود.
 - push دستی snapshot فقط با درخواست انتشار کاربر، stage صریح، build/test از خود clone و بدون force-push مجاز است.
 - rollback با snapshot یا commit قبلی deployment repository انجام می‌شود.
-- چند app/process در هر آیتم فقط در دو bundle مصوب ADR-0016 و از طریق manifest و supervisor مشخص اجرا می‌شوند؛ افزودن process تازه نیازمند به‌روزرسانی ماتریس پورت/environment/health است.
+- چند app/process در هر آیتم فقط در دو bundle مصوب ADR-0016 و از طریق manifest و supervisor مشخص اجرا می‌شوند؛ Supervisor هر process را پس از پاسخ موفق endpoint readiness همان process شروع می‌کند. افزودن process تازه نیازمند به‌روزرسانی ترتیب startup و ماتریس پورت/environment/readiness است.
 - جزئیات نگاشت، ماتریس اثر، workflow commit/push و چک‌لیست در [CommitPushAndDeploymentWorkflow.md](CommitPushAndDeploymentWorkflow.md) و [RunflareRepositoryAndDeployment.md](RunflareRepositoryAndDeployment.md) اجباری است.
 
 ## ۱۶. قوانین Git و Review

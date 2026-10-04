@@ -1,31 +1,72 @@
-import { connect } from 'node:net';
 import { readFile } from 'node:fs/promises';
+import { request as httpRequest } from 'node:http';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(process.cwd());
 
 function isWithinRoot(candidate) {
   const pathFromRoot = relative(ROOT, candidate);
-  return pathFromRoot === '' || (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== '..' && !isAbsolute(pathFromRoot));
+  return (
+    pathFromRoot === '' ||
+    (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== '..' && !isAbsolute(pathFromRoot))
+  );
 }
 
-function checkPort(host, port, timeoutMs) {
-  return new Promise((resolveResult) => {
-    const socket = connect({ host, port });
-    let settled = false;
-    const finish = (healthy) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      socket.destroy();
-      resolveResult(healthy);
-    };
-    const timeout = setTimeout(() => finish(false), timeoutMs);
+export function isValidReadinessPath(path) {
+  return (
+    typeof path === 'string' &&
+    path.startsWith('/') &&
+    !path.startsWith('//') &&
+    !/[?#\\\r\n]/.test(path)
+  );
+}
 
-    socket.once('connect', () => finish(true));
-    socket.once('error', () => finish(false));
+export function probeHttpReadiness({ host, port, path, timeoutMs }) {
+  return new Promise((resolveProbe) => {
+    let settled = false;
+    let statusCode = null;
+    let timeoutHandle;
+
+    const finish = (healthy, causeCode) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      resolveProbe({
+        healthy,
+        ...(statusCode === null ? {} : { statusCode }),
+        ...(causeCode ? { causeCode } : {}),
+      });
+    };
+
+    const request = httpRequest(
+      {
+        hostname: host,
+        port,
+        path,
+        method: 'GET',
+        headers: { connection: 'close' },
+      },
+      (response) => {
+        statusCode = response.statusCode ?? null;
+        response.once('aborted', () => finish(false, 'HTTP_RESPONSE_ABORTED'));
+        response.once('error', (error) => finish(false, error.code ?? 'HTTP_RESPONSE_FAILED'));
+        response.once('end', () => {
+          const healthy = statusCode !== null && statusCode >= 200 && statusCode < 400;
+          finish(healthy, healthy ? undefined : 'HTTP_STATUS_NOT_READY');
+        });
+        response.resume();
+      },
+    );
+
+    timeoutHandle = setTimeout(() => {
+      const error = new Error('HTTP readiness probe exceeded its deadline.');
+      error.code = 'ETIMEDOUT';
+      request.destroy(error);
+    }, timeoutMs);
+
+    request.once('error', (error) => finish(false, error.code ?? 'HTTP_REQUEST_FAILED'));
+    request.end();
   });
 }
 
@@ -44,15 +85,40 @@ async function main() {
   if (!Array.isArray(manifest.processes) || manifest.processes.length === 0) {
     throw new Error('Runtime manifest contains no process ports.');
   }
+  if (
+    !manifest.health ||
+    typeof manifest.health.host !== 'string' ||
+    manifest.health.host.length === 0 ||
+    !Number.isInteger(manifest.health.connectionTimeoutMs) ||
+    manifest.health.connectionTimeoutMs < 100
+  ) {
+    throw new Error('Runtime manifest health readiness settings are invalid.');
+  }
+  for (const entry of manifest.processes) {
+    if (!Number.isInteger(entry.port) || !isValidReadinessPath(entry.readinessPath)) {
+      throw new Error(
+        `Runtime manifest contains an invalid readiness definition for ${entry.name}.`,
+      );
+    }
+  }
 
   const host = manifest.health?.host ?? '127.0.0.1';
-  const timeoutMs = manifest.health?.connectionTimeoutMs ?? 1000;
+  const timeoutMs = manifest.health.connectionTimeoutMs;
   const results = await Promise.all(
-    manifest.processes.map(async (entry) => ({
-      name: entry.name,
-      port: entry.port,
-      healthy: await checkPort(host, entry.port, timeoutMs),
-    })),
+    manifest.processes.map(async (entry) => {
+      const probe = await probeHttpReadiness({
+        host,
+        port: entry.port,
+        path: entry.readinessPath,
+        timeoutMs,
+      });
+      return {
+        name: entry.name,
+        port: entry.port,
+        path: entry.readinessPath,
+        ...probe,
+      };
+    }),
   );
   const unavailable = results.filter(({ healthy }) => !healthy);
 
@@ -62,7 +128,13 @@ async function main() {
         timestamp: new Date().toISOString(),
         event: 'runtime.healthcheck_failed',
         bundle: manifest.bundle,
-        unavailable: unavailable.map(({ name, port }) => ({ process: name, port })),
+        unavailable: unavailable.map(({ name, port, path, statusCode, causeCode }) => ({
+          process: name,
+          port,
+          path,
+          ...(statusCode === undefined ? {} : { statusCode }),
+          ...(causeCode ? { causeCode } : {}),
+        })),
       })}\n`,
     );
     process.exitCode = 1;
@@ -79,13 +151,15 @@ async function main() {
   );
 }
 
-void main().catch((error) => {
-  process.stderr.write(
-    `${JSON.stringify({
-      timestamp: new Date().toISOString(),
-      event: 'runtime.healthcheck_configuration_failed',
-      message: error instanceof Error ? error.message : 'Unknown healthcheck error.',
-    })}\n`,
-  );
-  process.exitCode = 1;
-});
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  void main().catch((error) => {
+    process.stderr.write(
+      `${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: 'runtime.healthcheck_configuration_failed',
+        message: error instanceof Error ? error.message : 'Unknown healthcheck error.',
+      })}\n`,
+    );
+    process.exitCode = 1;
+  });
+}

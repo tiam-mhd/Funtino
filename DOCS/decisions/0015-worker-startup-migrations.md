@@ -38,7 +38,7 @@ Docker هر یک از پنج Worker پیش از اجرای برنامه، runner
 - خطای اتصال، نبود دسترسی DDL، schema اشتباه، migration خراب یا تاریخچه‌ی migration ناسازگار موجب توقف fail-closed می‌شود. خروجی Prisma شامل کد Prisma و در صورت ارائه، SQLSTATE PostgreSQL است؛ secretها redacted می‌شوند.
 - خطای DNS با `DATABASE_DNS_LOOKUP_FAILED` یا `DATABASE_DNS_NO_ADDRESSES` و خطای اتصال پورت با `DATABASE_TCP_CONNECT_FAILED` پیش از اجرای Prisma گزارش می‌شود. موفقیت TCP فقط بازبودن مسیر تا پورت را ثابت می‌کند؛ احراز هویت و مجوز DDL همچنان به Prisma واگذار می‌شود.
 - برای خطاهایی مانند migration شکست‌خورده‌ی ثبت‌شده (`P3009`)، runner وضعیت را خودکار resolve یا پاک نمی‌کند. ابتدا log کامل همان مرحله و وضعیت دیتابیس باید بررسی و یک ترمیم کنترل‌شده طراحی شود.
-- `prisma migrate deploy` از advisory lock خود Prisma استفاده می‌کند. در rollout هم‌زمان چند replica، هر replica migration را درخواست می‌کند؛ lock باید تغییرها را serialize کند، اما timeout قفل باعث fail-closed شدن replica می‌شود. برای release اولیه یک replica توصیه می‌شود و startup طولانی در سلامت Docker با start-period برابر ۱۸۰ ثانیه پوشش داده می‌شود.
+- `prisma migrate deploy` از advisory lock خود Prisma استفاده می‌کند. در rollout هم‌زمان چند replica، هر replica migration را درخواست می‌کند؛ lock باید تغییرها را serialize کند، اما timeout قفل باعث fail-closed شدن replica می‌شود. برای release اولیه یک replica توصیه می‌شود. پس از تجمیع در ADR-0016، Supervisor پنج Worker را ترتیبی آماده می‌کند: مهلت هر Worker سه دقیقه است و Docker start-period کل backend بیست دقیقه تا پایان migrationهای متوالی فرصت می‌دهد.
 - تغییرات schema همچنان باید backward-compatible و expand/contract باشند. startup migration rollback خودکار DDL انجام نمی‌دهد؛ rollback نسخه‌ی app فقط در صورتی امن است که schema جدید با app قبلی سازگار باشد. backup و آزمون restore مستقل لازم است.
 
 ### مهلت اجرا و عیب‌یابی توقف فرمان
@@ -52,7 +52,7 @@ Docker هر یک از پنج Worker پیش از اجرای برنامه، runner
 ## خارج از دامنه و پیامد
 
 - این تصمیم فقط برای پنج Worker است. migration API Gateway، وب‌اپ‌ها و سایر سرویس‌ها همچنان release/job کنترل‌شده‌ی جدا دارند.
-- healthcheck منتظر HTTP health می‌ماند و برای migration اولیه تا ۱۸۰ ثانیه فرصت می‌دهد؛ زمان طولانی‌تر همچنان باید از log تشخیص داده شود.
+- Supervisor برای هر Worker تا ۱۸۰ ثانیه منتظر پاسخ `/health/ready` می‌ماند؛ healthcheck کل backend نیز endpointهای readiness همه‌ی processها را می‌سنجد. برای پنج Worker متوالی، Docker start-period برابر ۲۰ دقیقه است؛ timeout خود Prisma برای `create_schema` و `migrate deploy` جداگانه برقرار می‌ماند.
 - نیاز دائمی Worker به credential DDL ریسک امنیتی بیشتری از migration job کوتاه‌عمر دارد؛ دسترسی باید محدود به schema مالک، قابل rotation و فقط در همان آیتم Worker باشد.
 - موفقیت build یا push اثبات نمی‌کند migration روی PostgreSQL واقعی اجرا شده است. تأیید نهایی نیازمند مشاهده‌ی log start، migration completed و health در Runflare است.
 

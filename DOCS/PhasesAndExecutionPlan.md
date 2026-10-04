@@ -51,7 +51,7 @@
 - تثبیت Git source monorepo و دو deployment repository خودبسنده‌ی frontend/backend طبق ADR-0016؛
 - تعریف path filter و ماتریس اثر تغییر shared package/contract بر دو runtime bundle؛
 - اتصال هر runtime repository به یک branch و Auto Pull مستقل Runflare؛
-- تثبیت supervisor fail-fast، allow-list متغیرهای محیطی، health پردازه‌ها و mapping شبکه/دامنه/پورت؛
+- تثبیت supervisor fail-fast با startup ترتیبی و انتظار برای HTTP readiness هر process، allow-list متغیرهای محیطی، health پردازه‌ها و mapping شبکه/دامنه/پورت؛
 - تعریف migration gate و rollback؛
 - تنظیم لاگ و event عملیاتی Runflare؛
 - تعریف backup مستقل و restore test؛
