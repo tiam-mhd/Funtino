@@ -34,3 +34,4 @@
 - [ADR-0016: بسته‌بندی دوگانه‌ی runtime برای frontend و backend](0016-grouped-frontend-backend-runtime-deployments.md)
 - [ADR-0017: پیش‌بررسی TCP اتصال دیتابیس Worker](0017-worker-database-tcp-preflight.md)
 - [ADR-0018: لاگ تشخیصی هم‌بسته برای backend](0018-correlated-backend-diagnostics.md)
+- [ADR-0019: مجوز ساخت مجموعه برای مدیر سراسری bootstrapشده](0019-system-admin-organization-provisioning.md)

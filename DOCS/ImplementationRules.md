@@ -161,6 +161,7 @@
 - authorization دو مرحله دارد: نقش/scope و rule دامنه.
 - نقش‌ها و overrideهای membership با مدل policy نسخه‌دار و audit‌شده ارزیابی می‌شوند؛ نقش به‌تنهایی مجوز resource خارج از scope نیست.
 - انتساب permission تابع اصل delegation-of-authority است: actor فقط اختیار واگذاری permissionهای قابل‌واگذاری خودش را دارد؛ مسیر break-glass و system admin از tenant policy جدا است.
+- نقش سراسری `system_admin` در bootstrap، تمام permissionهای `delegable` کاتالوگ به‌علاوه‌ی `organization.create` را می‌گیرد تا بتواند اولین مجموعه را ایجاد کند. `organization.create` همچنان در کاتالوگ غیرقابل‌واگذاری می‌ماند؛ `system.access.bootstrap` و `system.access.impersonate` به نقش دائمی منتقل نمی‌شوند. جزئیات در [ADR-0019](decisions/0019-system-admin-organization-provisioning.md) است.
 - revoke/تعلیق membership و تغییر permission باید بدون اتکا به refresh دستی مرورگر فوراً در درخواست بعدی اثر کند.
 - هیچ شناسه یا branch id دریافت‌شده از client قابل اعتماد نیست.
 - دسترسی به کودک، خانواده و کارت بر اساس رابطه و رضایت بررسی می‌شود.
