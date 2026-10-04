@@ -1,0 +1,120 @@
+.page {
+  width: min(100% - 28px, 920px);
+  margin: 0 auto;
+  padding: 28px 0 56px;
+  color: var(--ft-ink);
+}
+.header {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.header h1 {
+  margin: 0;
+  font-size: clamp(25px, 4vw, 38px);
+}
+.backLink,
+.eyebrow {
+  color: var(--ft-purple);
+  font-weight: 800;
+}
+.backLink {
+  width: fit-content;
+  font-size: 12px;
+}
+.eyebrow {
+  margin: 12px 0 0;
+  font-size: 11px;
+}
+.lead,
+.panel > div p,
+.note {
+  color: var(--ft-muted);
+  line-height: 1.9;
+}
+.panel {
+  display: grid;
+  gap: 20px;
+  border: 1px solid var(--ft-line);
+  border-radius: 18px;
+  padding: clamp(16px, 3vw, 26px);
+  background: #fff;
+  box-shadow: 0 10px 30px #25234a0a;
+}
+.panel h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.panel > div p {
+  margin: 5px 0 0;
+}
+.form {
+  display: grid;
+  gap: 10px;
+  max-width: 620px;
+}
+.form label {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.form select,
+.form textarea {
+  width: 100%;
+  border: 1px solid var(--ft-line);
+  border-radius: 11px;
+  padding: 12px;
+  color: var(--ft-ink);
+  background: #fff;
+  font: inherit;
+}
+.form button,
+.error button {
+  width: fit-content;
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 16px;
+  color: #fff;
+  background: var(--ft-purple);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.form :focus-visible,
+.error button:focus-visible {
+  outline: 3px solid #9382ff;
+  outline-offset: 2px;
+}
+.form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.status,
+.note,
+.error,
+.notice {
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.note {
+  margin: 0;
+  background: #f4f3fa;
+}
+.error {
+  color: #98243b;
+  background: #fff0f2;
+}
+.error p {
+  margin: 0 0 12px;
+}
+.notice {
+  color: #14633e;
+  background: #eaf8f0;
+}
+@media (max-width: 560px) {
+  .page {
+    width: min(100% - 20px, 920px);
+    padding-top: 18px;
+  }
+}

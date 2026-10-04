@@ -54,7 +54,7 @@
 - permission مؤثر همواره به عضویت فعال، scope عضویت، scope منبع و invariant دامنه محدود می‌شود. مدیر نمی‌تواند permission یا scopeی فراتر از اختیار واگذاری خود اعطا کند.
 - تغییر role، permission، assignment، override و scope باید MFA/reauth متناسب، audit قبل/بعد و جلوگیری از حذف آخرین مدیر مجاز داشته باشد.
 - authorization هر درخواست server-side و fail-closed است. cache فقط با versioning/invalidation قابل اتکا و revocation فوری مجاز است؛ browser، localStorage یا claim بلندعمر منبع حقیقت نیست.
-- MFA مدیران طبق [ADR-0006](decisions/0006-administrative-mfa-totp.md) با TOTP و ۱۰ کد بازیابی یک‌بارمصرف است؛ OTP ورود MFA محسوب نمی‌شود. مدیر سامانه در هر ورود MFA می‌کند و پس از ۱۵ دقیقه بی‌فعالیتی نشستش منقضی می‌شود؛ step-up حساس حداکثر ۳۰۰ ثانیه و فقط از نشست سمت‌سرور Gateway پذیرفته می‌شود. secret با AES-256-GCM و keyring نسخه‌دار runtime محافظت می‌شود. [ADR-0014](decisions/0014-admin-login-mfa-and-idle-timeout.md) مرجع سیاست login/idle است.
+- MFA مدیران طبق [ADR-0006](decisions/0006-administrative-mfa-totp.md) با TOTP و ۱۰ کد بازیابی یک‌بارمصرف است؛ OTP ورود MFA محسوب نمی‌شود. مدیر سامانه در هر ورود MFA می‌کند. نشست مدیریتی مطلق و ۱ تا ۱۲ ساعت، با پیش‌فرض ۱۲ ساعت، از تنظیم IAM خوانده می‌شود؛ پنل نشست فعال را به علت بی‌فعالیتی قطع نمی‌کند. MFA مدیر سراسری تا پایان همان نشست معتبر است و نسخه‌ی عامل، membership، scope، مجوز و policy در IAM زنده بررسی می‌شود. step-up سایر کارکنان حداکثر ۳۰۰ ثانیه باقی می‌ماند. secret با AES-256-GCM و keyring نسخه‌دار runtime محافظت می‌شود. [ADR-0020](decisions/0020-admin-session-duration-and-system-admin-capabilities.md) مرجع سیاست جدید است.
 - تغییر عامل یا مصرف recovery code بدون ثبت audit append-only و بدون redaction کامل secret/code مجاز نیست. شکست keyring، نشست یا سرویس IAM باید برای عملیات step-up به رد دسترسی منجر شود.
 - endpointهای مدیریت permission خودشان با مجوزهای مدیریتی مستقل محافظت می‌شوند؛ مخفی‌کردن منو یا دکمه جایگزین authorization نیست.
 
@@ -161,7 +161,7 @@
 - authorization دو مرحله دارد: نقش/scope و rule دامنه.
 - نقش‌ها و overrideهای membership با مدل policy نسخه‌دار و audit‌شده ارزیابی می‌شوند؛ نقش به‌تنهایی مجوز resource خارج از scope نیست.
 - انتساب permission تابع اصل delegation-of-authority است: actor فقط اختیار واگذاری permissionهای قابل‌واگذاری خودش را دارد؛ مسیر break-glass و system admin از tenant policy جدا است.
-- نقش سراسری `system_admin` در bootstrap، تمام permissionهای `delegable` کاتالوگ به‌علاوه‌ی `organization.create` را می‌گیرد تا بتواند اولین مجموعه را ایجاد کند. `organization.create` همچنان در کاتالوگ غیرقابل‌واگذاری می‌ماند؛ `system.access.bootstrap` و `system.access.impersonate` به نقش دائمی منتقل نمی‌شوند. جزئیات در [ADR-0019](decisions/0019-system-admin-organization-provisioning.md) است.
+- نقش سراسری `system_admin` در bootstrap، تمام permissionهای `delegable` کاتالوگ به‌علاوه‌ی `organization.create` و `system.session_policy.manage` را می‌گیرد. دسترسی جدید به تنظیم نشست غیرقابل‌واگذاری است؛ `system.access.bootstrap` و `system.access.impersonate` به نقش دائمی منتقل نمی‌شوند. roleهای قبلی فقط با finalize یک‌باره و MFA تازه، از مجموعه‌ی دقیق شناخته‌شده به کاتالوگ جدید ارتقا می‌یابند. جزئیات در [ADR-0019](decisions/0019-system-admin-organization-provisioning.md) و [ADR-0020](decisions/0020-admin-session-duration-and-system-admin-capabilities.md) است.
 - revoke/تعلیق membership و تغییر permission باید بدون اتکا به refresh دستی مرورگر فوراً در درخواست بعدی اثر کند.
 - هیچ شناسه یا branch id دریافت‌شده از client قابل اعتماد نیست.
 - دسترسی به کودک، خانواده و کارت بر اساس رابطه و رضایت بررسی می‌شود.

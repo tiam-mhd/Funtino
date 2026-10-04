@@ -478,9 +478,14 @@ export function AccessManagement() {
             مجوزها در سرور ارزیابی می‌شوند؛ هر تغییر حساس به تأیید مجدد MFA و ثبت دلیل نیاز دارد.
           </p>
         </div>
-        <a className={styles.mfaLink} href="/fa/mfa">
-          تنظیم تأیید دومرحله‌ای
-        </a>
+        <div className={styles.headerLinks}>
+          <a className={styles.mfaLink} href="/fa/mfa">
+            تنظیم تأیید دومرحله‌ای
+          </a>
+          <a className={styles.mfaLink} href="/fa/security/session-policy">
+            مدت نشست کارکنان
+          </a>
+        </div>
       </header>
 
       <section className={styles.scopePanel} aria-labelledby="scope-heading">

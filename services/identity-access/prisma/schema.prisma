@@ -239,9 +239,10 @@ model OutboxEvent {
 }
 
 model PolicyState {
-  id        Int      @id @default(1)
-  version   Int      @default(1)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                       Int      @id @default(1)
+  version                  Int      @default(1)
+  managementSessionTtlHours Int     @default(12) @map("management_session_ttl_hours")
+  updatedAt                DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("policy_state")
 }

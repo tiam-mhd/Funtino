@@ -354,6 +354,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
           (console)/
             layout.tsx
             overview/
+            security/session-policy/
             organizations/
             branches/
             users/
@@ -367,6 +368,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
       features/
         organizations/
         access-control/
+        security/
         integrations/
         audit/
         health/
@@ -391,6 +393,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 - داده‌ی خام secret، token provider یا credential در رابط نمایش داده نمی‌شود.
 - پنل سیستمی با density بالاتر ساخته می‌شود، اما خوانایی، focus و خطای قابل‌اقدام حفظ می‌شود.
 - قابلیت پایش در `features/health/` و route مجاز `app/[locale]/(console)/system-health/` قرار می‌گیرد؛ دریافت telemetry فقط از Gateway و پس از مجوز سراسری IAM انجام می‌شود.
+- تنظیم مدت نشست مدیریتی در `features/security/SessionPolicySettings.tsx` و route `app/[locale]/(console)/security/session-policy/` قرار می‌گیرد؛ API فقط از Gateway و پس از مجوز global در IAM فراخوانی می‌شود.
 
 ## ۸. ساختار هر سرویس دامنه
 

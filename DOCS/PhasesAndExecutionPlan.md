@@ -61,7 +61,9 @@
 
 ### G4 — هسته‌ی هویت و دسترسی
 
-وضعیت 2026-10-01: commandهای IAM (role/membership/invitation/override)، فهرست و لغو دعوت‌های صادرشده، delegation، idempotency، audit/outbox، ممیزی خواندن داده‌های حساس، حفاظت آخرین مدیر، MFA step-up و bootstrap آفلاین در source پیاده‌سازی شده‌اند؛ Operations Web نیز inbox پذیرش دعوت، roster و UI مدیریت role/status/override را به BFF متصل می‌کند. گزینه‌ی ۱ ADR-0010 اجرا شده است: IAM permission/delegation/MFA را ارزیابی می‌کند و سپس در production هر mutation tenant scope را با Owner فعال/هم‌والد بودن بررسی می‌کند. ADR-0011 gate مدیریتی production را default-off، bootstrap را one-shot و membership موقت آن را ۲۴ساعته می‌کند؛ session مطلق ۳۰روزه و step-up پنج‌دقیقه‌ای یک‌منبعی شده‌اند. Owner failure یا configuration نامعتبر fail-closed است؛ rollout staging، secretهای مستقل و E2E tenant همچنان gate هستند. این وضعیت مجوز انتشار نیست.
+وضعیت 2026-10-04: نشست مدیریتی مطلق و قابل‌تنظیم ۱ تا ۱۲ ساعت (پیش‌فرض ۱۲)، اعتبار MFA مدیر سراسری تا پایان همان نشست، صفحه‌ی تنظیمات System Web و مجوز اختصاصی غیرقابل‌واگذاری به برنامه اضافه شده است. Customer-only همچنان ۳۰ روز و step-up کارکنان غیرمدیر سراسری پنج دقیقه است. تغییر تنظیم بر نشست‌های بعدی اثر می‌گذارد. migration، build و controlled snapshot release باید پیش از استقرار بررسی شوند؛ write gate production همچنان default-off است و باید جداگانه، فقط در rollout مصوب، باز شود. این وضعیت به‌تنهایی مجوز انتشار یا بازکردن gate نیست.
+
+وضعیت 2026-10-01: commandهای IAM (role/membership/invitation/override)، فهرست و لغو دعوت‌های صادرشده، delegation، idempotency، audit/outbox، ممیزی خواندن داده‌های حساس، حفاظت آخرین مدیر، MFA step-up و bootstrap آفلاین در source پیاده‌سازی شده‌اند؛ Operations Web نیز inbox پذیرش دعوت، roster و UI مدیریت role/status/override را به BFF متصل می‌کند. گزینه‌ی ۱ ADR-0010 اجرا شده است: IAM permission/delegation/MFA را ارزیابی می‌کند و سپس در production هر mutation tenant scope را با Owner فعال/هم‌والد بودن بررسی می‌کند. ADR-0011 gate مدیریتی production را default-off، bootstrap را one-shot و membership موقت آن را ۲۴ساعته می‌کند؛ تنظیم نشست‌ها و اعتبار MFA از این پس طبق ADR-0020 هستند. Owner failure یا configuration نامعتبر fail-closed است؛ rollout staging، secretهای مستقل و E2E tenant همچنان gate هستند. این وضعیت مجوز انتشار نیست.
 
 - OTP و session؛
 - membership و role؛
@@ -275,8 +277,8 @@
 
 ### S0 — هویت مدیریتی و کنترل ویژه
 
-- ورود مدیر با MFA؛ TOTP با پنجره‌ی ۳۰ ثانیه و تلورانس یک بازه، step-up حداکثر ۳۰۰ ثانیه و ۱۰ recovery code یک‌بارمصرف (ADR-0006)؛
-- session timeout؛
+- ورود مدیر با MFA؛ TOTP با پنجره‌ی ۳۰ ثانیه و تلورانس یک بازه و ۱۰ recovery code یک‌بارمصرف (ADR-0006)؛
+- نشست مدیر با مدت مطلق ۱ تا ۱۲ ساعت و MFA proof تا پایان همان نشست؛ step-up کارکنان دیگر حداکثر ۳۰۰ ثانیه (ADR-0020)؛
 - نقش مدیر سامانه و پشتیبانی؛
 - break-glass policy؛
 - lock/unlock حساب؛

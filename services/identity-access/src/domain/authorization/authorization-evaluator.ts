@@ -3,6 +3,7 @@ import {
   type PermissionKey,
   type ScopeType,
 } from './permission-catalog.js';
+import { SYSTEM_ADMIN_MFA_SESSION_MAX_SECONDS } from './mfa-policy.js';
 
 export type AccessScope =
   | { type: 'global' }
@@ -238,10 +239,18 @@ export function evaluateAuthorization(
   }
 
   if (permission.stepUp) {
+    const maxFreshnessSeconds =
+      context.membership.status === 'active' &&
+      context.membership.scope.type === 'global' &&
+      context.role.status === 'active' &&
+      context.role.scope.type === 'global' &&
+      context.role.permissions.includes('system.session_policy.manage')
+        ? SYSTEM_ADMIN_MFA_SESSION_MAX_SECONDS
+        : 900;
     if (
       !Number.isSafeInteger(options.mfaFreshnessSeconds) ||
       options.mfaFreshnessSeconds! < 1 ||
-      options.mfaFreshnessSeconds! > 900
+      options.mfaFreshnessSeconds! > maxFreshnessSeconds
     ) {
       return decision(false, request, context, 'step_up_policy_unconfigured');
     }

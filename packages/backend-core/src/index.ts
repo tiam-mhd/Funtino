@@ -30,7 +30,8 @@ export type ApiErrorCode =
   | 'NOT_FOUND'
   | 'CONFLICT'
   | 'RATE_LIMITED'
-  | 'DEPENDENCY_UNAVAILABLE';
+  | 'DEPENDENCY_UNAVAILABLE'
+  | 'IAM_MANAGEMENT_WRITES_DISABLED';
 
 export class DomainError extends Error {
   constructor(
@@ -58,6 +59,8 @@ function statusForError(code: ApiErrorCode): number {
       return HttpStatus.CONFLICT;
     case 'RATE_LIMITED':
       return HttpStatus.TOO_MANY_REQUESTS;
+    case 'IAM_MANAGEMENT_WRITES_DISABLED':
+      return HttpStatus.SERVICE_UNAVAILABLE;
     case 'DEPENDENCY_UNAVAILABLE':
       return HttpStatus.SERVICE_UNAVAILABLE;
   }

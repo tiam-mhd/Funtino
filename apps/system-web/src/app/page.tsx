@@ -49,6 +49,9 @@ export default function SystemHome() {
           <a href="/fa/mfa">
             <span aria-hidden="true">♙</span> تأیید دومرحله‌ای
           </a>
+          <a href="/fa/security/session-policy">
+            <span aria-hidden="true">◷</span> مدت نشست کارکنان
+          </a>
           <a href="#integrations">
             <span aria-hidden="true">⌘</span> اتصال‌ها
           </a>
@@ -93,6 +96,14 @@ export default function SystemHome() {
           </section>
 
           <section className="system-quick-grid" id="organizations">
+            <a
+              className="system-quick-card system-quick-card--link"
+              href="/fa/security/session-policy"
+            >
+              <IconBadge icon="◷" label="امنیت" tone="purple" />
+              <strong>مدت نشست کارکنان</strong>
+              <span>تنظیم انقضای مطلق نشست پنل از ۱ تا ۱۲ ساعت</span>
+            </a>
             <a className="system-quick-card system-quick-card--link" href="/fa/organizations">
               <IconBadge icon="▦" label="سازمان‌ها" tone="purple" />
               <strong>مدیریت مجموعه‌ها و شعب</strong>

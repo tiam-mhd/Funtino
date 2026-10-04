@@ -14,6 +14,7 @@ import { OperationsReportsController } from './interfaces/http/operations-report
 import { OperationsScopeController } from './interfaces/http/operations-scope.controller.js';
 import { SystemOrganizationController } from './interfaces/http/system-organization.controller.js';
 import { SystemHealthController } from './interfaces/http/system-health.controller.js';
+import { SystemSessionPolicyController } from './interfaces/http/system-session-policy.controller.js';
 import { OperationsCardsController } from './interfaces/http/operations-cards.controller.js';
 import { SessionGuard } from './interfaces/http/session.guard.js';
 import { TrustedOriginGuard } from './interfaces/http/trusted-origin.guard.js';
@@ -44,6 +45,7 @@ import { PrometheusTelemetryClient } from './infrastructure/observability/promet
     OperationsScopeController,
     SystemOrganizationController,
     SystemHealthController,
+    SystemSessionPolicyController,
   ],
   providers: [
     PrismaService,

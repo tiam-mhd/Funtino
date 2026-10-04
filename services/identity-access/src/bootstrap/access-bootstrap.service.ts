@@ -13,9 +13,12 @@ import { PrismaService } from '../infrastructure/persistence/prisma/prisma.servi
 
 const BOOTSTRAP_ROLE_NAME = SYSTEM_ADMIN_BOOTSTRAP_ROLE_NAME;
 const SYSTEM_ADMIN_ROLE_NAME = 'system_admin';
-// This non-delegable operational permission is part of the protected global admin role.
+// These non-delegable operational permissions are explicitly held by the protected global admin role.
 // Bootstrap and impersonation remain separate privileges.
-const SYSTEM_ADMIN_REQUIRED_PERMISSION_KEYS = ['organization.create'] as const;
+const SYSTEM_ADMIN_REQUIRED_PERMISSION_KEYS = [
+  'organization.create',
+  'system.session_policy.manage',
+] as const;
 
 type ProtectedRole = {
   id: string;
@@ -38,6 +41,10 @@ function legacySystemAdminPermissionKeys(): string[] {
     .sort();
 }
 
+function previouslyCurrentSystemAdminPermissionKeys(): string[] {
+  return [...new Set([...legacySystemAdminPermissionKeys(), 'organization.create'])].sort();
+}
+
 function systemAdminPermissionKeys(): string[] {
   return [
     ...new Set([...legacySystemAdminPermissionKeys(), ...SYSTEM_ADMIN_REQUIRED_PERMISSION_KEYS]),
@@ -54,7 +61,11 @@ function systemAdminPermissionState(role: ProtectedRole): 'current' | 'legacy' |
     return 'inconsistent';
   const actual = sortedPermissionKeys(role).join('|');
   if (actual === systemAdminPermissionKeys().join('|')) return 'current';
-  if (actual === legacySystemAdminPermissionKeys().join('|')) return 'legacy';
+  if (
+    actual === legacySystemAdminPermissionKeys().join('|') ||
+    actual === previouslyCurrentSystemAdminPermissionKeys().join('|')
+  )
+    return 'legacy';
   return 'inconsistent';
 }
 
@@ -330,7 +341,7 @@ export class AccessBootstrapService {
           };
         }
         if (currentAdminState === 'legacy') {
-          const { role, changed } = await this.addOrganizationCreationPermission(
+          const { role, changed } = await this.reconcileSystemAdminPermissions(
             tx,
             membership.role,
             input,
@@ -351,7 +362,7 @@ export class AccessBootstrapService {
           throw new ConflictException('The protected system administrator role is inconsistent.');
         }
         if (role && systemAdminPermissionState(role) === 'legacy') {
-          await this.addOrganizationCreationPermission(tx, role, input);
+          await this.reconcileSystemAdminPermissions(tx, role, input);
         }
         if (!role) {
           role = await tx.accessRole.create({
@@ -419,7 +430,7 @@ export class AccessBootstrapService {
     );
   }
 
-  private async addOrganizationCreationPermission(
+  private async reconcileSystemAdminPermissions(
     tx: Prisma.TransactionClient,
     role: ProtectedRole,
     input: { operatorLabel: string; reason: string },
@@ -428,11 +439,13 @@ export class AccessBootstrapService {
     if (systemAdminPermissionState(role) !== 'legacy') {
       throw new ConflictException('The protected system administrator role is inconsistent.');
     }
+    const currentKeys = new Set(sortedPermissionKeys(role));
+    const permissionsToAdd = systemAdminPermissionKeys().filter((key) => !currentKeys.has(key));
     const updated = await tx.accessRole.update({
       where: { id: role.id },
       data: {
         version: { increment: 1 },
-        permissions: { create: [{ permissionKey: SYSTEM_ADMIN_REQUIRED_PERMISSION_KEYS[0] }] },
+        permissions: { create: permissionsToAdd.map((permissionKey) => ({ permissionKey })) },
       },
       include: { permissions: true },
     });

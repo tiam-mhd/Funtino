@@ -510,6 +510,59 @@ paths:
           description: Invalid service credential or missing actor context.
         '503':
           description: Policy database is unavailable.
+  /internal/v1/system/management-session-policy:
+    get:
+      x-funtino-availability: implemented
+      operationId: getManagementSessionPolicy
+      description: Requires the actor's global system.session_policy.manage permission. Reads the IAM-owned absolute TTL applied to new management sessions.
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Current management session lifetime and policy version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementSessionPolicyResponse'
+        '403':
+          description: Actor lacks the global session-policy permission.
+        '503':
+          description: IAM policy storage is unavailable.
+    put:
+      x-funtino-availability: implemented
+      operationId: updateManagementSessionPolicy
+      description: Changes the absolute lifetime for future management logins. Requires global system.session_policy.manage, an idempotency key, current If-Match policy version, MFA evidence from the trusted Gateway session, audit, and Outbox.
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementSessionPolicyUpdate'
+      responses:
+        '200':
+          description: Session policy updated and recorded in audit and Outbox.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementSessionPolicyMutationResponse'
+        '400':
+          description: Duration, reason, or command metadata is invalid.
+        '403':
+          description: Actor lacks the global session-policy permission.
+        '409':
+          description: Policy version is stale or the idempotency key conflicts.
+        '503':
+          description: IAM write gate is closed or the policy store is unavailable.
   /internal/v1/staff:
     get:
       x-funtino-availability: implemented
@@ -1493,7 +1546,7 @@ components:
           maxLength: 500
     CurrentMembershipsResponse:
       type: object
-      required: [data, policyVersion, catalogVersion]
+      required: [data, policyVersion, catalogVersion, managementSessionTtlHours]
       properties:
         data:
           type: array
@@ -1503,6 +1556,52 @@ components:
           type: integer
           minimum: 1
         catalogVersion:
+          type: integer
+          minimum: 1
+        managementSessionTtlHours:
+          type: integer
+          minimum: 1
+          maximum: 12
+    ManagementSessionPolicyUpdate:
+      type: object
+      additionalProperties: false
+      required: [managementSessionTtlHours, reason]
+      properties:
+        managementSessionTtlHours:
+          type: integer
+          minimum: 1
+          maximum: 12
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    ManagementSessionPolicyResponse:
+      type: object
+      additionalProperties: false
+      required: [managementSessionTtlHours, policyVersion]
+      properties:
+        managementSessionTtlHours:
+          type: integer
+          minimum: 1
+          maximum: 12
+        policyVersion:
+          type: integer
+          minimum: 1
+    ManagementSessionPolicyMutationResponse:
+      type: object
+      additionalProperties: false
+      required: [data, policyVersion]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [managementSessionTtlHours]
+          properties:
+            managementSessionTtlHours:
+              type: integer
+              minimum: 1
+              maximum: 12
+        policyVersion:
           type: integer
           minimum: 1
     StaffMembershipSummary:

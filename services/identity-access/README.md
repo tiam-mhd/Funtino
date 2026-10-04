@@ -19,7 +19,7 @@
 - allow/deny override در سطح membership با scope/resource/انقضا؛ هر تغییر حساس زیر policy lock، با idempotency، audit append-only و outbox نسخه‌دار انجام می‌شود.
 - audit خواندنی، صفحه‌بندی‌شده و scopeدار؛ دسترسی موفق مدیریتی به فهرست کارکنان، دعوت‌ها، overrideها و خود audit نیز ثبت می‌شود. تلاش‌های authorization ردشده نیز audit می‌شوند؛ خواندن audit به step-up تازه‌ی MFA نیاز دارد.
 - idempotency key در هر actor/operation برای ۲۴ ساعت replay می‌شود؛ استفاده‌ی مجدد از همان کلید با body متفاوت `409` می‌دهد. request fingerprint با HMAC ذخیره می‌شود.
-- نشست ورود Gateway همان TTL فعلی ۳۰ روز را دارد. عملیات حساس و خواندن audit با step-up حداکثر ۳۰۰ثانیه‌ای مجاز است و IAM در هر درخواست حساس فعال‌بودن MFA و نسخه‌ی فعلی عامل را بازبینی می‌کند. شواهد MFA فقط از session ذخیره‌شده‌ی Gateway می‌آید، نه body مرورگر.
+- نشست کاربران دارای عضویت مدیریتی TTL مطلقی برابر تنظیم IAM از ۱ تا ۱۲ ساعت (پیش‌فرض ۱۲) دارد و از ورود بعدی اعمال می‌شود؛ مشتریان بدون عضویت مدیریتی TTL سی‌روزه را نگه می‌دارند. مدیر سراسری در هر login MFA می‌کند و proof او فقط تا پایان نشست Gateway معتبر است؛ برای سایر کارکنان step-up پنج‌دقیقه‌ای باقی است. IAM در هر درخواست فعال‌بودن MFA و نسخه‌ی عامل را بازبینی می‌کند و proof فقط از session سمت‌سرور Gateway می‌آید.
 - تغییر role، membership، invitation و override با policy version، audit before/after و Outbox اتمیک ثبت می‌شود. Outbox ممکن است حداقل‌یک‌بار ارسال شود؛ consumerها باید idempotent باشند.
 
 ## Bootstrap مدیر سراسری
@@ -31,9 +31,21 @@ Bootstrap endpoint عمومی ندارد و فقط با CLI آفلاین انج�
 3. role موقت فقط ۲۴ ساعت اعتبار دارد. کاربر وارد System Web شود، TOTP را enroll و recovery codeها را خارج از سامانه امن کند.
 4. اپراتور flag one-shot را فقط برای invocation نهایی تنظیم کند؛ finalize proof TOTP/recovery را بدون echo می‌گیرد، یک‌بارمصرف می‌کند و membership را به `system_admin` ارتقا می‌دهد: `pnpm --filter @funtino/identity-access run iam:bootstrap finalize <user-uuid> <operator-label> <audit-reason>`. دستور بدون `--` است تا `finalize` اولین آرگومان CLI باشد.
 
-`system_admin` همه‌ی permissionهای قابل‌واگذاری کاتالوگ به‌علاوه‌ی `organization.create` را در scope سراسری می‌گیرد؛ مجوز ساخت مجموعه عمداً غیرقابل‌واگذاری باقی می‌ماند. `system.access.bootstrap` و `system.access.impersonate` به نقش دائمی داده نمی‌شوند. اگر نقش قدیمی دقیقاً مجموعه‌ی permissionهای قابل‌واگذاری قبلی را داشته باشد، finalize با MFA تازه فقط `organization.create` را اضافه و تغییر را با audit/outbox ثبت می‌کند؛ وضعیت‌های ناسازگار fail-closed هستند. جزئیات در [ADR-0019](../../DOCS/decisions/0019-system-admin-organization-provisioning.md) آمده است.
+`system_admin` همه‌ی permissionهای قابل‌واگذاری کاتالوگ به‌علاوه‌ی `organization.create` و `system.session_policy.manage` را در scope سراسری می‌گیرد؛ این دو permission غیرقابل‌واگذاری‌اند. `system.access.bootstrap` و `system.access.impersonate` به نقش دائمی داده نمی‌شوند. نقش‌های قدیمی با یکی از مجموعه‌های دقیق شناخته‌شده، فقط پس از finalize و MFA تازه به مجموعه‌ی کامل نسخه‌ی جدید ارتقا می‌یابند و audit/outbox می‌نویسند؛ وضعیت‌های ناسازگار fail-closed هستند. جزئیات در [ADR-0019](../../DOCS/decisions/0019-system-admin-organization-provisioning.md) و [ADR-0020](../../DOCS/decisions/0020-admin-session-duration-and-system-admin-capabilities.md) آمده است.
 
 `system_admin` و `system_admin_bootstrap` از دعوت، API عادی و UI قابل تخصیص نیستند. Bootstrap و تغییر role آن audit system-actor، policy version و outbox تولید می‌کند؛ membership موقت منقضی‌شده از authorization و عملیات MFA کنار گذاشته می‌شود و پیش از prepare مجدد به‌طور ممیزی‌شده revoke می‌شود. `IDENTITY_ACCESS_BOOTSTRAP_ENABLED` را در سرویس دائمی تنظیم نکنید؛ آن را فقط به فرایند CLI تعاملیِ one-shot بدهید و پس از هر اجرا حذف کنید. Repository مستقل IAM provision شده است؛ migration schema در هر startup طبق ADR-0015 خودکار است، اما تأیید backup/restore، keyring و runbook عملیاتی همچنان پیش‌نیاز پایلوت و بازکردن writeها هستند.
+
+### تنظیم مدت نشست مدیریتی
+
+`policy_state.management_session_ttl_hours` با migration نسخه‌دار پیش‌فرض ۱۲ ساعت می‌گیرد. مدیر دارای `system.session_policy.manage` می‌تواند در System Web مدت ۱ تا ۱۲ ساعت را انتخاب کند؛ تغییر از ورود بعدی کارکنان اعمال می‌شود و نشست‌های فعال و نشست مشتریان تغییر نمی‌کنند. دسترسی خواندن و تغییر تنظیم ثبت audit می‌شود؛ تغییر موفق با policy version و identity access Outbox commit می‌شود.
+
+برای مدیر فعلی که دقیقاً یکی از دو مجموعه‌ی permission قدیمی شناخته‌شده را دارد، بعد از انتشار از terminal تعاملی Backend، فقط یک‌بار finalize را با TOTP/recovery اجرا کنید. بدون جداکننده‌ی `--`:
+
+`IDENTITY_ACCESS_BOOTSTRAP_ENABLED=true pnpm --filter @funtino/identity-access run iam:bootstrap finalize <user-uuid> <operator-label> <audit-reason>`
+
+CLI یک `--` ابتدایی را هم برای سازگاری با wrapperهای pnpm نادیده می‌گیرد؛ مقدار bootstrap فقط در همان invocation باشد. هیچ خروجی command نباید شامل code یا secret باشد.
+
+پس از finalize، برای بازکردن mutationهای عادی IAM باید گیت production را در محیط Runflare به‌صورت دستی و در پنجره‌ی rollout مجاز فعال کرد. این دو عمل جدا هستند: finalize فقط role را با MFA ممیزی‌شده ارتقا می‌دهد و گیت همچنان default-off می‌ماند.
 
 ## بازکردن writeهای مدیریتی در production
 

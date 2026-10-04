@@ -63,6 +63,13 @@ const accessAuditSnapshotSchema = z.discriminatedUnion('kind', [
       revokedAt: z.string().datetime({ offset: true }).nullable(),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal('system_setting'),
+      id: z.string().min(1).max(160),
+      managementSessionTtlHours: z.number().int().min(1).max(12),
+    })
+    .strict(),
 ]);
 
 type AccessAuditSnapshot = Zod.infer<typeof accessAuditSnapshotSchema>;
@@ -82,7 +89,7 @@ export type RecordCommittedAccessChange = ChangePayload & {
 export type RecordDeniedAccessAttempt = {
   actorUserId: string;
   action: string;
-  targetType: 'role' | 'membership' | 'permission_override';
+  targetType: 'role' | 'membership' | 'permission_override' | 'system_setting';
   targetId: string;
   scope: AccessScope;
   reason: string;
@@ -90,12 +97,13 @@ export type RecordDeniedAccessAttempt = {
 };
 
 export type RecordSensitiveAccess = Omit<RecordDeniedAccessAttempt, 'reason' | 'targetType'> & {
-  targetType: 'role' | 'membership' | 'permission_override' | 'audit_log';
+  targetType: 'role' | 'membership' | 'permission_override' | 'audit_log' | 'system_setting';
   reason: string;
   policyVersion: number;
 };
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const targetIdPattern = /^[a-z0-9][a-z0-9._-]{0,159}$/i;
 
 function parseSnapshot(
   snapshot: AccessAuditSnapshot | null | undefined,
@@ -131,7 +139,13 @@ function assertValidInput(input: RecordCommittedAccessChange): {
     ? 'role'
     : input.changeType.startsWith('membership.')
       ? 'membership'
-      : 'permission_override';
+      : input.changeType.startsWith('permission_override.')
+        ? 'permission_override'
+        : 'system_setting';
+  const targetIdValid =
+    expectedTargetType === 'system_setting'
+      ? targetIdPattern.test(input.targetId)
+      : uuidPattern.test(input.targetId);
   const actorType = input.actorType ?? 'user';
   const actorValid =
     (actorType === 'user' && input.actorUserId !== null && uuidPattern.test(input.actorUserId)) ||
@@ -147,6 +161,7 @@ function assertValidInput(input: RecordCommittedAccessChange): {
     !uuidPattern.test(input.correlationId) ||
     scopeIds.some((id) => !uuidPattern.test(id)) ||
     input.targetType !== expectedTargetType ||
+    !targetIdValid ||
     input.reason.trim().length < 8 ||
     input.reason.trim().length > 500
   ) {
@@ -166,17 +181,22 @@ export class AccessMutationJournalService {
     tx: Prisma.TransactionClient,
     input: RecordSensitiveAccess,
   ): Promise<{ auditId: string }> {
-    const scopeIds = input.scope.type === 'global'
-      ? []
-      : input.scope.type === 'organization'
-        ? [input.scope.organizationId]
-        : [input.scope.organizationId, input.scope.branchId];
+    const scopeIds =
+      input.scope.type === 'global'
+        ? []
+        : input.scope.type === 'organization'
+          ? [input.scope.organizationId]
+          : [input.scope.organizationId, input.scope.branchId];
     if (
-      !uuidPattern.test(input.actorUserId) || !uuidPattern.test(input.correlationId) ||
-      !uuidPattern.test(input.targetId) || scopeIds.some((id) => !uuidPattern.test(id)) ||
+      !uuidPattern.test(input.actorUserId) ||
+      !uuidPattern.test(input.correlationId) ||
+      !targetIdPattern.test(input.targetId) ||
+      scopeIds.some((id) => !uuidPattern.test(id)) ||
       !/^[a-z][a-z0-9._-]{1,119}$/.test(input.action) ||
-      !Number.isSafeInteger(input.policyVersion) || input.policyVersion < 1 ||
-      input.reason.trim().length < 8 || input.reason.trim().length > 500
+      !Number.isSafeInteger(input.policyVersion) ||
+      input.policyVersion < 1 ||
+      input.reason.trim().length < 8 ||
+      input.reason.trim().length > 500
     ) {
       throw new BadRequestException('Invalid sensitive access audit context.');
     }
@@ -187,10 +207,16 @@ export class AccessMutationJournalService {
     };
     const audit = await tx.accessAuditLog.create({
       data: {
-        actorType: 'user', actorUserId: input.actorUserId, action: input.action,
-        targetType: input.targetType, targetId: input.targetId, ...scopeColumns,
-        reason: input.reason.trim(), policyVersion: input.policyVersion,
-        correlationId: input.correlationId, outcome: 'succeeded',
+        actorType: 'user',
+        actorUserId: input.actorUserId,
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        ...scopeColumns,
+        reason: input.reason.trim(),
+        policyVersion: input.policyVersion,
+        correlationId: input.correlationId,
+        outcome: 'succeeded',
       },
       select: { id: true },
     });
@@ -280,7 +306,7 @@ export class AccessMutationJournalService {
     if (
       !uuidPattern.test(input.actorUserId) ||
       !uuidPattern.test(input.correlationId) ||
-      !uuidPattern.test(input.targetId) ||
+      !targetIdPattern.test(input.targetId) ||
       scopeIds.some((id) => !uuidPattern.test(id)) ||
       !/^[a-z][a-z0-9._-]{1,119}$/.test(input.action) ||
       input.reason.trim().length < 8 ||

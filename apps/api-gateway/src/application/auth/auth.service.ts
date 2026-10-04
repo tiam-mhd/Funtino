@@ -101,7 +101,13 @@ export class AuthService {
     await this.store.consumeOtpChallenge(challenge.id);
     const token = generateOpaqueSecret(32);
     const mfaLoginDeadlineAt = mfaRequired ? Date.now() + SYSTEM_ADMIN_MFA_LOGIN_WINDOW_MS : null;
-    const session = await this.store.saveSession(user.id, hashSecret(token), SESSION_TTL_MS, {
+    const hasActiveManagementMembership = access.memberships.some(
+      (membership) => membership.status === 'active' && membership.role.status === 'active',
+    );
+    const sessionTtlMs = hasActiveManagementMembership
+      ? access.managementSessionTtlHours * 60 * 60 * 1000
+      : SESSION_TTL_MS;
+    const session = await this.store.saveSession(user.id, hashSecret(token), sessionTtlMs, {
       isSystemAdmin: mfaRequired,
       mfaLoginDeadlineAt,
     });

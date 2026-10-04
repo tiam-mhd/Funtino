@@ -200,9 +200,10 @@ export const identityPolicyChangedPayloadSchema = z
       'membership.invitation_expired',
       'permission_override.granted',
       'permission_override.revoked',
+      'system.session_policy.updated',
     ]),
-    targetType: z.enum(['role', 'membership', 'permission_override']),
-    targetId: z.string().uuid(),
+    targetType: z.enum(['role', 'membership', 'permission_override', 'system_setting']),
+    targetId: z.string().min(1).max(160),
   })
   .strict();
 

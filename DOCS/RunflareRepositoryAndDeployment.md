@@ -60,6 +60,8 @@ PostgreSQL، RabbitMQ و Redis همچنان itemهای مستقل‌اند. sche
 
 Migrationهای خارج از این پنج Worker با job/فرمان نسخه‌دار مستقل و پیش از rollout app اجرا می‌شوند. deployment bundle به‌صورت ضمنی database migration نمی‌کند. ترتیب additive/expand-contract و rollback schema باید در release ثبت شود.
 
+تغییر سیاست نشست، migration افزایشی `identity_access.policy_state.management_session_ttl_hours` را به Worker ‏Identity & Access اضافه می‌کند؛ طبق ADR-0015 هنگام startup همان Worker اعمال می‌شود. API Gateway و System Web باید با هم از snapshotهای backend و frontend منتشر شوند. پس از انتشار، role مدیر فعلی با CLI یک‌باره و TOTP به permission جدید مجهز می‌شود و `IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED=true` فقط در پنجره‌ی rollout مجاز، روی process مربوط به IAM در item بک‌اند تنظیم می‌شود؛ این گیت در image یا source باز نمی‌شود.
+
 ## اثر تغییر و انتشار
 
 | تغییر source                                          | Runtimeهای لازم                                                           |

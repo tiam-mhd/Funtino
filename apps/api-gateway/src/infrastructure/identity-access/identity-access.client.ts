@@ -34,6 +34,11 @@ const accessContextSchema = z.object({
   data: z.array(membershipSchema),
   policyVersion: z.number().int().positive(),
   catalogVersion: z.number().int().positive(),
+  managementSessionTtlHours: z.number().int().min(1).max(12).default(12),
+});
+const managementSessionPolicySchema = z.object({
+  managementSessionTtlHours: z.number().int().min(1).max(12),
+  policyVersion: z.number().int().positive(),
 });
 const permissionCatalogSchema = z.object({
   catalogVersion: z.number().int().positive(),
@@ -54,6 +59,9 @@ const roleListSchema = z.object({
 const policyVersionSchema = z.number().int().positive();
 const mutationResultSchema = <T extends ZodType>(item: T) =>
   z.object({ data: item, policyVersion: policyVersionSchema });
+const managementSessionPolicyMutationSchema = mutationResultSchema(
+  z.object({ managementSessionTtlHours: z.number().int().min(1).max(12) }),
+);
 const roleMutationSchema = mutationResultSchema(roleSummarySchema);
 const staffMembershipSchema = z.object({
   membershipId: uuidSchema,
@@ -220,6 +228,7 @@ export type OperationsAccessContext = {
   }>;
   policyVersion: number;
   catalogVersion: number;
+  managementSessionTtlHours: number;
 };
 
 export type MfaProof = { method: 'totp' | 'recovery'; code: string };
@@ -257,7 +266,38 @@ export class IdentityAccessClient {
       })),
       policyVersion: parsed.policyVersion,
       catalogVersion: parsed.catalogVersion,
+      managementSessionTtlHours: parsed.managementSessionTtlHours ?? 12,
     };
+  }
+
+  async managementSessionPolicy(userId: string, session: Session, correlationId: string) {
+    return this.parse(
+      managementSessionPolicySchema,
+      await this.request('/internal/v1/system/management-session-policy', userId, correlationId, {
+        session,
+      }),
+    );
+  }
+
+  async updateManagementSessionPolicy(
+    userId: string,
+    session: Session,
+    managementSessionTtlHours: number,
+    reason: string,
+    expectedVersion: number,
+    correlationId: string,
+    idempotencyKey: string,
+  ) {
+    return this.parse(
+      managementSessionPolicyMutationSchema,
+      await this.request('/internal/v1/system/management-session-policy', userId, correlationId, {
+        method: 'PUT',
+        body: { managementSessionTtlHours, reason },
+        expectedVersion,
+        idempotencyKey,
+        session,
+      }),
+    );
   }
 
   async permissionCatalog(correlationId: string) {
@@ -833,6 +873,18 @@ export class IdentityAccessClient {
     }
 
     if (!response.ok) {
+      if (response.status === 503) {
+        const body = (await response
+          .clone()
+          .json()
+          .catch(() => null)) as { error?: { code?: unknown } } | null;
+        if (body?.error?.code === 'IAM_MANAGEMENT_WRITES_DISABLED') {
+          throw new DomainError(
+            'IAM_MANAGEMENT_WRITES_DISABLED',
+            'مدیریت دسترسی‌ها در محیط production غیرفعال است؛ گیت مدیریت IAM باید در پنل استقرار فعال شود.',
+          );
+        }
+      }
       if (response.status === 400) {
         throw new DomainError('VALIDATION_ERROR', 'درخواست یا کد تأیید معتبر نیست.');
       }

@@ -30,6 +30,15 @@ const proofSchema = z.discriminatedUnion('method', [
   z.object({ method: z.literal('recovery'), code: z.string().min(27).max(35) }).strict(),
 ]);
 
+function bindMfaProofToSystemAdminSession<T extends { validUntil: string }>(
+  result: T,
+  session: { isSystemAdmin: boolean; expiresAt: number },
+): T {
+  return session.isSystemAdmin
+    ? { ...result, validUntil: new Date(session.expiresAt).toISOString() }
+    : result;
+}
+
 @Controller('api/v1/operations/mfa')
 @UseGuards(SessionGuard)
 export class OperationsMfaController {
@@ -89,8 +98,9 @@ export class OperationsMfaController {
       requestCorrelationId(request),
       body.code,
     );
-    await this.store.updateSessionMfa(session.id, result);
-    return success(result, request);
+    const sessionBoundResult = bindMfaProofToSystemAdminSession(result, session);
+    await this.store.updateSessionMfa(session.id, sessionBoundResult);
+    return success(sessionBoundResult, request);
   }
 
   @Post('step-up/verify')
@@ -110,8 +120,9 @@ export class OperationsMfaController {
       requestCorrelationId(request),
       body,
     );
-    await this.store.updateSessionMfa(session.id, result);
-    return success(result, request);
+    const sessionBoundResult = bindMfaProofToSystemAdminSession(result, session);
+    await this.store.updateSessionMfa(session.id, sessionBoundResult);
+    return success(sessionBoundResult, request);
   }
 
   @Post('recovery-codes/regenerate')
@@ -131,8 +142,9 @@ export class OperationsMfaController {
       requestCorrelationId(request),
       body,
     );
-    await this.store.updateSessionMfa(session.id, result);
-    return success(result, request);
+    const sessionBoundResult = bindMfaProofToSystemAdminSession(result, session);
+    await this.store.updateSessionMfa(session.id, sessionBoundResult);
+    return success(sessionBoundResult, request);
   }
 
   @Post('disable')

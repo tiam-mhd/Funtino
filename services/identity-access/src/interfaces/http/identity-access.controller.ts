@@ -83,6 +83,10 @@ const auditQuerySchema = z
     if (type !== 'branch' && value.branchId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Branch identifier requires branch scope.' });
   });
 const reasonSchema = z.object({ reason: z.string().trim().min(8).max(500) }).strict();
+const managementSessionPolicySchema = z.object({
+  managementSessionTtlHours: z.number().int().min(1).max(12),
+  reason: z.string().trim().min(8).max(500),
+}).strict();
 const roleCreateSchema = z.object({
   name: z.string().trim().min(2).max(80), scope: accessScopeSchema,
   permissionKeys: z.array(z.string().min(1).max(120)).min(1).max(100).refine((items) => new Set(items).size === items.length),
@@ -226,6 +230,30 @@ export class IdentityAccessController {
     const actorUserId = uuid.safeParse(rawActorUserId);
     if (!actorUserId.success) throw new UnauthorizedException('Actor context is missing.');
     return this.accessPolicy.currentMemberships(actorUserId.data);
+  }
+
+  @Get('system/management-session-policy')
+  managementSessionPolicy(
+    @Headers('x-funtino-actor-user-id') actor: string | undefined,
+    @Headers('x-correlation-id') correlation: string | undefined,
+  ) {
+    return this.accessPolicy.managementSessionPolicy(
+      this.actor(actor),
+      this.correlation(correlation),
+    );
+  }
+
+  @Put('system/management-session-policy')
+  updateManagementSessionPolicy(
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Body(new ZodValidationPipe(managementSessionPolicySchema))
+    body: z.infer<typeof managementSessionPolicySchema>,
+  ) {
+    return this.accessManagement.updateManagementSessionPolicy(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      body,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Get('roles')

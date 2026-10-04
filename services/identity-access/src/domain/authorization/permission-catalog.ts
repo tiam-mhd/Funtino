@@ -1,4 +1,4 @@
-export const permissionCatalogVersion = 1;
+export const permissionCatalogVersion = 2;
 
 export const permissionCatalog = [
   { key: 'organization.create', scopes: ['global'], delegable: false, stepUp: true },
@@ -140,6 +140,7 @@ export const permissionCatalog = [
   { key: 'system.access.bootstrap', scopes: ['global'], delegable: false, stepUp: true },
   { key: 'system.access.impersonate', scopes: ['global'], delegable: false, stepUp: true },
   { key: 'system.health.read', scopes: ['global'], delegable: true, stepUp: false },
+  { key: 'system.session_policy.manage', scopes: ['global'], delegable: false, stepUp: false },
 ] as const;
 
 export type PermissionKey = (typeof permissionCatalog)[number]['key'];

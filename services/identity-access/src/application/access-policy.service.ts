@@ -21,7 +21,7 @@ import {
   isBootstrapMembershipExpired,
   isEffectiveActiveMembership,
 } from '../domain/authorization/bootstrap-membership.js';
-import { MFA_STEP_UP_TTL_SECONDS } from '../domain/authorization/mfa-policy.js';
+import { mfaFreshnessSecondsForContexts } from '../domain/authorization/mfa-policy.js';
 import { templatesForScope } from '../domain/authorization/role-templates.js';
 import {
   AccessMutationJournalService,
@@ -150,23 +150,24 @@ export class AccessPolicyService {
       const policyVersion = this.requirePolicyVersion(policy?.version);
       return {
         data: memberships
-          .filter((membership) => !isBootstrapMembershipExpired(
-            membership.role.name,
-            membership.createdAt,
-          ))
+          .filter(
+            (membership) =>
+              !isBootstrapMembershipExpired(membership.role.name, membership.createdAt),
+          )
           .map((membership) => ({
-          id: membership.id,
-          status: membership.status,
-          scope: scopeFromColumns(
-            membership.scopeType,
-            membership.organizationId,
-            membership.branchId,
-          ),
-          role: summarizeRole(membership.role),
-          version: membership.version,
-        })),
+            id: membership.id,
+            status: membership.status,
+            scope: scopeFromColumns(
+              membership.scopeType,
+              membership.organizationId,
+              membership.branchId,
+            ),
+            role: summarizeRole(membership.role),
+            version: membership.version,
+          })),
         policyVersion,
         catalogVersion: permissionCatalogVersion,
+        managementSessionTtlHours: policy?.managementSessionTtlHours ?? 12,
       };
     });
   }
@@ -179,13 +180,54 @@ export class AccessPolicyService {
     return this.inSnapshot(async (tx) => {
       const { contexts, policyVersion } = await this.loadContexts(tx, userId, stepUp);
       const decision = evaluateAuthorizationAcrossMemberships(contexts, request, policyVersion, {
-        mfaFreshnessSeconds: MFA_STEP_UP_TTL_SECONDS,
+        mfaFreshnessSeconds: mfaFreshnessSecondsForContexts(contexts),
       });
       return {
         allowed: decision.allowed,
         reason: decision.reason,
         policyVersion,
         catalogVersion: permissionCatalogVersion,
+      };
+    });
+  }
+
+  async managementSessionPolicy(userId: string, correlationId: string) {
+    return this.inSnapshot(async (tx) => {
+      const [{ contexts, policyVersion }, policy] = await Promise.all([
+        this.loadContexts(tx, userId),
+        tx.policyState.findUnique({ where: { id: 1 } }),
+      ]);
+      if (!policy) throw new ServiceUnavailableException('Access policy state is not initialized.');
+      const decision = evaluateAuthorizationAcrossMemberships(
+        contexts,
+        { permission: 'system.session_policy.manage', scope: { type: 'global' } },
+        policyVersion,
+        { mfaFreshnessSeconds: mfaFreshnessSecondsForContexts(contexts) },
+      );
+      if (!decision.allowed) {
+        throw new AccessPolicyDeniedError({
+          actorUserId: userId,
+          action: 'system.session_policy.read',
+          targetType: 'system_setting',
+          targetId: 'management_session_policy',
+          scope: { type: 'global' },
+          reason: 'Actor lacked system.session_policy.manage permission.',
+          correlationId,
+        });
+      }
+      await this.journal.recordSensitiveAccess(tx, {
+        actorUserId: userId,
+        action: 'system.session_policy.read',
+        targetType: 'system_setting',
+        targetId: 'management_session_policy',
+        scope: { type: 'global' },
+        reason: 'System administrator viewed the management session policy.',
+        correlationId,
+        policyVersion,
+      });
+      return {
+        managementSessionTtlHours: policy.managementSessionTtlHours,
+        policyVersion,
       };
     });
   }

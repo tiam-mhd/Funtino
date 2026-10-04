@@ -90,7 +90,10 @@ function validateArgs(command: string | undefined, userId: string | undefined, o
 }
 
 async function main(): Promise<void> {
-  const [, , command, userId, operatorLabel, ...reasonParts] = process.argv;
+  const [, , ...rawArgs] = process.argv;
+  // pnpm versions differ in whether they preserve the conventional script separator.
+  const [command, userId, operatorLabel, ...reasonParts] =
+    rawArgs[0] === '--' ? rawArgs.slice(1) : rawArgs;
   const reason = reasonParts.join(' ');
   validateArgs(command, userId, operatorLabel, reason);
   if (!isBootstrapCliEnabled()) {

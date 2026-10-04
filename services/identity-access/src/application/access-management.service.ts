@@ -19,7 +19,11 @@ import {
 } from '../domain/authorization/authorization-evaluator.js';
 import { getPermissionDefinition } from '../domain/authorization/permission-catalog.js';
 import { isEffectiveActiveMembership } from '../domain/authorization/bootstrap-membership.js';
-import { MFA_STEP_UP_TTL_SECONDS } from '../domain/authorization/mfa-policy.js';
+import {
+  MFA_STEP_UP_TTL_SECONDS,
+  SYSTEM_ADMIN_MFA_SESSION_MAX_SECONDS,
+  mfaFreshnessSecondsForContexts,
+} from '../domain/authorization/mfa-policy.js';
 import { AccessManagementCryptoService } from './access-management-crypto.service.js';
 import { AccessMutationJournalService } from './access-mutation-journal.service.js';
 import { areManagementWritesEnabled } from './management-write-gate.js';
@@ -31,7 +35,6 @@ import { PrismaService } from '../infrastructure/persistence/prisma/prisma.servi
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
-const MFA_FRESHNESS_SECONDS = MFA_STEP_UP_TTL_SECONDS;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type TrustedStepUp = {
@@ -93,12 +96,17 @@ type AccessAuditSnapshot =
       startsAt: string;
       expiresAt: string | null;
       revokedAt: string | null;
+    }
+  | {
+      kind: 'system_setting';
+      id: string;
+      managementSessionTtlHours: number;
     };
 
 type DeniedAuditContext = {
   actorUserId: string;
   action: string;
-  targetType: 'role' | 'membership' | 'permission_override';
+  targetType: 'role' | 'membership' | 'permission_override' | 'system_setting';
   targetId: string;
   scope: AccessScope;
   correlationId: string;
@@ -242,6 +250,86 @@ export class AccessManagementService {
     @Inject(ORGANIZATION_SCOPE_OWNER)
     private readonly organizationScopeOwner: OrganizationScopeOwner,
   ) {}
+
+  async updateManagementSessionPolicy(
+    actorUserId: string,
+    input: { managementSessionTtlHours: number; reason: string },
+    meta: AccessCommandMeta,
+  ) {
+    const targetId = 'management_session_policy';
+    return this.runMutation(
+      actorUserId,
+      'system.session-policy.update',
+      meta,
+      input,
+      async (tx, contexts, policyVersion, replay) => {
+        const audit: DeniedAuditTarget = {
+          action: 'system.session_policy.update',
+          targetType: 'system_setting',
+          targetId,
+          scope: { type: 'global' },
+          correlationId: meta.correlationId,
+        };
+        this.requirePermissions(
+          contexts,
+          actorUserId,
+          policyVersion,
+          { type: 'global' },
+          ['system.session_policy.manage'],
+          audit,
+        );
+        if (replay) return replay;
+        this.requireExpectedVersion(policyVersion, meta.expectedVersion, 'Access policy');
+        if (
+          !Number.isSafeInteger(input.managementSessionTtlHours) ||
+          input.managementSessionTtlHours < 1 ||
+          input.managementSessionTtlHours > 12 ||
+          input.reason.trim().length < 8 ||
+          input.reason.trim().length > 500
+        ) {
+          throw new BadRequestException('Management session policy values are invalid.');
+        }
+
+        const current = await tx.policyState.findUnique({ where: { id: 1 } });
+        if (!current) {
+          throw new ServiceUnavailableException('Access policy state is not initialized.');
+        }
+        if (current.managementSessionTtlHours === input.managementSessionTtlHours) {
+          return {
+            data: { managementSessionTtlHours: current.managementSessionTtlHours },
+            policyVersion,
+          };
+        }
+        const updated = await tx.policyState.update({
+          where: { id: 1 },
+          data: { managementSessionTtlHours: input.managementSessionTtlHours },
+        });
+        const result = await this.journal.recordCommittedChange(tx, {
+          actorUserId,
+          correlationId: meta.correlationId,
+          changeType: 'system.session_policy.updated',
+          targetType: 'system_setting',
+          targetId,
+          scope: { type: 'global' },
+          reason: input.reason,
+          beforeState: {
+            kind: 'system_setting',
+            id: targetId,
+            managementSessionTtlHours: current.managementSessionTtlHours,
+          },
+          afterState: {
+            kind: 'system_setting',
+            id: targetId,
+            managementSessionTtlHours: updated.managementSessionTtlHours,
+          },
+        });
+        return {
+          data: { managementSessionTtlHours: updated.managementSessionTtlHours },
+          policyVersion: result.policyVersion,
+        };
+      },
+    );
+  }
 
   async createRole(
     actorUserId: string,
@@ -867,7 +955,13 @@ export class AccessManagementService {
     this.validateCommandMeta(actorUserId, operation, meta);
     if (!areManagementWritesEnabled()) {
       await this.recordManagementWriteBlocked(actorUserId, operation, meta.correlationId);
-      throw new ServiceUnavailableException('Administrative IAM writes are disabled by runtime policy.');
+      throw new ServiceUnavailableException({
+        status: 'error',
+        error: {
+          code: 'IAM_MANAGEMENT_WRITES_DISABLED',
+          message: 'Administrative IAM writes are disabled by runtime policy.',
+        },
+      });
     }
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -986,6 +1080,26 @@ export class AccessManagementService {
     if (!policy || !Number.isSafeInteger(policy.version) || policy.version < 1) {
       throw new ServiceUnavailableException('Access policy state is not initialized.');
     }
+    const systemAdminMfaFreshness = memberships.some(
+      (row) =>
+        row.status === 'active' &&
+        row.scopeType === 'global' &&
+        row.role.scopeType === 'global' &&
+        row.role.status === 'active' &&
+        row.role.name === 'system_admin' &&
+        row.role.systemManaged &&
+        row.role.permissions.some(
+          ({ permissionKey }) => permissionKey === 'system.session_policy.manage',
+        ) &&
+        isEffectiveActiveMembership({
+          status: row.status,
+          createdAt: row.createdAt,
+          roleName: row.role.name,
+        }),
+    );
+    const mfaFreshnessSeconds = systemAdminMfaFreshness
+      ? SYSTEM_ADMIN_MFA_SESSION_MAX_SECONDS
+      : MFA_STEP_UP_TTL_SECONDS;
     let verifiedAt: Date | null = null;
     if (
       stepUp && credential?.status === 'active' && credential.version === stepUp.factorVersion &&
@@ -993,7 +1107,7 @@ export class AccessManagementService {
     ) {
       const parsed = new Date(stepUp.verifiedAt);
       const age = Date.now() - parsed.getTime();
-      if (Number.isFinite(age) && age >= 0 && age <= MFA_FRESHNESS_SECONDS * 1000) verifiedAt = parsed;
+      if (Number.isFinite(age) && age >= 0 && age <= mfaFreshnessSeconds * 1000) verifiedAt = parsed;
     }
     return {
       policyVersion: policy.version,
@@ -1044,7 +1158,7 @@ export class AccessManagementService {
   ): void {
     for (const permission of permissions) {
       const decision = evaluateAuthorizationAcrossMemberships(
-        contexts, { permission, scope }, policyVersion, { mfaFreshnessSeconds: MFA_FRESHNESS_SECONDS },
+        contexts, { permission, scope }, policyVersion, { mfaFreshnessSeconds: mfaFreshnessSecondsForContexts(contexts) },
       );
       if (!decision.allowed) throw new AccessDeniedError({ ...audit, actorUserId });
     }
@@ -1055,7 +1169,7 @@ export class AccessManagementService {
     permissions: string[], scope: AccessScope, audit: DeniedAuditTarget,
   ): void {
     const decision = evaluateDelegationAcrossMemberships(
-      contexts, permissions, scope, policyVersion, { mfaFreshnessSeconds: MFA_FRESHNESS_SECONDS },
+      contexts, permissions, scope, policyVersion, { mfaFreshnessSeconds: mfaFreshnessSecondsForContexts(contexts) },
     );
     if (!decision.allowed) throw new AccessDeniedError({ ...audit, actorUserId });
   }

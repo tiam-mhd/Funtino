@@ -285,6 +285,54 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '503':
           description: Private telemetry source is not configured or is temporarily unavailable.
+  /api/v1/system/security/session-policy:
+    get:
+      x-funtino-availability: implemented
+      operationId: readManagementSessionPolicy
+      description: Requires an active session and global system.session_policy.manage permission. Returns the IAM-owned absolute lifetime used for subsequent management logins.
+      responses:
+        '200':
+          description: Current management session lifetime and policy version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemManagementSessionPolicySuccess'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          description: Identity & Access policy data is unavailable.
+    put:
+      x-funtino-availability: implemented
+      operationId: updateManagementSessionPolicy
+      description: Requires an active session, global system.session_policy.manage permission, a trusted browser origin, a reason, an idempotency key, and the current policy version. The change applies to future management logins and is audited by IAM.
+      parameters:
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchVersion'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemManagementSessionPolicyUpdate'
+      responses:
+        '200':
+          description: The future management session lifetime was saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemManagementSessionPolicySuccess'
+        '400':
+          description: Duration, reason, or command metadata is invalid.
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Policy version is stale; reload settings before retrying.
+        '503':
+          description: IAM management writes are disabled or the IAM policy store is unavailable.
   /api/v1/system/organizations:
     get:
       x-funtino-availability: implemented
@@ -1920,6 +1968,28 @@ components:
         status: { type: string, const: success }
         data: { $ref: '#/components/schemas/SystemHealthSnapshot' }
         meta: { $ref: '#/components/schemas/ResponseMeta' }
+    SystemManagementSessionPolicy:
+      type: object
+      additionalProperties: false
+      required: [managementSessionTtlHours, policyVersion]
+      properties:
+        managementSessionTtlHours: { type: integer, minimum: 1, maximum: 12 }
+        policyVersion: { type: integer, minimum: 1 }
+    SystemManagementSessionPolicySuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data: { $ref: '#/components/schemas/SystemManagementSessionPolicy' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    SystemManagementSessionPolicyUpdate:
+      type: object
+      additionalProperties: false
+      required: [managementSessionTtlHours, reason]
+      properties:
+        managementSessionTtlHours: { type: integer, minimum: 1, maximum: 12 }
+        reason: { type: string, minLength: 8, maxLength: 500 }
     SystemResourceStatus:
       type: string
       enum: [active, suspended, archived]

@@ -53,7 +53,11 @@ export class AuthController {
       ...body,
       correlationId: requestCorrelationId(request),
     });
-    reply.setCookie(SESSION_COOKIE, result.token, sessionCookieOptions());
+    reply.setCookie(
+      SESSION_COOKIE,
+      result.token,
+      sessionCookieOptions(process.env, result.expiresAt),
+    );
     return success(
       { user: result.user, expiresAt: result.expiresAt, mfaRequired: result.mfaRequired },
       request,

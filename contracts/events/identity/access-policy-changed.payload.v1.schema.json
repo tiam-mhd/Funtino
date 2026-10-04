@@ -19,11 +19,12 @@
         "membership.revoked",
         "membership.invitation_expired",
         "permission_override.granted",
-        "permission_override.revoked"
+        "permission_override.revoked",
+        "system.session_policy.updated"
       ]
     },
-    "targetType": { "enum": ["role", "membership", "permission_override"] },
-    "targetId": { "type": "string", "format": "uuid" }
+    "targetType": { "enum": ["role", "membership", "permission_override", "system_setting"] },
+    "targetId": { "type": "string", "minLength": 1, "maxLength": 160 }
   },
   "additionalProperties": false
 }
