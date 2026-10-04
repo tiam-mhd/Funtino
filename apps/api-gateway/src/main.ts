@@ -6,9 +6,14 @@ import multipart from '@fastify/multipart';
 import { AppModule } from './app.module.js';
 import { ApiExceptionFilter } from './interfaces/http/api-exception.filter.js';
 import { requestContextMiddleware } from './interfaces/http/request-context.middleware.js';
-import { installHttpTelemetry } from '@funtino/backend-core';
+import {
+  installHttpRequestContext,
+  installHttpTelemetry,
+  installUncaughtExceptionDiagnostics,
+} from '@funtino/backend-core';
 
 async function bootstrap(): Promise<void> {
+  installUncaughtExceptionDiagnostics('api-gateway');
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ logger: false, bodyLimit: 2_500_000 }),
@@ -32,7 +37,10 @@ async function bootstrap(): Promise<void> {
       'X-Requested-With',
       'Idempotency-Key',
       'If-Match',
+      'X-Request-Id',
+      'X-Correlation-Id',
     ],
+    exposedHeaders: ['X-Request-Id', 'X-Correlation-Id'],
   });
   app
     .getHttpAdapter()
@@ -53,6 +61,7 @@ async function bootstrap(): Promise<void> {
     service: 'api-gateway',
     tokenEnvironmentVariable: 'API_METRICS_TOKEN',
   });
+  installHttpRequestContext(app, 'api-gateway');
   await app.listen({ port, host: '0.0.0.0' });
   console.info(
     JSON.stringify({

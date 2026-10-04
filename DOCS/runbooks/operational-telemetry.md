@@ -31,6 +31,27 @@ This runbook covers the source-controlled Prometheus, Grafana and Alertmanager s
 4. If a deployment is the cause, redeploy the last known-good image only after confirming the current schema remains backward-compatible. Do not reverse a forward-only migration by hand.
 5. Reconcile the issue, then tune the initial 5%/1-second alert candidates with Operations; they are not approved SLOs.
 
+## Diagnose one failed request across backend services
+
+1. From `http.request.complete` or the client response, copy the `correlationId`. Use `requestId` only to locate that single HTTP hop; every outgoing request gets its own request ID.
+2. Search all backend logs for the same `correlationId`. The Gateway records `http.request.exception`; outgoing Node `fetch` records `dependency.http.completed` or `dependency.http.failed`; invalid JSON responses add `dependency.response.json_failed`; downstream services record their own request and exception with that correlation ID.
+3. In `dependency.http.failed`, inspect `dependencyHost`, `dependencyPort`, `method`, `durationMs`, `error.type`, cause codes, and `origin`. In `dependency.http.completed`, inspect `status` and `outcome`. A returned 5xx means the target replied; a transport error means the HTTP request did not receive a usable response.
+4. In `http.request.exception`, inspect `component`, `stage`, `status`, `origin`, `error.type`, `error.code`, `error.causes`, `error.frames` and any safe database fields such as `sqlState`, `modelName` or `table`. Search downstream by `correlationId` to find the original exception.
+5. If the client has a dependency event but the target has no request record, investigate DNS, TLS, port, route and network reachability. If both sides logged the same correlation ID, start from the target's exception and follow its causes/frames back to the Gateway response.
+6. Keep `dependencyHost` and `dependencyPort` inside private operations channels. Never paste environment variables, request/response bodies, cookies, authorization headers, OTPs or provider credentials into a ticket.
+
+These records omit raw exception messages and bodies by design. Use the type/code, cause chain, stage and source frames to identify the failing boundary without disclosing sensitive input.
+
+## Database readiness, background work, and process failures
+
+1. For a readiness `503`, search for `service.readiness.failed` using the same `correlationId`. Check `service`, `component`, `stage`, and `dependency`; `configurationKeys` names missing or invalid settings without recording their values. A database failure includes safe Prisma/PostgreSQL codes and table/model metadata where available.
+2. For event delivery, search `outbox.delivery.batch_failed`, `outbox.batch_failed`, and `outbox.envelope.invalid`. These records identify whether failure happened during RabbitMQ publish, PostgreSQL acknowledgement, batch claim, or envelope validation. The `failures` array is capped to a few event IDs/types and never includes payloads.
+3. For consumer errors, search `event.consumer.failed` by `correlationId`, `eventId`, or queue. Check `stage` to distinguish decode/validation from handler failure; rejected messages are still dead-lettered according to the existing queue policy.
+4. For a process that exits unexpectedly, search `process.uncaught_exception` and check `stage`, `error.code`, cause codes, and source frames. Node's existing crash behavior remains in effect after the diagnostic is written.
+5. To report an incident, send the `correlationId` plus all matching JSON records from every backend service around the same timestamp. Include the `requestId` only for the specific HTTP hop. Remove credentials and do not send environment variable values, cookies, OTPs, request/response bodies, or customer data.
+
+Background work may have no HTTP `correlationId`; in that case use its `eventId`, queue, service, and timestamp to connect the batch, consumer, and dependency records.
+
 ## RabbitMQ backlog alert
 
 1. Inspect the affected vhost/queue and consumer count in Grafana and the private RabbitMQ management interface.

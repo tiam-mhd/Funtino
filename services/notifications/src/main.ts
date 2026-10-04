@@ -2,9 +2,14 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
-import { installHttpTelemetry } from '@funtino/backend-core';
+import {
+  installHttpExceptionDiagnostics,
+  installHttpTelemetry,
+  installUncaughtExceptionDiagnostics,
+} from '@funtino/backend-core';
 
 async function bootstrap(): Promise<void> {
+  installUncaughtExceptionDiagnostics('notifications');
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ logger: false }),
@@ -13,6 +18,7 @@ async function bootstrap(): Promise<void> {
     service: 'notifications',
     tokenEnvironmentVariable: 'NOTIFICATIONS_METRICS_TOKEN',
   });
+  installHttpExceptionDiagnostics(app, 'notifications');
   app.enableShutdownHooks();
   await app.listen({ port: Number(process.env.NOTIFICATIONS_PORT ?? 4030), host: '0.0.0.0' });
   console.info(

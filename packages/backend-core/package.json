@@ -14,6 +14,7 @@
     "@funtino/event-contracts": "workspace:*",
     "@nestjs/common": "11.0.11",
     "amqplib": "0.10.7",
+    "rxjs": "7.8.2",
     "zod": "3.25.76"
   },
   "devDependencies": {

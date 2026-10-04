@@ -1,4 +1,5 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { createSafeErrorDiagnostic, writeStructuredLog } from '@funtino/backend-core';
 import { PrismaService } from '../../infrastructure/persistence/prisma/prisma.service.js';
 
 @Controller('health')
@@ -23,6 +24,15 @@ export class HealthController {
       !isValidServiceToken(branchToken) ||
       gatewayToken === branchToken
     ) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'service.readiness.failed',
+        service: 'wallet',
+        component: 'HealthController.ready',
+        stage: 'service_token_validation',
+        dependency: 'service_configuration',
+        configurationKeys: ['WALLET_GATEWAY_TOKEN', 'WALLET_ORGANIZATION_BRANCH_TOKEN'],
+      });
       throw new ServiceUnavailableException('Wallet service authentication is not configured.');
     }
     try {
@@ -36,7 +46,16 @@ export class HealthController {
         service: 'wallet',
         outbox: { pending, deadLettered, publisherConfigured: Boolean(process.env.RABBITMQ_URL) },
       };
-    } catch {
+    } catch (error) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'service.readiness.failed',
+        service: 'wallet',
+        component: 'HealthController.ready',
+        stage: 'database_and_outbox_probe',
+        dependency: 'postgresql',
+        error: createSafeErrorDiagnostic(error),
+      });
       throw new ServiceUnavailableException('Wallet database is not ready.');
     }
   }

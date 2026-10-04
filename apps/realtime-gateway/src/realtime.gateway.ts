@@ -6,10 +6,16 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
-import { consumeRabbitQueue } from '@funtino/backend-core';
+import {
+  consumeRabbitQueue,
+  createSafeErrorDiagnostic,
+  normalizeCorrelationId,
+  writeStructuredLog,
+} from '@funtino/backend-core';
 import { eventTypes, type EventEnvelope } from '@funtino/event-contracts';
+import { randomUUID } from 'node:crypto';
 
 type AuthenticatedSocket = Socket & { userId?: string };
 
@@ -24,7 +30,6 @@ export class RealtimeGateway implements OnGatewayConnection, OnModuleInit, OnMod
   @WebSocketServer()
   server!: Server;
 
-  private readonly logger = new Logger(RealtimeGateway.name);
   private stopConsumer?: () => Promise<void>;
 
   async onModuleInit(): Promise<void> {
@@ -63,17 +68,65 @@ export class RealtimeGateway implements OnGatewayConnection, OnModuleInit, OnMod
 
   private async authorize(socket: AuthenticatedSocket, sessionToken: string): Promise<boolean> {
     const apiBaseUrl = process.env.API_BASE_URL ?? 'http://localhost:4000';
+    const requestId = randomUUID();
+    const incomingCorrelationId = socket.handshake.headers['x-correlation-id'];
+    const correlationId = normalizeCorrelationId(
+      Array.isArray(incomingCorrelationId) ? incomingCorrelationId[0] : incomingCorrelationId,
+    );
+    let failureStage = 'api_gateway_fetch';
     try {
       const response = await fetch(`${apiBaseUrl}/api/v1/auth/me`, {
-        headers: { cookie: `funtino_session=${encodeURIComponent(sessionToken)}` },
+        headers: {
+          cookie: `funtino_session=${encodeURIComponent(sessionToken)}`,
+          'x-request-id': requestId,
+          'x-correlation-id': correlationId,
+        },
       });
-      if (!response.ok) return false;
-      const body = (await response.json()) as { data?: { id?: string } };
-      if (!body.data?.id) return false;
+      if (!response.ok) {
+        writeStructuredLog({
+          level: response.status >= 500 ? 'error' : 'warn',
+          event: 'realtime.auth.lookup_failed',
+          service: 'realtime-gateway',
+          component: 'RealtimeGateway.authorize',
+          stage: 'api_gateway_http_response',
+          requestId,
+          correlationId,
+          dependency: 'api-gateway',
+          status: response.status,
+        });
+        return false;
+      }
+      failureStage = 'api_gateway_response_json';
+      const body = (await response.json()) as { data?: { id?: unknown } };
+      failureStage = 'api_gateway_response_validation';
+      if (typeof body.data?.id !== 'string') {
+        writeStructuredLog({
+          level: 'error',
+          event: 'realtime.auth.lookup_failed',
+          service: 'realtime-gateway',
+          component: 'RealtimeGateway.authorize',
+          stage: failureStage,
+          requestId,
+          correlationId,
+          dependency: 'api-gateway',
+          error: { type: 'ResponseContractError', code: 'AUTH_RESPONSE_INVALID' },
+        });
+        return false;
+      }
       socket.userId = body.data.id;
       return true;
     } catch (error) {
-      this.logger.warn(`realtime auth unavailable: ${String(error)}`);
+      writeStructuredLog({
+        level: 'error',
+        event: 'realtime.auth.lookup_failed',
+        service: 'realtime-gateway',
+        component: 'RealtimeGateway.authorize',
+        stage: failureStage,
+        requestId,
+        correlationId,
+        dependency: 'api-gateway',
+        error: createSafeErrorDiagnostic(error),
+      });
       return false;
     }
   }
@@ -81,6 +134,12 @@ export class RealtimeGateway implements OnGatewayConnection, OnModuleInit, OnMod
   private broadcast(event: EventEnvelope): void {
     const userId = typeof event.payload.userId === 'string' ? event.payload.userId : undefined;
     if (userId) this.server.to(`user:${userId}`).emit('domain:event', event);
-    this.logger.debug(`projected ${event.eventType}`);
+    writeStructuredLog({
+      level: 'debug',
+      event: 'realtime.event.projected',
+      service: 'realtime-gateway',
+      component: 'RealtimeGateway.broadcast',
+      eventType: event.eventType,
+    });
   }
 }

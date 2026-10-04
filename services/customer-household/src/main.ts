@@ -1,11 +1,16 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { installHttpTelemetry } from '@funtino/backend-core';
+import {
+  installHttpExceptionDiagnostics,
+  installHttpTelemetry,
+  installUncaughtExceptionDiagnostics,
+} from '@funtino/backend-core';
 import { AppModule } from './app.module.js';
 import { reportStartupFailure } from './bootstrap/startup-failure.js';
 
 async function bootstrap(): Promise<void> {
+  installUncaughtExceptionDiagnostics('customer-household');
   let stage = 'create_application';
   let app: NestFastifyApplication | undefined;
   try {
@@ -18,6 +23,7 @@ async function bootstrap(): Promise<void> {
       service: 'customer-household',
       tokenEnvironmentVariable: 'CUSTOMER_HOUSEHOLD_METRICS_TOKEN',
     });
+    installHttpExceptionDiagnostics(app, 'customer-household');
     app.enableShutdownHooks();
     stage = 'validate_port';
     const port = Number(process.env.CUSTOMER_HOUSEHOLD_PORT ?? 4080);

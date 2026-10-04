@@ -1,8 +1,11 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { identityPolicyChangedEventSchema } from '@funtino/event-contracts';
-import type { EventBus } from '@funtino/backend-core';
+import {
+  createSafeErrorDiagnostic,
+  type EventBus,
+  writeStructuredLog,
+} from '@funtino/backend-core';
 import { randomUUID } from 'node:crypto';
-import { createSafeErrorDiagnostic } from '../../../bootstrap/startup-failure.js';
 import { PrismaService } from '../../persistence/prisma/prisma.service.js';
 
 export const ACCESS_EVENT_BUS = Symbol('ACCESS_EVENT_BUS');
@@ -30,7 +33,6 @@ export type OutboxFlushResult = {
 
 @Injectable()
 export class AccessOutboxRelayService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(AccessOutboxRelayService.name);
   private timer?: NodeJS.Timeout;
   private running = false;
 
@@ -42,7 +44,15 @@ export class AccessOutboxRelayService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     if (!this.rabbitUrl) {
-      this.logger.warn('RabbitMQ is not configured; access events remain pending in the outbox.');
+      writeStructuredLog({
+        level: 'warn',
+        event: 'dependency.disabled',
+        service: 'identity-access',
+        component: 'AccessOutboxRelayService.onModuleInit',
+        stage: 'outbox_publisher_configuration',
+        dependency: 'rabbitmq',
+        deliveryMode: 'durable_outbox_only',
+      });
       return;
     }
     this.timer = setInterval(() => void this.flushOnce(), 2_000);
@@ -59,9 +69,19 @@ export class AccessOutboxRelayService implements OnModuleInit, OnModuleDestroy {
     if (!this.rabbitUrl || this.running) return result;
 
     this.running = true;
+    const deliveryFailures: Array<{
+      eventId: string;
+      eventType: string;
+      stage: string;
+      attempt: number;
+      correlationId: string;
+      error: unknown;
+    }> = [];
+    let stage = 'claim_batch';
     try {
       const rows = await this.claimBatch();
       result.claimed = rows.length;
+      stage = 'process_batch';
 
       for (const row of rows) {
         const parsedEvent = identityPolicyChangedEventSchema.safeParse(row.envelope);
@@ -73,15 +93,25 @@ export class AccessOutboxRelayService implements OnModuleInit, OnModuleDestroy {
         ) {
           if (await this.deadLetter(row)) {
             result.deadLettered += 1;
-            this.logger.error(
-              'Invalid access event envelope moved to the service dead-letter state.',
-            );
+            writeStructuredLog({
+              level: 'error',
+              event: 'outbox.envelope.invalid',
+              service: 'identity-access',
+              component: 'AccessOutboxRelayService.flushOnce',
+              stage: 'envelope_validation',
+              eventId: parsedEvent.success ? parsedEvent.data.eventId : row.id,
+              error: parsedEvent.success
+                ? { type: 'OutboxInvariantError', code: 'OUTBOX_ENVELOPE_MISMATCH' }
+                : createSafeErrorDiagnostic(parsedEvent.error),
+            });
           }
           continue;
         }
 
+        let deliveryStage = 'rabbitmq_publish';
         try {
           await this.eventBus.publish(parsedEvent.data);
+          deliveryStage = 'postgresql_ack';
           const acknowledgement = await this.prisma.outboxEvent.updateMany({
             where: { id: row.id, leaseToken: row.leaseToken },
             data: {
@@ -92,27 +122,68 @@ export class AccessOutboxRelayService implements OnModuleInit, OnModuleDestroy {
             },
           });
           if (acknowledgement.count > 0) result.published += 1;
-        } catch {
+        } catch (error) {
+          deliveryFailures.push({
+            eventId: parsedEvent.data.eventId,
+            eventType: parsedEvent.data.eventType,
+            stage: deliveryStage,
+            attempt: row.attempts + 1,
+            correlationId: parsedEvent.data.correlationId,
+            error,
+          });
           const retry = await this.scheduleRetry(row);
           if (retry.updated) {
             if (retry.deadLettered) result.deadLettered += 1;
             else result.retried += 1;
-            this.logger.warn(
-              'Access event publish failed; delivery will be retried or dead-lettered.',
-            );
           }
         }
       }
     } catch (error) {
-      this.logger.error(
-        JSON.stringify({
-          event: 'outbox.batch_failed',
-          service: 'identity-access',
-          error: createSafeErrorDiagnostic(error),
-        }),
-      );
+      writeStructuredLog({
+        level: 'error',
+        event: 'outbox.batch_failed',
+        service: 'identity-access',
+        component: 'AccessOutboxRelayService.flushOnce',
+        stage,
+        dependency: 'postgresql_or_rabbitmq',
+        error: createSafeErrorDiagnostic(error),
+        priorDeliveryFailureCount: deliveryFailures.length,
+        ...(deliveryFailures.length
+          ? {
+              priorDeliveryFailures: deliveryFailures.slice(0, 5).map((failure) => ({
+                eventId: failure.eventId,
+                eventType: failure.eventType,
+                stage: failure.stage,
+                attempt: failure.attempt,
+                correlationId: failure.correlationId,
+                error: createSafeErrorDiagnostic(failure.error),
+              })),
+            }
+          : {}),
+      });
     } finally {
       this.running = false;
+    }
+    if (deliveryFailures.length > 0) {
+      writeStructuredLog({
+        level: result.deadLettered > 0 ? 'error' : 'warn',
+        event: 'outbox.delivery.batch_failed',
+        service: 'identity-access',
+        component: 'AccessOutboxRelayService.flushOnce',
+        stage: 'per_event_delivery',
+        dependency: 'rabbitmq_or_postgresql',
+        failureCount: deliveryFailures.length,
+        retriedCount: result.retried,
+        deadLetteredCount: result.deadLettered,
+        failures: deliveryFailures.slice(0, 5).map((failure) => ({
+          eventId: failure.eventId,
+          eventType: failure.eventType,
+          stage: failure.stage,
+          attempt: failure.attempt,
+          correlationId: failure.correlationId,
+          error: createSafeErrorDiagnostic(failure.error),
+        })),
+      });
     }
     return result;
   }

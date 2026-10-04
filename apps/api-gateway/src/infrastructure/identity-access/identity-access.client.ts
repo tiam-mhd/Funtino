@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { DomainError } from '@funtino/backend-core';
+import {
+  createSafeErrorDiagnostic,
+  DomainError,
+  writeStructuredLog,
+} from '@funtino/backend-core';
 import { z, type ZodType } from 'zod';
 import type { Session } from '../../domain/models.js';
 
@@ -720,6 +724,15 @@ export class IdentityAccessClient {
   private parse<T>(schema: ZodType<T>, value: unknown): T {
     const result = schema.safeParse(value);
     if (!result.success) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'dependency.contract.invalid',
+        service: 'api-gateway',
+        component: 'IdentityAccessClient.parse',
+        stage: 'response_contract_validation',
+        dependency: 'identity-access',
+        error: createSafeErrorDiagnostic(result.error),
+      });
       throw new DomainError('DEPENDENCY_UNAVAILABLE', 'قرارداد سرویس مدیریت دسترسی ناسازگار است.');
     }
     return result.data;
@@ -756,7 +769,16 @@ export class IdentityAccessClient {
       if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
         throw new Error('Internal service traffic must use TLS in production.');
       }
-    } catch {
+    } catch (error) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'dependency.configuration.invalid',
+        service: 'api-gateway',
+        component: 'IdentityAccessClient.request',
+        stage: 'build_internal_url',
+        dependency: 'identity-access',
+        error: createSafeErrorDiagnostic(error),
+      });
       throw new DomainError('DEPENDENCY_UNAVAILABLE', 'نشانی سرویس مدیریت دسترسی معتبر نیست.');
     }
 
@@ -822,7 +844,16 @@ export class IdentityAccessClient {
 
     try {
       return await response.json();
-    } catch {
+    } catch (error) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'dependency.response.invalid',
+        service: 'api-gateway',
+        component: 'IdentityAccessClient.request',
+        stage: 'response_json_parse',
+        dependency: 'identity-access',
+        error: createSafeErrorDiagnostic(error),
+      });
       throw new DomainError('DEPENDENCY_UNAVAILABLE', 'پاسخ سرویس مدیریت دسترسی قابل خواندن نیست.');
     }
   }

@@ -1,4 +1,5 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { createSafeErrorDiagnostic, writeStructuredLog } from '@funtino/backend-core';
 import { DeviceRegistryService } from '../../application/device-registry.service.js';
 import { PrismaService } from '../../infrastructure/persistence/prisma/prisma.service.js';
 
@@ -24,7 +25,16 @@ export class HealthController {
         this.prisma.outboxEvent.count({ where: { publishedAt: null, deadLetteredAt: null } }),
         this.prisma.outboxEvent.count({ where: { deadLetteredAt: { not: null } } }),
       ]);
-    } catch {
+    } catch (error) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'service.readiness.failed',
+        service: 'device-integration',
+        component: 'HealthController.ready',
+        stage: 'outbox_database_probe',
+        dependency: 'postgresql',
+        error: createSafeErrorDiagnostic(error),
+      });
       throw new ServiceUnavailableException('Device registry database is unavailable.');
     }
     return {

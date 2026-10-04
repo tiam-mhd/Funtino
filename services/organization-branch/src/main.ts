@@ -2,10 +2,15 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
-import { installHttpTelemetry } from '@funtino/backend-core';
+import {
+  installHttpExceptionDiagnostics,
+  installHttpTelemetry,
+  installUncaughtExceptionDiagnostics,
+} from '@funtino/backend-core';
 import { reportStartupFailure } from './bootstrap/startup-failure.js';
 
 async function bootstrap(): Promise<void> {
+  installUncaughtExceptionDiagnostics('organization-branch');
   let stage = 'create_application';
   let app: NestFastifyApplication | undefined;
   try {
@@ -18,6 +23,7 @@ async function bootstrap(): Promise<void> {
       service: 'organization-branch',
       tokenEnvironmentVariable: 'ORGANIZATION_BRANCH_METRICS_TOKEN',
     });
+    installHttpExceptionDiagnostics(app, 'organization-branch');
     app.enableShutdownHooks();
     stage = 'validate_port';
     const port = Number(process.env.ORGANIZATION_BRANCH_PORT ?? 4050);

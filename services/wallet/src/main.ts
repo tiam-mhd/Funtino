@@ -1,11 +1,16 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { installHttpTelemetry } from '@funtino/backend-core';
+import {
+  installHttpExceptionDiagnostics,
+  installHttpTelemetry,
+  installUncaughtExceptionDiagnostics,
+} from '@funtino/backend-core';
 import { AppModule } from './app.module.js';
 import { reportStartupFailure } from './bootstrap/startup-failure.js';
 
 async function bootstrap(): Promise<void> {
+  installUncaughtExceptionDiagnostics('wallet');
   let stage = 'create_application';
   let app: NestFastifyApplication | undefined;
   try {
@@ -18,6 +23,7 @@ async function bootstrap(): Promise<void> {
       service: 'wallet',
       tokenEnvironmentVariable: 'WALLET_METRICS_TOKEN',
     });
+    installHttpExceptionDiagnostics(app, 'wallet');
     app.enableShutdownHooks();
     const port = Number(process.env.WALLET_PORT ?? 4070);
     stage = 'listen';

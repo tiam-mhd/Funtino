@@ -5,6 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { createEventEnvelope, eventTypes } from '@funtino/event-contracts';
+import { createSafeErrorDiagnostic, writeStructuredLog } from '@funtino/backend-core';
 import { createHash, randomUUID } from 'node:crypto';
 import { Prisma, type Device as PrismaDevice } from '../../../../generated/prisma/index.js';
 import type {
@@ -368,7 +369,16 @@ export class PrismaDeviceRegistryRepository implements DeviceRegistryRepository 
   async isReady(): Promise<void> {
     try {
       await this.prisma.$queryRaw`SELECT 1`;
-    } catch {
+    } catch (error) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'service.readiness.failed',
+        service: 'device-integration',
+        component: 'PrismaDeviceRegistryRepository.isReady',
+        stage: 'database_probe',
+        dependency: 'postgresql',
+        error: createSafeErrorDiagnostic(error),
+      });
       throw new ServiceUnavailableException('Device registry database is unavailable.');
     }
   }

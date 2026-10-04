@@ -2,10 +2,15 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
-import { installHttpTelemetry } from '@funtino/backend-core';
+import {
+  installHttpExceptionDiagnostics,
+  installHttpTelemetry,
+  installUncaughtExceptionDiagnostics,
+} from '@funtino/backend-core';
 import { reportStartupFailure } from './bootstrap/startup-failure.js';
 
 async function bootstrap(): Promise<void> {
+  installUncaughtExceptionDiagnostics('analytics-read-model');
   let stage = 'create_application';
   let app: NestFastifyApplication | undefined;
   try {
@@ -18,6 +23,7 @@ async function bootstrap(): Promise<void> {
       service: 'analytics-read-model',
       tokenEnvironmentVariable: 'ANALYTICS_METRICS_TOKEN',
     });
+    installHttpExceptionDiagnostics(app, 'analytics-read-model');
     app.enableShutdownHooks();
     const port = Number(process.env.ANALYTICS_PORT ?? process.env.PORT ?? 4060);
     stage = 'listen';

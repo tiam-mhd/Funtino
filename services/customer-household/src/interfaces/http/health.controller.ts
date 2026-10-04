@@ -1,4 +1,5 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { createSafeErrorDiagnostic, writeStructuredLog } from '@funtino/backend-core';
 import { PrismaService } from '../../infrastructure/persistence/prisma/prisma.service.js';
 
 @Controller('health')
@@ -24,6 +25,18 @@ export class HealthController {
       tokens.some((token) => !token || token.length < 32 || token.length > 512) ||
       new Set(tokens).size !== tokens.length
     ) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'service.readiness.failed',
+        service: 'customer-household',
+        component: 'HealthController.ready',
+        stage: 'service_token_validation',
+        dependency: 'service_configuration',
+        configurationKeys: [
+          'CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN',
+          'CUSTOMER_HOUSEHOLD_WALLET_TOKEN',
+        ],
+      });
       throw new ServiceUnavailableException('Service authentication is not configured.');
     }
     try {
@@ -37,7 +50,16 @@ export class HealthController {
         service: 'customer-household',
         outbox: { pending, deadLettered, publisherConfigured: Boolean(process.env.RABBITMQ_URL) },
       };
-    } catch {
+    } catch (error) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'service.readiness.failed',
+        service: 'customer-household',
+        component: 'HealthController.ready',
+        stage: 'database_and_outbox_probe',
+        dependency: 'postgresql',
+        error: createSafeErrorDiagnostic(error),
+      });
       throw new ServiceUnavailableException('Customer & Household database is not ready.');
     }
   }

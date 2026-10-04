@@ -1,4 +1,5 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { createSafeErrorDiagnostic, writeStructuredLog } from '@funtino/backend-core';
 import { PrismaService } from '../../infrastructure/persistence/prisma/prisma.service.js';
 
 @Controller('health')
@@ -24,6 +25,19 @@ export class HealthController {
       serviceTokens.some((token) => !token || token.length < 32 || token.length > 512) ||
       new Set(serviceTokens).size !== serviceTokens.length
     ) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'service.readiness.failed',
+        service: 'organization-branch',
+        component: 'HealthController.ready',
+        stage: 'service_token_validation',
+        dependency: 'service_configuration',
+        configurationKeys: [
+          'ORGANIZATION_BRANCH_GATEWAY_TOKEN',
+          'ORGANIZATION_BRANCH_IDENTITY_ACCESS_TOKEN',
+          'ORGANIZATION_BRANCH_WALLET_TOKEN',
+        ],
+      });
       throw new ServiceUnavailableException('Service authentication is not configured.');
     }
     try {
@@ -37,7 +51,16 @@ export class HealthController {
         service: 'organization-branch',
         outbox: { pending, deadLettered, publisherConfigured: Boolean(process.env.RABBITMQ_URL) },
       };
-    } catch {
+    } catch (error) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'service.readiness.failed',
+        service: 'organization-branch',
+        component: 'HealthController.ready',
+        stage: 'database_and_outbox_probe',
+        dependency: 'postgresql',
+        error: createSafeErrorDiagnostic(error),
+      });
       throw new ServiceUnavailableException('Organization/branch database is not ready.');
     }
   }

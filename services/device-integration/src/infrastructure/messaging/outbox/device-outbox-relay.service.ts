@@ -1,6 +1,10 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { eventEnvelopeSchema, eventPayloadSchemas, eventTypes } from '@funtino/event-contracts';
-import type { EventBus } from '@funtino/backend-core';
+import {
+  createSafeErrorDiagnostic,
+  type EventBus,
+  writeStructuredLog,
+} from '@funtino/backend-core';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../persistence/prisma/prisma.service.js';
 
@@ -29,7 +33,6 @@ const ownedEventTypes = new Set<string>([
 
 @Injectable()
 export class DeviceOutboxRelayService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(DeviceOutboxRelayService.name);
   private timer?: NodeJS.Timeout;
   private running = false;
 
@@ -41,7 +44,15 @@ export class DeviceOutboxRelayService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     if (!this.rabbitUrl) {
-      this.logger.warn('RabbitMQ is not configured; device events remain in the durable outbox.');
+      writeStructuredLog({
+        level: 'warn',
+        event: 'dependency.disabled',
+        service: 'device-integration',
+        component: 'DeviceOutboxRelayService.onModuleInit',
+        stage: 'outbox_publisher_configuration',
+        dependency: 'rabbitmq',
+        deliveryMode: 'durable_outbox_only',
+      });
       return;
     }
     this.timer = setInterval(() => void this.flushOnce(), 2_000);
@@ -55,11 +66,21 @@ export class DeviceOutboxRelayService implements OnModuleInit, OnModuleDestroy {
 
   async flushOnce() {
     const counts = { claimed: 0, published: 0, retried: 0, deadLettered: 0 };
+    const deliveryFailures: Array<{
+      eventId: string;
+      eventType: string;
+      stage: string;
+      attempt: number;
+      correlationId: string;
+      error: unknown;
+    }> = [];
     if (!this.rabbitUrl || this.running) return counts;
     this.running = true;
+    let stage = 'claim_batch';
     try {
       const rows = await this.claimBatch();
       counts.claimed = rows.length;
+      stage = 'process_batch';
       for (const row of rows) {
         const envelope = eventEnvelopeSchema.safeParse(row.envelope);
         const payloadSchema = envelope.success
@@ -74,12 +95,28 @@ export class DeviceOutboxRelayService implements OnModuleInit, OnModuleDestroy {
           envelope.data.sourceId !== 'device-integration' ||
           !ownedEventTypes.has(envelope.data.eventType)
         ) {
-          if (await this.deadLetter(row, 'INVALID_ENVELOPE')) counts.deadLettered += 1;
+          if (await this.deadLetter(row, 'INVALID_ENVELOPE')) {
+            counts.deadLettered += 1;
+            writeStructuredLog({
+              level: 'error',
+              event: 'outbox.envelope.invalid',
+              service: 'device-integration',
+              component: 'DeviceOutboxRelayService.flushOnce',
+              stage: 'envelope_validation',
+              eventId: envelope.success ? envelope.data.eventId : row.id,
+              ...(envelope.success ? { eventType: envelope.data.eventType } : {}),
+              error: envelope.success
+                ? { type: 'OutboxInvariantError', code: 'OUTBOX_ENVELOPE_MISMATCH' }
+                : createSafeErrorDiagnostic(envelope.error),
+            });
+          }
           continue;
         }
 
+        let deliveryStage = 'rabbitmq_publish';
         try {
           await this.eventBus.publish(envelope.data);
+          deliveryStage = 'postgresql_ack';
           const ack = await this.prisma.outboxEvent.updateMany({
             where: { id: row.id, leaseToken: row.leaseToken },
             data: {
@@ -90,7 +127,15 @@ export class DeviceOutboxRelayService implements OnModuleInit, OnModuleDestroy {
             },
           });
           if (ack.count) counts.published += 1;
-        } catch {
+        } catch (error) {
+          deliveryFailures.push({
+            eventId: envelope.data.eventId,
+            eventType: envelope.data.eventType,
+            stage: deliveryStage,
+            attempt: row.attempts + 1,
+            correlationId: envelope.data.correlationId,
+            error,
+          });
           const deadLettered = row.attempts + 1 >= maxAttempts;
           const delay = Math.min(1_000 * 2 ** row.attempts, maxRetryDelayMilliseconds);
           const update = await this.prisma.outboxEvent.updateMany({
@@ -108,16 +153,63 @@ export class DeviceOutboxRelayService implements OnModuleInit, OnModuleDestroy {
             if (deadLettered) counts.deadLettered += 1;
             else counts.retried += 1;
           }
-          this.logger.warn('Device event publish failed; delivery is scheduled for retry.');
         }
       }
-    } catch {
-      this.logger.error('Device outbox batch could not be processed.');
+    } catch (error) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'outbox.batch_failed',
+        service: 'device-integration',
+        component: 'DeviceOutboxRelayService.flushOnce',
+        stage,
+        dependency: 'postgresql_or_rabbitmq',
+        error: createSafeErrorDiagnostic(error),
+        priorDeliveryFailureCount: deliveryFailures.length,
+        ...(deliveryFailures.length
+          ? {
+              priorDeliveryFailures: deliveryFailures.slice(0, 5).map((failure) => ({
+                eventId: failure.eventId,
+                eventType: failure.eventType,
+                stage: failure.stage,
+                attempt: failure.attempt,
+                correlationId: failure.correlationId,
+                error: createSafeErrorDiagnostic(failure.error),
+              })),
+            }
+          : {}),
+      });
     } finally {
       this.running = false;
     }
+    if (deliveryFailures.length > 0) {
+      writeStructuredLog({
+        level: counts.deadLettered > 0 ? 'error' : 'warn',
+        event: 'outbox.delivery.batch_failed',
+        service: 'device-integration',
+        component: 'DeviceOutboxRelayService.flushOnce',
+        stage: 'per_event_delivery',
+        dependency: 'rabbitmq_or_postgresql',
+        failureCount: deliveryFailures.length,
+        retriedCount: counts.retried,
+        deadLetteredCount: counts.deadLettered,
+        failures: deliveryFailures.slice(0, 5).map((failure) => ({
+          eventId: failure.eventId,
+          eventType: failure.eventType,
+          stage: failure.stage,
+          attempt: failure.attempt,
+          correlationId: failure.correlationId,
+          error: createSafeErrorDiagnostic(failure.error),
+        })),
+      });
+    }
     if (counts.deadLettered > 0) {
-      this.logger.error(`Device outbox dead-lettered ${counts.deadLettered} event(s).`);
+      writeStructuredLog({
+        level: 'error',
+        event: 'outbox.events.dead_lettered',
+        service: 'device-integration',
+        component: 'DeviceOutboxRelayService.flushOnce',
+        count: counts.deadLettered,
+      });
     }
     return counts;
   }

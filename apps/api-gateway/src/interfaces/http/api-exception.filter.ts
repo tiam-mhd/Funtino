@@ -1,6 +1,6 @@
 import { Catch, HttpException, type ArgumentsHost, type ExceptionFilter } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { DomainError } from '@funtino/backend-core';
+import { DomainError, logHttpRequestException } from '@funtino/backend-core';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
@@ -10,6 +10,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
       .switchToHttp()
       .getRequest<FastifyRequest & { requestId?: string; correlationId?: string }>();
 
+    logHttpRequestException({
+      service: 'api-gateway',
+      component: 'ApiExceptionFilter',
+      exception,
+      request,
+    });
     const result = toErrorResponse(exception);
     response
       .status(result.statusCode)
@@ -55,7 +61,6 @@ function toErrorResponse(exception: unknown): {
     };
   }
 
-  console.error(exception);
   return {
     statusCode: 500,
     error: { code: 'INTERNAL_ERROR', message: 'خطای غیرمنتظره‌ای رخ داد.' },

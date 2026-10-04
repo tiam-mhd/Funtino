@@ -216,6 +216,9 @@ importers:
       amqplib:
         specifier: 0.10.7
         version: 0.10.7
+      rxjs:
+        specifier: 7.8.2
+        version: 7.8.2
       zod:
         specifier: 3.25.76
         version: 3.25.76

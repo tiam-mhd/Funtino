@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 import amqp, { type ConfirmChannel, type Connection, type ConsumeMessage } from 'amqplib';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
@@ -7,8 +7,20 @@ import {
   rabbitExchange,
   type EventEnvelope,
 } from '@funtino/event-contracts';
+import {
+  createSafeErrorDiagnostic,
+  writeStructuredLog,
+} from './observability/structured-diagnostics.js';
 export { installHttpTelemetry } from './observability/http-telemetry.js';
 export type { HttpTelemetryOptions } from './observability/http-telemetry.js';
+export {
+  createSafeErrorDiagnostic,
+  installHttpExceptionDiagnostics,
+  installHttpRequestContext,
+  installUncaughtExceptionDiagnostics,
+  logHttpRequestException,
+  writeStructuredLog,
+} from './observability/structured-diagnostics.js';
 
 export type ApiErrorCode =
   | 'VALIDATION_ERROR'
@@ -122,7 +134,7 @@ export interface EventBus {
 export class RabbitEventBus implements EventBus {
   private connection?: Connection;
   private channel?: ConfirmChannel;
-  private readonly logger = new Logger(RabbitEventBus.name);
+  private disabledPublishLogged = false;
 
   constructor(
     private readonly url: string | undefined,
@@ -133,23 +145,52 @@ export class RabbitEventBus implements EventBus {
     if (!this.url) return undefined;
     if (this.channel) return this.channel;
 
-    this.connection = await amqp.connect(this.url);
-    this.channel = await this.connection.createConfirmChannel();
-    await this.channel.assertExchange(rabbitExchange, 'topic', { durable: true });
-    this.connection.on('error', (error) => {
-      this.logger.error(
-        { errorType: error instanceof Error ? error.name.slice(0, 80) : 'UnknownError' },
-        'rabbit connection error',
-      );
-    });
-    return this.channel;
+    try {
+      this.connection = await amqp.connect(this.url);
+      this.channel = await this.connection.createConfirmChannel();
+      await this.channel.assertExchange(rabbitExchange, 'topic', { durable: true });
+      this.connection.on('error', (error) => {
+        writeStructuredLog({
+          level: 'error',
+          event: 'dependency.connection.failed',
+          service: this.sourceId,
+          component: 'RabbitEventBus',
+          stage: 'connection_error_event',
+          dependency: 'rabbitmq',
+          error: createSafeErrorDiagnostic(error),
+        });
+      });
+      return this.channel;
+    } catch (error) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'dependency.connection.failed',
+        service: this.sourceId,
+        component: 'RabbitEventBus',
+        stage: 'channel_setup',
+        dependency: 'rabbitmq',
+        error: createSafeErrorDiagnostic(error),
+      });
+      throw error;
+    }
   }
 
   async publish(event: EventEnvelope): Promise<void> {
     const parsed = eventEnvelopeSchema.parse(event);
     const channel = await this.ensureChannel();
     if (!channel) {
-      this.logger.warn({ eventType: parsed.eventType }, 'rabbit disabled; event remains in outbox');
+      if (!this.disabledPublishLogged) {
+        this.disabledPublishLogged = true;
+        writeStructuredLog({
+          level: 'warn',
+          event: 'dependency.disabled',
+          service: this.sourceId,
+          component: 'RabbitEventBus',
+          stage: 'publish',
+          dependency: 'rabbitmq',
+          eventType: parsed.eventType,
+        });
+      }
       return;
     }
 
@@ -199,15 +240,31 @@ export async function consumeRabbitQueue(input: {
 
   await channel.consume(input.queue, async (message) => {
     if (!message) return;
+    let parsedEvent: EventEnvelope | undefined;
     try {
-      const event = eventEnvelopeSchema.parse(JSON.parse(message.content.toString()));
-      await input.handler(event, message);
+      parsedEvent = eventEnvelopeSchema.parse(JSON.parse(message.content.toString()));
+      await input.handler(parsedEvent, message);
       channel.ack(message);
     } catch (error) {
       channel.nack(message, false, false);
       // A DLX policy can route rejected messages to the configured dead-letter queue.
       // The consumer deliberately does not retry forever.
-      console.error(`[${input.queue}] message rejected`, error);
+      writeStructuredLog({
+        level: 'error',
+        event: 'event.consumer.failed',
+        service: input.queue,
+        component: 'consumeRabbitQueue',
+        stage: parsedEvent ? 'handler' : 'decode_or_validate',
+        queue: input.queue,
+        ...(parsedEvent
+          ? {
+              eventId: parsedEvent.eventId,
+              eventType: parsedEvent.eventType,
+              correlationId: parsedEvent.correlationId,
+            }
+          : {}),
+        error: createSafeErrorDiagnostic(error),
+      });
     }
   });
 

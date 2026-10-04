@@ -2,9 +2,14 @@ import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from './app.module.js';
-import { installHttpTelemetry } from '@funtino/backend-core';
+import {
+  installHttpExceptionDiagnostics,
+  installHttpTelemetry,
+  installUncaughtExceptionDiagnostics,
+} from '@funtino/backend-core';
 
 async function bootstrap(): Promise<void> {
+  installUncaughtExceptionDiagnostics('realtime-gateway');
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ logger: false }),
@@ -13,6 +18,7 @@ async function bootstrap(): Promise<void> {
     service: 'realtime-gateway',
     tokenEnvironmentVariable: 'REALTIME_METRICS_TOKEN',
   });
+  installHttpExceptionDiagnostics(app, 'realtime-gateway');
   app.enableCors({
     origin: (process.env.CORS_ORIGINS ?? 'http://localhost:3000').split(','),
     credentials: true,

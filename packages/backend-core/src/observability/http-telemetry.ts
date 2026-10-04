@@ -1,4 +1,5 @@
 import { timingSafeEqual, randomUUID } from 'node:crypto';
+import { installDependencyFetchDiagnostics } from './structured-diagnostics.js';
 
 type HeaderValue = string | string[] | undefined;
 type TelemetryRequest = {
@@ -57,6 +58,8 @@ export function installHttpTelemetry(server: unknown, options: HttpTelemetryOpti
   if (process.env.NODE_ENV === 'production' && (!token || token.length < 32)) {
     throw new Error(options.tokenEnvironmentVariable + ' is required in production.');
   }
+
+  installDependencyFetchDiagnostics(options.service);
 
   const metrics = new Map<string, Metric>();
   app.addHook('onRequest', (request, reply, done) => {
