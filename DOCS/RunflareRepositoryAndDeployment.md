@@ -31,6 +31,7 @@ ADR-0002 تصمیم اولیه‌ی یک repository به‌ازای هر item ر
 | Backend  | Analytics Read Model  | 4060 | شبکه‌ی داخلی                                      |
 | Backend  | Wallet                | 4070 | شبکه‌ی داخلی                                      |
 | Backend  | Customer & Household  | 4080 | شبکه‌ی داخلی                                      |
+| Backend  | Forms                 | 4090 | شبکه‌ی داخلی                                      |
 
 هر process روی port فعلی خودش و host برابر 0.0.0.0 گوش می‌دهد. برای هر target port باید network/route مختص همان process ساخته شود و هر domain به network متناظر وصل شود. مستند Runflare امکان افزودن چند network، انتقال Port به Target Port و اتصال domain به network انتخاب‌شده را توضیح می‌دهد؛ نام دقیق network و mapping پورت باید از حساب واقعی ثبت شود. NodePort مستقیم برای ارتباط backend production انتخاب نشود. [تنظیمات شبکه‌ی Runflare](https://docs.runflare.com/general/network-settings/)
 
@@ -96,3 +97,12 @@ Bootstrap مالک مقید به شماره طبق ADR-0021 است و migration 
 - [قانون commit/push](CommitPushAndDeploymentWorkflow.md)
 - [Runbook اجرایی دو runtime](runbooks/GroupedRunflareRuntime.md)
 - [ADR-0015: migration پنج Worker](decisions/0015-worker-startup-migrations.md)
+- [ADR-0022: فرم‌ساز و مالکیت پاسخ‌ها](decisions/0022-dynamic-forms.md)
+
+### Forms
+
+- `services/forms` یک process داخلی از `funtino-backend-runtime` و port آن `4090` است؛ snapshot باید manifest، supervisor، healthcheck، Dockerfile، `.dockerignore` و build check را همگام نگه دارد.
+- `FORMS_DATABASE_URL` فقط به process Forms و `FORMS_API_GATEWAY_TOKEN` به Forms و API Gateway allow-list می‌شود. Gateway با `FORMS_URL` داخلی به سرویس متصل می‌شود. secretها runtime-only هستند.
+- رابط مدیریت فرم برای ساخت پیوند عمومی از `NEXT_PUBLIC_CUSTOMER_WEB_URL` در build استفاده می‌کند؛ مقدار production برابر `https://app.funtino.ir` است و این تنظیم public است، نه secret.
+- migrationهای Forms با job/فرمان نسخه‌دار و credential migration مستقل اجرا می‌شوند؛ startup migration برای Forms ممنوع است.
+- هر تغییر API Gateway، Forms، `event-contracts` یا backend shared package روی Backend اثر دارد. تغییر `forms-schema`, `forms-renderer` یا UI روی Frontend هم اثر دارد؛ تغییر مشترک پیش از انتشار هر دو bundle را همگام می‌کند.

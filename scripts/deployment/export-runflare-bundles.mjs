@@ -60,6 +60,7 @@ const BUNDLES = Object.freeze({
       '@funtino/analytics-read-model',
       '@funtino/wallet',
       '@funtino/customer-household',
+      '@funtino/forms',
     ],
     templateDirectory: 'infra/runflare-bundles/backend',
     manifestFile: 'backend.processes.json',

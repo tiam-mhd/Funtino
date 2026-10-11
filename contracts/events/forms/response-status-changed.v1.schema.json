@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/forms/response-status-changed.v1.schema.json",
+  "title": "Form response status changed event v1",
+  "allOf": [
+    { "$ref": "../common/envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "forms.response-status-changed.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["responseId", "formId", "organizationId", "branchId", "previousStatus", "status"],
+          "properties": {
+            "responseId": { "type": "string", "format": "uuid" },
+            "formId": { "type": "string", "format": "uuid" },
+            "organizationId": { "type": "string", "format": "uuid" },
+            "branchId": { "type": "string", "format": "uuid" },
+            "previousStatus": { "$ref": "#/$defs/ResponseStatus" },
+            "status": { "$ref": "#/$defs/ResponseStatus" }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ResponseStatus": {
+      "type": "string",
+      "enum": ["new", "in_review", "followed_up", "closed", "spam"]
+    }
+  }
+}

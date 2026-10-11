@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/forms/response-corrected.v1.schema.json",
+  "title": "Form response corrected event v1",
+  "allOf": [
+    { "$ref": "../common/envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "forms.response-corrected.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["responseId", "formId", "organizationId", "branchId", "correctionVersion", "changedFieldCount"],
+          "properties": {
+            "responseId": { "type": "string", "format": "uuid" },
+            "formId": { "type": "string", "format": "uuid" },
+            "organizationId": { "type": "string", "format": "uuid" },
+            "branchId": { "type": "string", "format": "uuid" },
+            "correctionVersion": { "type": "integer", "minimum": 1 },
+            "changedFieldCount": { "type": "integer", "minimum": 1, "maximum": 100 }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

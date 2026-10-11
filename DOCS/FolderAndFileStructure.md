@@ -524,3 +524,11 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 - عکس و icon در public فقط با نام، منبع و وضعیت مجوز مشخص ذخیره می‌شود.
 - فایل کاربر در public یا filesystem موقت سرویس ذخیره نمی‌شود؛ object storage استفاده می‌شود.
 - هر asset دارای alt یا دلیل decorative بودن است.
+
+## ۱۴. ساختار Forms
+
+- دامنهٔ فرم فقط در `services/forms/` قرار می‌گیرد؛ Prisma schema و migrationهایش مالک schema اختصاصی `forms` هستند و migration با دستور/job مستقل اجرا می‌شود.
+- قراردادهای عمومی و داخلی به‌ترتیب در `contracts/openapi/gateway.yaml` و `contracts/openapi/forms-internal.yaml` نگهداری می‌شوند؛ قراردادهای event نسخه‌دار در `packages/event-contracts/` قرار می‌گیرند.
+- `packages/forms-schema/` فقط schema، validation و typeهای مشترک است؛ `packages/forms-renderer/` renderer React مشترک preview و customer runtime را نگه می‌دارد.
+- کد customer در `apps/customer-web/src/features/forms/` و route عمومی در `apps/customer-web/src/app/[locale]/forms/[slug]/`؛ کد عملیاتی در `apps/operations-web/src/features/forms/` و routeهای آن زیر `src/app/`؛ کد سیستمی در `apps/system-web/src/features/forms/` و route آن زیر `src/app/[locale]/(console)/forms/` قرار می‌گیرد.
+- Gateway controller در `apps/api-gateway/src/interfaces/http/` و client داخلی Forms در `apps/api-gateway/src/infrastructure/forms/` است. هیچ app یا service دیگری Prisma client/schema مربوط به Forms را import نمی‌کند.

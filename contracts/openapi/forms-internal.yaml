@@ -1,0 +1,638 @@
+openapi: 3.1.0
+info:
+  title: Funtino Forms Internal API
+  version: 1.0.0
+  description: >-
+    Private API owned by the Forms service. API Gateway is the only caller and authenticates
+    with the service identity and a runtime-only shared credential.
+servers:
+  - url: http://forms:4090
+security:
+  - formsServiceId: []
+    formsServiceToken: []
+paths:
+  /internal/v1/forms:
+    get:
+      operationId: listFormsInternal
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/OptionalBranchId'
+        - $ref: '#/components/parameters/FormStatus'
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '400': { $ref: '#/components/responses/Error' }
+    post:
+      operationId: createFormInternal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/TenantScope' }
+                - type: object
+                  required: [branchId, title]
+                  properties:
+                    branchId: { type: string, format: uuid }
+                    title: { type: string, minLength: 1, maxLength: 160 }
+                - { $ref: '#/components/schemas/ActorMeta' }
+              unevaluatedProperties: false
+      responses:
+        '201': { $ref: '#/components/responses/Json' }
+        '400': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/templates:
+    get:
+      operationId: listFormTemplatesInternal
+      parameters:
+        - in: query
+          name: scopeType
+          schema: { type: string, enum: [global, organization, branch] }
+        - $ref: '#/components/parameters/OptionalOrganizationId'
+        - $ref: '#/components/parameters/OptionalBranchId'
+        - in: query
+          name: enabledOnly
+          schema: { type: boolean, default: false }
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+    post:
+      operationId: createFormTemplateInternal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scopeType, name, definition, actorUserId, correlationId]
+              properties:
+                scopeType: { type: string, enum: [global, organization, branch] }
+                organizationId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                name: { type: string, minLength: 1, maxLength: 120 }
+                description: { type: string, maxLength: 500 }
+                definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                actorUserId: { type: string, format: uuid }
+                correlationId: { type: string, format: uuid }
+              additionalProperties: false
+      responses:
+        '201': { $ref: '#/components/responses/Json' }
+        '400': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/templates/{templateId}:
+    patch:
+      operationId: updateFormTemplateInternal
+      parameters:
+        - $ref: '#/components/parameters/TemplateId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, actorUserId, correlationId]
+              properties:
+                organizationId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                name: { type: string, minLength: 1, maxLength: 120 }
+                description: { type: string, maxLength: 500 }
+                definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                enabled: { type: boolean }
+                actorUserId: { type: string, format: uuid }
+                correlationId: { type: string, format: uuid }
+              additionalProperties: false
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '404': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}:
+    get:
+      operationId: getFormInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/OptionalBranchId'
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '404': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/duplicate:
+    post:
+      operationId: duplicateFormInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/TenantScope' }
+                - { $ref: '#/components/schemas/ActorMeta' }
+              unevaluatedProperties: false
+      responses:
+        '201': { $ref: '#/components/responses/Json' }
+        '404': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/draft:
+    put:
+      operationId: updateFormDraftInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/TenantScope' }
+                - type: object
+                  required: [definition]
+                  properties:
+                    definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                - { $ref: '#/components/schemas/ActorMeta' }
+              unevaluatedProperties: false
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/settings:
+    put:
+      operationId: updateFormSettingsInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/TenantScope' }
+                - type: object
+                  required: [accessMode, linkEnabled]
+                  properties:
+                    accessMode: { type: string, enum: [guest, optional_auth, auth_required] }
+                    linkEnabled: { type: boolean }
+                    startsAt: { type: [string, 'null'], format: date-time }
+                    endsAt: { type: [string, 'null'], format: date-time }
+                    responseLimit: { type: [integer, 'null'], minimum: 1 }
+                - { $ref: '#/components/schemas/ActorMeta' }
+              unevaluatedProperties: false
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '400': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/publish:
+    post:
+      operationId: publishFormInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '409': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/pause:
+    post:
+      operationId: pauseFormInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '409': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/archive:
+    post:
+      operationId: archiveFormInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '409': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/responses:
+    get:
+      operationId: listFormResponsesInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/OptionalBranchId'
+        - $ref: '#/components/parameters/ResponseStatus'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageSize'
+        - in: query
+          name: searchFieldId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: search
+          schema: { type: string, maxLength: 100 }
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+  /internal/v1/forms/{formId}/responses/stats:
+    get:
+      operationId: getFormResponseStatsInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/OptionalBranchId'
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+  /internal/v1/forms/responses/stats:
+    get:
+      operationId: getAggregateFormResponseStatsInternal
+      description: Aggregated response counts only. No answers or personal data are returned.
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/OptionalBranchId'
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+  /internal/v1/forms/{formId}/responses/export:
+    get:
+      operationId: exportFormResponsesInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/OptionalBranchId'
+        - $ref: '#/components/parameters/ResponseStatus'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - in: query
+          name: includeSensitive
+          schema: { type: boolean, default: false }
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '403': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/responses/{responseId}:
+    get:
+      operationId: getFormResponseInternal
+      x-funtino-sensitive: response-answer-data
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+        - $ref: '#/components/parameters/ResponseId'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/OptionalBranchId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - in: query
+          name: includeSensitive
+          schema: { type: boolean, default: false }
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/responses/{responseId}/status:
+    patch:
+      operationId: updateFormResponseStatusInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+        - $ref: '#/components/parameters/ResponseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/TenantScope' }
+                - type: object
+                  required: [status, reason]
+                  properties:
+                    status: { $ref: '#/components/schemas/ResponseStatus' }
+                    reason: { type: string, minLength: 8, maxLength: 500 }
+                - { $ref: '#/components/schemas/ActorMeta' }
+              unevaluatedProperties: false
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '409': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/responses/{responseId}/answers:
+    patch:
+      operationId: correctFormResponseAnswersInternal
+      x-funtino-sensitive: response-answer-correction
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+        - $ref: '#/components/parameters/ResponseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/TenantScope' }
+                - type: object
+                  required: [expectedVersion, changes, reason]
+                  properties:
+                    expectedVersion: { type: integer, minimum: 0 }
+                    changes:
+                      type: array
+                      minItems: 1
+                      maxItems: 100
+                      items:
+                        type: object
+                        required: [fieldId, value]
+                        properties:
+                          fieldId: { type: string, format: uuid }
+                          value: {}
+                        additionalProperties: false
+                    reason: { type: string, minLength: 8, maxLength: 500 }
+                - { $ref: '#/components/schemas/ActorMeta' }
+              unevaluatedProperties: false
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /internal/v1/forms/{formId}/responses/{responseId}/notes:
+    post:
+      operationId: addFormResponseNoteInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+        - $ref: '#/components/parameters/ResponseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/TenantScope' }
+                - type: object
+                  required: [body]
+                  properties:
+                    body: { type: string, minLength: 1, maxLength: 2000 }
+                - { $ref: '#/components/schemas/ActorMeta' }
+              unevaluatedProperties: false
+      responses:
+        '201': { $ref: '#/components/responses/Json' }
+  /internal/v1/forms/{formId}/responses/{responseId}/tags:
+    put:
+      operationId: updateFormResponseTagsInternal
+      parameters:
+        - $ref: '#/components/parameters/FormId'
+        - $ref: '#/components/parameters/ResponseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/TenantScope' }
+                - type: object
+                  required: [tags]
+                  properties:
+                    tags: { type: array, maxItems: 12, items: { type: string, minLength: 1, maxLength: 40 } }
+                - { $ref: '#/components/schemas/ActorMeta' }
+              unevaluatedProperties: false
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+  /internal/v1/public/forms:
+    get:
+      operationId: listPublicFormsInternal
+      parameters:
+        - $ref: '#/components/parameters/OptionalBranchId'
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+  /internal/v1/public/forms/{slug}:
+    get:
+      operationId: getPublicFormInternal
+      parameters:
+        - $ref: '#/components/parameters/Slug'
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+        '404': { $ref: '#/components/responses/Error' }
+  /internal/v1/public/forms/{slug}/responses:
+    post:
+      operationId: submitPublicFormInternal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answers, idempotencyKey, isAuthenticated, correlationId]
+              properties:
+                answers: { type: object, additionalProperties: true }
+                idempotencyKey: { type: string, minLength: 16, maxLength: 80 }
+                isAuthenticated: { type: boolean }
+                customerId: { type: string, format: uuid }
+                linkToAccountConsent: { type: boolean, default: false }
+                linkParameters:
+                  type: object
+                  properties:
+                    source: { type: string, maxLength: 160 }
+                    campaign: { type: string, maxLength: 160 }
+                    ref: { type: string, maxLength: 160 }
+                  additionalProperties: false
+                correlationId: { type: string, format: uuid }
+              additionalProperties: false
+      responses:
+        '201': { $ref: '#/components/responses/Json' }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /internal/v1/system/forms:
+    get:
+      operationId: listSystemFormsInternal
+      parameters:
+        - $ref: '#/components/parameters/OptionalOrganizationId'
+        - $ref: '#/components/parameters/OptionalBranchId'
+        - $ref: '#/components/parameters/FormStatus'
+        - $ref: '#/components/parameters/Query'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+  /internal/v1/system/forms/templates:
+    get:
+      operationId: listSystemTemplatesInternal
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+    post:
+      operationId: createSystemTemplateInternal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scopeType, name, definition, actorUserId, correlationId]
+              properties:
+                scopeType: { const: global }
+                name: { type: string, minLength: 1, maxLength: 120 }
+                description: { type: string, maxLength: 500 }
+                definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                actorUserId: { type: string, format: uuid }
+                correlationId: { type: string, format: uuid }
+              additionalProperties: false
+      responses:
+        '201': { $ref: '#/components/responses/Json' }
+  /internal/v1/system/forms/templates/{templateId}:
+    patch:
+      operationId: updateSystemTemplateInternal
+      parameters:
+        - $ref: '#/components/parameters/TemplateId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 3
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+                description: { type: string, maxLength: 500 }
+                definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                enabled: { type: boolean }
+                actorUserId: { type: string, format: uuid }
+                correlationId: { type: string, format: uuid }
+              required: [actorUserId, correlationId]
+              additionalProperties: false
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+  /internal/v1/system/forms/settings:
+    get:
+      operationId: getSystemSettingsInternal
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+    put:
+      operationId: updateSystemSettingsInternal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [defaultTheme, actorUserId, correlationId]
+              properties:
+                defaultTheme: { $ref: '../schemas/forms/form-definition.v1.schema.json#/$defs/Theme' }
+                actorUserId: { type: string, format: uuid }
+                correlationId: { type: string, format: uuid }
+              additionalProperties: false
+      responses:
+        '200': { $ref: '#/components/responses/Json' }
+components:
+  securitySchemes:
+    formsServiceId:
+      type: apiKey
+      in: header
+      name: x-funtino-service-id
+    formsServiceToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+  parameters:
+    FormId:
+      in: path
+      name: formId
+      required: true
+      schema: { type: string, format: uuid }
+    ResponseId:
+      in: path
+      name: responseId
+      required: true
+      schema: { type: string, format: uuid }
+    TemplateId:
+      in: path
+      name: templateId
+      required: true
+      schema: { type: string, format: uuid }
+    Slug:
+      in: path
+      name: slug
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 80 }
+    OrganizationId:
+      in: query
+      name: organizationId
+      required: true
+      schema: { type: string, format: uuid }
+    OptionalOrganizationId:
+      in: query
+      name: organizationId
+      schema: { type: string, format: uuid }
+    OptionalBranchId:
+      in: query
+      name: branchId
+      schema: { type: string, format: uuid }
+    FormStatus:
+      in: query
+      name: status
+      schema: { type: string, enum: [draft, published, paused, archived] }
+    ResponseStatus:
+      in: query
+      name: status
+      schema: { $ref: '#/components/schemas/ResponseStatus' }
+    Query:
+      in: query
+      name: query
+      schema: { type: string, maxLength: 120 }
+    Cursor:
+      in: query
+      name: cursor
+      schema: { type: string, format: uuid }
+    PageSize:
+      in: query
+      name: pageSize
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    From:
+      in: query
+      name: from
+      schema: { type: string, format: date-time }
+    To:
+      in: query
+      name: to
+      schema: { type: string, format: date-time }
+    ActorUserId:
+      in: query
+      name: actorUserId
+      required: true
+      schema: { type: string, format: uuid }
+    CorrelationId:
+      in: query
+      name: correlationId
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Json:
+      description: Successful response from the Forms owner service.
+      content:
+        application/json:
+          schema: {}
+    Error:
+      description: Domain or validation error.
+      content:
+        application/json:
+          schema: { type: object, additionalProperties: true }
+  schemas:
+    TenantScope:
+      type: object
+      required: [organizationId]
+      properties:
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+    ActorMeta:
+      type: object
+      required: [actorUserId, correlationId]
+      properties:
+        actorUserId: { type: string, format: uuid }
+        correlationId: { type: string, format: uuid }
+    ResponseStatus:
+      type: string
+      enum: [new, in_review, followed_up, closed, spam]
+    ReasonRequest:
+      type: object
+      required: [organizationId, reason, actorUserId, correlationId]
+      properties:
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        reason: { type: string, minLength: 8, maxLength: 500 }
+        actorUserId: { type: string, format: uuid }
+        correlationId: { type: string, format: uuid }
+      additionalProperties: false

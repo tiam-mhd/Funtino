@@ -24,6 +24,11 @@ export const eventTypes = {
   branchCreated: 'organization.branch-created.v1',
   branchUpdated: 'organization.branch-updated.v1',
   branchStatusChanged: 'organization.branch-status-changed.v1',
+  formPublished: 'forms.form-published.v1',
+  formPaused: 'forms.form-paused.v1',
+  formResponseSubmitted: 'forms.response-submitted.v1',
+  formResponseStatusChanged: 'forms.response-status-changed.v1',
+  formResponseCorrected: 'forms.response-corrected.v1',
 } as const;
 
 export type FuntinoEventType = (typeof eventTypes)[keyof typeof eventTypes];
@@ -273,6 +278,57 @@ export const branchStatusChangedPayloadSchema = z
   })
   .strict();
 
+export const formPublishedPayloadSchema = z
+  .object({
+    formId: z.string().uuid(),
+    formVersionId: z.string().uuid(),
+    organizationId: z.string().uuid(),
+    branchId: z.string().uuid(),
+    version: z.number().int().positive(),
+  })
+  .strict();
+
+export const formPausedPayloadSchema = z
+  .object({
+    formId: z.string().uuid(),
+    organizationId: z.string().uuid(),
+    branchId: z.string().uuid(),
+    version: z.number().int().positive(),
+  })
+  .strict();
+
+export const formResponseSubmittedPayloadSchema = z
+  .object({
+    responseId: z.string().uuid(),
+    formId: z.string().uuid(),
+    formVersionId: z.string().uuid(),
+    organizationId: z.string().uuid(),
+    branchId: z.string().uuid(),
+  })
+  .strict();
+
+export const formResponseStatusChangedPayloadSchema = z
+  .object({
+    responseId: z.string().uuid(),
+    formId: z.string().uuid(),
+    organizationId: z.string().uuid(),
+    branchId: z.string().uuid(),
+    previousStatus: z.enum(['new', 'in_review', 'followed_up', 'closed', 'spam']),
+    status: z.enum(['new', 'in_review', 'followed_up', 'closed', 'spam']),
+  })
+  .strict();
+
+export const formResponseCorrectedPayloadSchema = z
+  .object({
+    responseId: z.string().uuid(),
+    formId: z.string().uuid(),
+    organizationId: z.string().uuid(),
+    branchId: z.string().uuid(),
+    correctionVersion: z.number().int().positive(),
+    changedFieldCount: z.number().int().positive().max(100),
+  })
+  .strict();
+
 export const eventPayloadSchemas = {
   [eventTypes.userRegistered]: userRegisteredPayloadSchema,
   [eventTypes.householdCreated]: householdCreatedPayloadSchema,
@@ -297,6 +353,11 @@ export const eventPayloadSchemas = {
   [eventTypes.branchCreated]: branchCreatedPayloadSchema,
   [eventTypes.branchUpdated]: branchUpdatedPayloadSchema,
   [eventTypes.branchStatusChanged]: branchStatusChangedPayloadSchema,
+  [eventTypes.formPublished]: formPublishedPayloadSchema,
+  [eventTypes.formPaused]: formPausedPayloadSchema,
+  [eventTypes.formResponseSubmitted]: formResponseSubmittedPayloadSchema,
+  [eventTypes.formResponseStatusChanged]: formResponseStatusChangedPayloadSchema,
+  [eventTypes.formResponseCorrected]: formResponseCorrectedPayloadSchema,
 } as const;
 
 export function createEventEnvelope<T extends Record<string, unknown>>(input: {

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import '@fontsource/estedad/arabic.css';
 import '@funtino/design-system/styles.css';
+import '@funtino/forms-renderer/forms.css';
 import './globals.css';
 
 export const metadata: Metadata = {

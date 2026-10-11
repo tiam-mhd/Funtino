@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/forms/form-published.v1.schema.json",
+  "title": "Form published event v1",
+  "allOf": [
+    { "$ref": "../common/envelope.schema.json" },
+    {
+      "type": "object",
+      "properties": {
+        "eventType": { "const": "forms.form-published.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["formId", "formVersionId", "organizationId", "branchId", "version"],
+          "properties": {
+            "formId": { "type": "string", "format": "uuid" },
+            "formVersionId": { "type": "string", "format": "uuid" },
+            "organizationId": { "type": "string", "format": "uuid" },
+            "branchId": { "type": "string", "format": "uuid" },
+            "version": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

@@ -627,6 +627,7 @@ export function OrganizationsManagement() {
           <a href="/fa/organizations" aria-current="page">
             مجموعه‌ها و شعب
           </a>
+          <a href="/fa/forms">فرم‌ها و قالب‌ها</a>
           <a href="/fa/access">کاربران و دسترسی</a>
           <a href="/fa/mfa">تأیید دومرحله‌ای</a>
         </nav>

@@ -58,6 +58,16 @@ channels:
         $ref: '#/components/messages/BranchUpdated'
       branchStatusChanged:
         $ref: '#/components/messages/BranchStatusChanged'
+      formPublished:
+        $ref: '#/components/messages/FormPublished'
+      formPaused:
+        $ref: '#/components/messages/FormPaused'
+      formResponseSubmitted:
+        $ref: '#/components/messages/FormResponseSubmitted'
+      formResponseStatusChanged:
+        $ref: '#/components/messages/FormResponseStatusChanged'
+      formResponseCorrected:
+        $ref: '#/components/messages/FormResponseCorrected'
 operations:
   consumeDomainEvents:
     action: receive
@@ -157,3 +167,23 @@ components:
       name: BranchStatusChanged
       payload:
         $ref: '../events/organization-branch/branch-status-changed.v1.schema.json'
+    FormPublished:
+      name: FormPublished
+      payload:
+        $ref: '../events/forms/form-published.v1.schema.json'
+    FormPaused:
+      name: FormPaused
+      payload:
+        $ref: '../events/forms/form-paused.v1.schema.json'
+    FormResponseSubmitted:
+      name: FormResponseSubmitted
+      payload:
+        $ref: '../events/forms/response-submitted.v1.schema.json'
+    FormResponseStatusChanged:
+      name: FormResponseStatusChanged
+      payload:
+        $ref: '../events/forms/response-status-changed.v1.schema.json'
+    FormResponseCorrected:
+      name: FormResponseCorrected
+      payload:
+        $ref: '../events/forms/response-corrected.v1.schema.json'

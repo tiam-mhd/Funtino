@@ -238,3 +238,12 @@ Controller یا consumer فقط ورودی را parse و use case را اجرا 
 - RabbitMQ پیام‌رسان اصلی Runflare و Redis گزینه‌ی cache/fan-out است.
 - WebSocket روی Gateway باقی می‌ماند و reconnect/refetch اجباری است.
 - Kafka، NATS، ClickHouse و جداسازی فیزیکی دیتابیس فقط با سنجه‌ی بار و نیاز replay بررسی می‌شوند.
+
+## ۱۲. مرز دامنهٔ Forms
+
+- `services/forms` مالک فرم، نسخهٔ منتشرشده، پاسخ، template، audit و Outbox در schema اختصاصی `forms` است؛ Gateway و وب‌اپ‌ها فقط API قرارداددار را مصرف می‌کنند.
+- فرم و پاسخ از PostgreSQL خوانده می‌شوند. Redis cache می‌تواند باشد و منبع حقیقت نیست. سرویس دیگری مستقیماً جدول Forms را نمی‌خواند.
+- API Gateway ingress عمومی/داخلی UI است و قبل از هر عملیات مدیریتی IAM و scope سازمان/شعبه را server-side بررسی می‌کند. سرویس Forms فقط service-token Gateway را می‌پذیرد.
+- رویدادهای فرم نسخه‌دار و عاری از متن پاسخ/PII هستند؛ Outbox/Inbox و idempotency اعمال می‌شود.
+- پاسخ‌های PII با مجوز جدا و audit قابل‌دسترسی‌اند؛ بستر system به پاسخ فردی دسترسی ندارد. تا تصویب retention، هیچ پاک‌سازی خودکاری انجام نمی‌شود.
+- آپلود تصویر/فایل/امضا تا انتخاب object-storage provider و قرارداد دانلود امن فعال نمی‌شود.

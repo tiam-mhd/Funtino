@@ -11,6 +11,7 @@ import { CardInventoryManagement } from '../cashier/CardInventoryManagement';
 import { OperationsMfaStepUpPanel } from '../../components/forms/OperationsMfaStepUpPanel';
 import { getOperationsMfaStatus } from '../../lib/api/operations-staff';
 import { OperationsReports } from '../reports/OperationsReports';
+import { OperationsForms } from '../forms/OperationsForms';
 import {
   getOperationsScopes,
   getOperationsUser,
@@ -41,7 +42,7 @@ export function OperationsEntry() {
   const [user, setUser] = useState<OperationsUser | null>(null);
   const [scopes, setScopes] = useState<OperationsScopeOption[]>([]);
   const [activeScope, setActiveScope] = useState<OperationsScopeOption | null>(null);
-  const [workspaceTab, setWorkspaceTab] = useState<'staff' | 'devices' | 'cards' | 'reports'>(
+  const [workspaceTab, setWorkspaceTab] = useState<'staff' | 'devices' | 'cards' | 'reports' | 'forms'>(
     'staff',
   );
   const [mfaStepUpUntil, setMfaStepUpUntil] = useState<number | null>(null);
@@ -497,6 +498,15 @@ export function OperationsEntry() {
               >
                 گزارش‌ها
               </Button>
+              <Button
+                id="operations-forms-tab"
+                aria-pressed={workspaceTab === 'forms'}
+                onClick={() => setWorkspaceTab('forms')}
+                tone={workspaceTab === 'forms' ? 'primary' : 'ghost'}
+                type="button"
+              >
+                فرم‌ها
+              </Button>
             </div>
             {workspaceTab === 'staff' ? (
               <div>
@@ -526,13 +536,22 @@ export function OperationsEntry() {
                 scope={activeScope.scope}
                 scopeOption={activeScope}
               />
-            ) : (
+            ) : workspaceTab === 'reports' ? (
               <OperationsReports
                 key={scopeKey(activeScope.scope)}
                 mfaStepUpUntil={mfaStepUpUntil}
                 onMfaStepUp={setMfaStepUpUntil}
                 onSessionExpired={resetToSignIn}
                 scope={activeScope.scope}
+              />
+            ) : (
+              <OperationsForms
+                key={scopeKey(activeScope.scope)}
+                mfaStepUpUntil={mfaStepUpUntil}
+                onMfaStepUp={setMfaStepUpUntil}
+                onSessionExpired={resetToSignIn}
+                scope={activeScope.scope}
+                scopeOptions={scopes}
               />
             )}
             {error && (

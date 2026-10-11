@@ -20,7 +20,7 @@
     "dev:identity": "turbo dev --filter=@funtino/identity-access",
     "dev:organization-branch": "turbo dev --filter=@funtino/organization-branch",
     "dev:analytics": "turbo dev --filter=@funtino/analytics-read-model",
-    "backend:build": "turbo run build --filter=@funtino/api-gateway --filter=@funtino/realtime-gateway --filter=@funtino/device-integration --filter=@funtino/wallet --filter=@funtino/customer-household --filter=@funtino/notifications --filter=@funtino/identity-access --filter=@funtino/organization-branch --filter=@funtino/analytics-read-model --filter=@funtino/backend-core --filter=@funtino/event-contracts",
+    "backend:build": "turbo run build --filter=@funtino/api-gateway --filter=@funtino/realtime-gateway --filter=@funtino/device-integration --filter=@funtino/wallet --filter=@funtino/customer-household --filter=@funtino/forms --filter=@funtino/notifications --filter=@funtino/identity-access --filter=@funtino/organization-branch --filter=@funtino/analytics-read-model --filter=@funtino/backend-core --filter=@funtino/event-contracts",
     "build": "turbo run build --concurrency=1",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
@@ -37,7 +37,7 @@
     "database:restore-smoke": "node scripts/database/backup-restore-smoke.mjs",
     "quality:ci": "pnpm format:check && pnpm contracts:check && pnpm monitoring:config:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e:scope",
     "format": "prettier --write .",
-    "backend:typecheck": "turbo run typecheck --filter=@funtino/api-gateway --filter=@funtino/realtime-gateway --filter=@funtino/device-integration --filter=@funtino/wallet --filter=@funtino/customer-household --filter=@funtino/notifications --filter=@funtino/identity-access --filter=@funtino/organization-branch --filter=@funtino/analytics-read-model --filter=@funtino/backend-core --filter=@funtino/event-contracts"
+    "backend:typecheck": "turbo run typecheck --filter=@funtino/api-gateway --filter=@funtino/realtime-gateway --filter=@funtino/device-integration --filter=@funtino/wallet --filter=@funtino/customer-household --filter=@funtino/forms --filter=@funtino/notifications --filter=@funtino/identity-access --filter=@funtino/organization-branch --filter=@funtino/analytics-read-model --filter=@funtino/backend-core --filter=@funtino/event-contracts"
   },
   "devDependencies": {
     "@eslint/eslintrc": "3.3.1",

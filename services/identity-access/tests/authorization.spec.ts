@@ -38,6 +38,29 @@ test('system telemetry permission is global-only and included in the read-only s
   );
 });
 
+test('Forms PII access is a separate step-up permission and is absent from default tenant roles', () => {
+  const pii = getPermissionDefinition('forms.responses.pii.read');
+  assert.deepEqual(pii?.scopes, ['branch', 'organization']);
+  assert.equal(pii?.delegable, true);
+  assert.equal(pii?.stepUp, true);
+
+  for (const template of accessRoleTemplates.filter((item) => ['organization_manager', 'branch_manager', 'organization_crm_manager', 'branch_crm_manager'].includes(item.key))) {
+    assert.equal(template.permissionKeys.includes('forms.responses.pii.read'), false);
+  }
+  assert.ok(accessRoleTemplates.find((item) => item.key === 'branch_manager')?.permissionKeys.includes('forms.manage'));
+  assert.ok(accessRoleTemplates.find((item) => item.key === 'organization_crm_manager')?.permissionKeys.includes('forms.responses.read'));
+});
+
+test('response correction is separately scoped and does not grant PII access', () => {
+  const correction = getPermissionDefinition('forms.responses.correct');
+  assert.deepEqual(correction?.scopes, ['branch', 'organization']);
+  assert.equal(correction?.stepUp, false);
+  for (const template of accessRoleTemplates.filter((item) => ['organization_manager', 'branch_manager'].includes(item.key))) {
+    assert.ok(template.permissionKeys.includes('forms.responses.correct'));
+    assert.equal(template.permissionKeys.includes('forms.responses.pii.read'), false);
+  }
+});
+
 function makeContext(overrides: readonly PermissionOverride[] = []): AuthorizationContext {
   return {
     actorUserId: 'user-a',

@@ -108,6 +108,12 @@ importers:
       '@funtino/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
+      '@funtino/forms-renderer':
+        specifier: workspace:*
+        version: link:../../packages/forms-renderer
+      '@funtino/forms-schema':
+        specifier: workspace:*
+        version: link:../../packages/forms-schema
       next:
         specifier: 15.5.2
         version: 15.5.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -130,6 +136,12 @@ importers:
       '@funtino/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
+      '@funtino/forms-renderer':
+        specifier: workspace:*
+        version: link:../../packages/forms-renderer
+      '@funtino/forms-schema':
+        specifier: workspace:*
+        version: link:../../packages/forms-schema
       next:
         specifier: 15.5.2
         version: 15.5.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -195,6 +207,9 @@ importers:
       '@funtino/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
+      '@funtino/forms-schema':
+        specifier: workspace:*
+        version: link:../../packages/forms-schema
       next:
         specifier: 15.5.2
         version: 15.5.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -245,6 +260,31 @@ importers:
       zod:
         specifier: 3.25.76
         version: 3.25.76
+
+  packages/forms-renderer:
+    dependencies:
+      '@funtino/forms-schema':
+        specifier: workspace:*
+        version: link:../forms-schema
+      react:
+        specifier: ^19.0.0
+        version: 19.1.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.1.0(react@19.1.0)
+
+  packages/forms-schema:
+    dependencies:
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      tsx:
+        specifier: 4.19.3
+        version: 4.19.3
+      typescript:
+        specifier: 5.8.2
+        version: 5.8.2
 
   services/analytics-read-model:
     dependencies:
@@ -380,6 +420,58 @@ importers:
         specifier: 3.25.76
         version: 3.25.76
     devDependencies:
+      prisma:
+        specifier: 6.7.0
+        version: 6.7.0(typescript@5.8.2)
+      tsx:
+        specifier: 4.19.3
+        version: 4.19.3
+      typescript:
+        specifier: 5.8.2
+        version: 5.8.2
+
+  services/forms:
+    dependencies:
+      '@funtino/backend-core':
+        specifier: workspace:*
+        version: link:../../packages/backend-core
+      '@funtino/event-contracts':
+        specifier: workspace:*
+        version: link:../../packages/event-contracts
+      '@funtino/forms-schema':
+        specifier: workspace:*
+        version: link:../../packages/forms-schema
+      '@nestjs/common':
+        specifier: 11.0.11
+        version: 11.0.11(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/config':
+        specifier: 4.0.2
+        version: 4.0.2(@nestjs/common@11.0.11(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(rxjs@7.8.2)
+      '@nestjs/core':
+        specifier: 11.0.11
+        version: 11.0.11(@nestjs/common@11.0.11(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/websockets@11.0.11)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/platform-fastify':
+        specifier: 11.0.11
+        version: 11.0.11(@nestjs/common@11.0.11(class-transformer@0.5.1)(class-validator@0.14.1)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.0.11)
+      '@prisma/client':
+        specifier: 6.7.0
+        version: 6.7.0(prisma@6.7.0(typescript@5.8.2))(typescript@5.8.2)
+      fastify:
+        specifier: 5.2.1
+        version: 5.2.1
+      reflect-metadata:
+        specifier: 0.2.2
+        version: 0.2.2
+      rxjs:
+        specifier: 7.8.2
+        version: 7.8.2
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: 22.13.10
+        version: 22.13.10
       prisma:
         specifier: 6.7.0
         version: 6.7.0(typescript@5.8.2)

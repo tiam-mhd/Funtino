@@ -32,20 +32,28 @@ import { PrismaService } from './infrastructure/persistence/prisma/prisma.servic
 import { OTP_SENDER } from './infrastructure/notifications/otp-sender.js';
 import { ParsGreenOtpSender } from './infrastructure/notifications/pars-green-otp.sender.js';
 import { PrometheusTelemetryClient } from './infrastructure/observability/prometheus-telemetry.client.js';
+import { FormsClient } from './infrastructure/forms/forms.client.js';
+import { CustomerFormsController } from './interfaces/http/customer-forms.controller.js';
+import { CustomerOptionalSessionGuard } from './interfaces/http/customer-optional-session.guard.js';
+import { OperationsFormsController } from './interfaces/http/operations-forms.controller.js';
+import { SystemFormsController } from './interfaces/http/system-forms.controller.js';
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true })],
   controllers: [
     AuthController,
     CustomerController,
+    CustomerFormsController,
     HealthController,
     OperationsAccessController,
     OperationsCardsController,
     OperationsDevicesController,
+    OperationsFormsController,
     OperationsMfaController,
     OperationsReportsController,
     OperationsScopeController,
     SystemOrganizationController,
+    SystemFormsController,
     SystemHealthController,
     SystemSessionPolicyController,
     SystemBootstrapOwnerController,
@@ -70,9 +78,11 @@ import { PrometheusTelemetryClient } from './infrastructure/observability/promet
     DeviceIntegrationClient,
     OrganizationBranchClient,
     AnalyticsReportClient,
+    FormsClient,
     WalletClient,
     PrometheusTelemetryClient,
     SessionGuard,
+    CustomerOptionalSessionGuard,
     IdentityAccessBootstrapLookupGuard,
     TrustedOriginGuard,
     OutboxRelay,

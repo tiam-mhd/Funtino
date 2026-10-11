@@ -119,6 +119,18 @@ export function CustomerHome({ locale }: { locale: Locale }) {
             </span>
             <CustomerIcon name="chevron-left" size={17} className="customer-quick-action__arrow" />
           </Link>
+          <Link href={homePath + '/forms'} className="customer-quick-action">
+            <IconBadge
+              icon={<CustomerIcon name="clipboard" size={18} />}
+              label="فرم‌ها"
+              tone="purple"
+            />
+            <span className="customer-quick-action__copy">
+              <strong>فرم‌های فانتینو</strong>
+              <small>فرم‌های در دسترس</small>
+            </span>
+            <CustomerIcon name="chevron-left" size={17} className="customer-quick-action__arrow" />
+          </Link>
           <Link href={homePath + '/family'} className="customer-quick-action">
             <IconBadge
               icon={<CustomerIcon name="family" size={18} />}

@@ -360,6 +360,27 @@
 - handoff به مسئول شعبه؛
 - تست ثبت کامل عملیات اضطراری.
 
+### F0 — معماری و قرارداد Forms
+
+- مالکیت مستقل سرویس Forms، schema PostgreSQL، مدل نسخه و پاسخ؛
+- قرارداد OpenAPI و event نسخه‌دار؛
+- catalog مجوز و سناریوی scope/PII/audit؛
+- مرزهای retention و storage؛ پاک‌سازی تا تصویب سیاست خاموش می‌ماند و upload تا انتخاب provider خاموش است.
+
+### F1 — سرویس، builder و پنل مدیریت
+
+- draft، validation، preview، publish/pause/archive و immutable version؛
+- editor مشترک schema/renderer، scope مجموعه/شعبه، template و API؛
+- پاسخ، فهرست scopeدار، وضعیت، audit و CSV کنترل‌شده؛
+- تست IDOR بین شعب، مجوز PII، idempotency، نسخه و migration مستقل.
+
+### F2 — customer runtime و rollout
+
+- فرم مهمان/مشتری، رضایت اتصال حساب، فرم عمومی، وضعیت و ارسال idempotent؛
+- RTL/mobile/accessibility و renderer مشترک با preview؛
+- rate limit، observability، backup/restore و rollout هر دو runtime bundle؛
+- file/image/signature فقط پس از تصمیم storage و قرارداد دانلود مجاز.
+
 ## ۵. وابستگی فازها
 
 | قابلیت       | پیش‌نیاز مشترک                      | بستر درگیر           |
@@ -372,6 +393,7 @@
 | کمپین        | Product/Pricing و Loyalty           | هر سه بستر           |
 | گزارش        | event contract و read model         | عملیات، سیستم        |
 | WebSocket    | RabbitMQ، auth و realtime gateway   | هر سه بستر           |
+| Forms        | F0، G1، G2، IAM، event contract     | هر سه بستر           |
 
 ## ۶. Gateهای انتشار
 

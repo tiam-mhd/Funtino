@@ -27,7 +27,8 @@ export type CustomerIconName =
   | 'candy'
   | 'heart'
   | 'settings'
-  | 'route';
+  | 'route'
+  | 'clipboard';
 
 type CustomerIconProps = Omit<SVGProps<SVGSVGElement>, 'name'> & {
   name: CustomerIconName;
@@ -179,6 +180,13 @@ function IconPaths({ name }: { name: CustomerIconName }): ReactNode {
           <circle cx="6" cy="18" r="2" />
           <circle cx="18" cy="6" r="2" />
           <path d="M8 18h2a4 4 0 0 0 4-4v-4a4 4 0 0 1 4-4" />
+        </>
+      );
+    case 'clipboard':
+      return (
+        <>
+          <rect x="5" y="4.5" width="14" height="17" rx="2" />
+          <path d="M9 4.5h6v3H9zM8.5 12h7M8.5 16h7" />
         </>
       );
   }

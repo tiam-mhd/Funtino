@@ -1,4 +1,4 @@
-export const permissionCatalogVersion = 2;
+export const permissionCatalogVersion = 4;
 
 export const permissionCatalog = [
   { key: 'organization.create', scopes: ['global'], delegable: false, stepUp: true },
@@ -141,6 +141,17 @@ export const permissionCatalog = [
   { key: 'system.access.impersonate', scopes: ['global'], delegable: false, stepUp: true },
   { key: 'system.health.read', scopes: ['global'], delegable: true, stepUp: false },
   { key: 'system.session_policy.manage', scopes: ['global'], delegable: false, stepUp: false },
+  { key: 'forms.platform.read', scopes: ['global'], delegable: true, stepUp: false },
+  { key: 'forms.platform.manage', scopes: ['global'], delegable: false, stepUp: true },
+  { key: 'forms.read', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
+  { key: 'forms.manage', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
+  { key: 'forms.publish', scopes: ['branch', 'organization'], delegable: true, stepUp: true },
+  { key: 'forms.responses.read', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
+  { key: 'forms.responses.manage', scopes: ['branch', 'organization'], delegable: true, stepUp: true },
+  { key: 'forms.responses.correct', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
+  { key: 'forms.responses.pii.read', scopes: ['branch', 'organization'], delegable: true, stepUp: true },
+  { key: 'forms.responses.export', scopes: ['branch', 'organization'], delegable: true, stepUp: true },
+  { key: 'forms.templates.manage', scopes: ['branch', 'organization', 'global'], delegable: true, stepUp: true },
 ] as const;
 
 export type PermissionKey = (typeof permissionCatalog)[number]['key'];

@@ -105,6 +105,16 @@
       ]
     },
     {
+      "name": "forms",
+      "cwd": ".",
+      "args": ["services/forms/dist/main.js"],
+      "port": 4090,
+      "portEnv": "FORMS_PORT",
+      "readinessPath": "/health/ready",
+      "startupTimeoutMs": 60000,
+      "env": ["FORMS_DATABASE_URL", "FORMS_METRICS_TOKEN", "FORMS_API_GATEWAY_TOKEN", "RABBITMQ_URL"]
+    },
+    {
       "name": "device-integration",
       "cwd": "services/device-integration",
       "args": ["dist/main.js"],
@@ -184,7 +194,9 @@
         "CUSTOMER_HOUSEHOLD_URL",
         "CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN",
         "ANALYTICS_READ_MODEL_URL",
-        "ANALYTICS_API_GATEWAY_TOKEN"
+        "ANALYTICS_API_GATEWAY_TOKEN",
+        "FORMS_URL",
+        "FORMS_API_GATEWAY_TOKEN"
       ]
     }
   ]

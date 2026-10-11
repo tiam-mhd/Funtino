@@ -1,0 +1,26 @@
+{
+  "name": "@funtino/forms-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.tsx",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./forms.css": "./src/forms.css"
+  },
+  "dependencies": {
+    "@funtino/forms-schema": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  }
+}
