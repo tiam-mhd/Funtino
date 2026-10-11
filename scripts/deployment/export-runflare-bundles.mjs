@@ -430,7 +430,54 @@ async function inspectExistingDestination(bundleName, destinationDirectory, rele
   if (receipt.fingerprint !== expectedFingerprint) {
     throw new Error(`Snapshot receipt fingerprint is invalid in ${destinationDirectory}.`);
   }
-  if (JSON.stringify(existingFiles) !== JSON.stringify(expected)) {
+  let snapshotMatches = JSON.stringify(existingFiles) === JSON.stringify(expected);
+  if (!snapshotMatches && hasGit) {
+    const gitEnvironment = createSafeGitEnvironmentFor(destinationDirectory);
+    const status = spawnSync('git', ['status', '--porcelain', '--untracked-files=all'], {
+      cwd: destinationDirectory,
+      env: gitEnvironment,
+      encoding: 'utf8',
+    });
+    if (status.status !== 0 || status.stdout.trim()) {
+      throw new Error(`Refusing to compare snapshot files in a non-clean clone: ${destinationDirectory}.`);
+    }
+
+    const samePaths =
+      existingFiles.length === expected.length &&
+      expected.every((file, index) => existingFiles[index].path === file.path);
+    if (samePaths) {
+      snapshotMatches = true;
+      for (let index = 0; index < expected.length; index += 1) {
+        const expectedFile = expected[index];
+        if (existingFiles[index].sha256 === expectedFile.sha256) {
+          continue;
+        }
+
+        assertSafeSnapshotPath(expectedFile.path);
+        const committedPath = resolve(destinationDirectory, expectedFile.path);
+        if (!isWithin(destinationDirectory, committedPath) || committedPath === destinationDirectory) {
+          throw new Error('Snapshot receipt contains an unsafe file path.');
+        }
+
+        const committedFile = spawnSync('git', ['cat-file', 'blob', `HEAD:${expectedFile.path}`], {
+          cwd: destinationDirectory,
+          env: gitEnvironment,
+          maxBuffer: 256 * 1024 * 1024,
+        });
+        if (committedFile.error) {
+          throw committedFile.error;
+        }
+        if (
+          committedFile.status !== 0 ||
+          createHash('sha256').update(committedFile.stdout).digest('hex') !== expectedFile.sha256
+        ) {
+          snapshotMatches = false;
+          break;
+        }
+      }
+    }
+  }
+  if (!snapshotMatches) {
     throw new Error(
       `Refusing to replace ${destinationDirectory}: snapshot files changed since the last export.`,
     );
