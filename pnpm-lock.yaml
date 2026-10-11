@@ -210,6 +210,9 @@ importers:
       '@funtino/design-system':
         specifier: workspace:*
         version: link:../../packages/design-system
+      '@funtino/forms-renderer':
+        specifier: workspace:*
+        version: link:../../packages/forms-renderer
       '@funtino/forms-schema':
         specifier: workspace:*
         version: link:../../packages/forms-schema

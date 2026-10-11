@@ -727,9 +727,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  .page,
+  .page *,
+  .page *::before,
+  .page *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
   }
