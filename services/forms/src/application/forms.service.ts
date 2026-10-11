@@ -114,14 +114,15 @@ export class FormsService {
   async createForm(input: TenantScope & { title: string }, meta: CommandMeta) {
     const title = input.title.trim();
     if (!title) throw new BadRequestException('عنوان فرم الزامی است.');
-    if (!input.branchId) throw new BadRequestException('فرم باید به یک شعبهٔ معتبر متصل باشد.');
+    const branchId = input.branchId;
+    if (!branchId) throw new BadRequestException('فرم باید به یک شعبهٔ معتبر متصل باشد.');
     const platformSettings = await this.prisma.formPlatformSettings.findUnique({ where: { id: 1 } });
     const definition = emptyDefinition(title, formThemeSchema.parse(platformSettings?.defaultTheme ?? defaultTheme));
     const form = await this.prisma.$transaction(async (tx) => {
       const created = await tx.form.create({
         data: {
           organizationId: input.organizationId,
-          branchId: input.branchId,
+          branchId,
           title,
           slug: makeSlug(title),
           description: '',
