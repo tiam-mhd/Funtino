@@ -7,6 +7,12 @@
   padding: 0 clamp(16px, 4vw, 54px);
 }
 
+.pageActive {
+  overflow: visible;
+  padding: 0;
+  background: #f6f7fb;
+}
+
 .ambient {
   position: absolute;
   z-index: -1;
@@ -91,8 +97,16 @@
 }
 
 .contentWide {
-  width: min(100%, 1320px);
+  width: 100%;
   align-content: start;
+  margin: 0;
+  padding: 0;
+}
+
+.moduleStack {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
 }
 
 .workspaceTabs {

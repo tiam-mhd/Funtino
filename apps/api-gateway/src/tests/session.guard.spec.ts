@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { hashSecret } from '@funtino/backend-core';
 import type { Session } from '../domain/models.js';
+import { SYSTEM_ADMIN_IDLE_TIMEOUT_MS } from '../application/auth/session-policy.js';
 import { SessionGuard } from '../interfaces/http/session.guard.js';
 
 const now = Date.now();
@@ -60,8 +61,8 @@ test('admin idle timeout revokes even a session with MFA evidence', async () => 
   const calls: string[] = [];
   const idle = {
     ...adminSession,
-    mfaVerifiedAt: now - 16 * 60_000,
-    lastActivityAt: now - 16 * 60_000,
+    mfaVerifiedAt: now - SYSTEM_ADMIN_IDLE_TIMEOUT_MS - 1,
+    lastActivityAt: now - SYSTEM_ADMIN_IDLE_TIMEOUT_MS - 1,
   };
   await assert.rejects(guardFor(idle, calls).canActivate(context('GET', '/api/v1/auth/me')));
   assert.deepEqual(calls, [`revoke:${adminSession.tokenHash}`]);

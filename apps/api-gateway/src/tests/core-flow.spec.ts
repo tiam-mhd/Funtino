@@ -43,6 +43,7 @@ function accessClient(systemAdmin = false): IdentityAccessClient {
         : [],
       policyVersion: 1,
       catalogVersion: 1,
+      managementSessionTtlHours: 12,
     }),
   } as unknown as IdentityAccessClient;
 }

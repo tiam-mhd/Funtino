@@ -95,6 +95,7 @@ function serviceFixture(occupiedCreatedAt: Date | null) {
           role: bootstrapRole,
         };
       },
+      findMany: async () => [],
     },
   } as unknown as PrismaService;
   const journal = {

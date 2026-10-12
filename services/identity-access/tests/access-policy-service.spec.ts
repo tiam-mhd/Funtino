@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ForbiddenException } from '@nestjs/common';
 import { AccessPolicyService } from '../src/application/access-policy.service.js';
+import { permissionCatalogVersion } from '../src/domain/authorization/permission-catalog.js';
 import type { AccessMutationJournalService } from '../src/application/access-mutation-journal.service.js';
 import type { PrismaService } from '../src/infrastructure/persistence/prisma/prisma.service.js';
 
@@ -290,7 +291,7 @@ test('current membership projection returns scope-safe summaries and policy vers
 
   const result = await service.currentMemberships(userId);
   assert.equal(result.policyVersion, 7);
-  assert.equal(result.catalogVersion, 1);
+  assert.equal(result.catalogVersion, permissionCatalogVersion);
   assert.equal(result.data[0]?.id, 'membership-a');
   assert.equal(result.data[0]?.role.permissionKeys[0], 'access.role.read');
   assert.equal('userId' in (result.data[0] ?? {}), false);

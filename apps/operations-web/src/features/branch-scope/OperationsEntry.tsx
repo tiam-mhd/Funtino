@@ -12,6 +12,12 @@ import { OperationsMfaStepUpPanel } from '../../components/forms/OperationsMfaSt
 import { getOperationsMfaStatus } from '../../lib/api/operations-staff';
 import { OperationsReports } from '../reports/OperationsReports';
 import { OperationsForms } from '../forms/OperationsForms';
+import { OperationsOverview } from '../reports/OperationsOverview';
+import { OperationsBranchDirectory } from '../reports/OperationsBranchDirectory';
+import {
+  OperationsWorkspaceShell,
+  type WorkspaceSection,
+} from '../../components/workspace-shell/OperationsWorkspaceShell';
 import {
   getOperationsScopes,
   getOperationsUser,
@@ -42,9 +48,7 @@ export function OperationsEntry() {
   const [user, setUser] = useState<OperationsUser | null>(null);
   const [scopes, setScopes] = useState<OperationsScopeOption[]>([]);
   const [activeScope, setActiveScope] = useState<OperationsScopeOption | null>(null);
-  const [workspaceTab, setWorkspaceTab] = useState<'staff' | 'devices' | 'cards' | 'reports' | 'forms'>(
-    'staff',
-  );
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceSection>('overview');
   const [mfaStepUpUntil, setMfaStepUpUntil] = useState<number | null>(null);
   const [phone, setPhone] = useState('');
   const [loginPhone, setLoginPhone] = useState('');
@@ -54,7 +58,6 @@ export function OperationsEntry() {
     expiresAt: string;
     deliveryStatus?: 'confirmed' | 'unknown';
   } | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [selectingKey, setSelectingKey] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -66,7 +69,6 @@ export function OperationsEntry() {
     setMfaStepUpUntil(null);
     setChallenge(null);
     setCode('');
-    setPickerOpen(false);
     setError('');
     setView('sign-in');
   }, []);
@@ -79,7 +81,6 @@ export function OperationsEntry() {
     const access = await getOperationsScopes();
     setScopes(access.items);
     setActiveScope(null);
-    setPickerOpen(false);
     setView(access.items.length > 0 ? 'scope-picker' : 'no-access');
   }, []);
 
@@ -188,9 +189,14 @@ export function OperationsEntry() {
     try {
       const selected = await selectOperationsScope(scope);
       setActiveScope(selected);
-      setWorkspaceTab('staff');
+      setScopes((current) => {
+        const selectedKey = scopeKey(selected.scope);
+        const existingIndex = current.findIndex((item) => scopeKey(item.scope) === selectedKey);
+        if (existingIndex === -1) return [...current, selected];
+        return current.map((item, index) => (index === existingIndex ? selected : item));
+      });
+      setWorkspaceTab('overview');
       setView('active');
-      setPickerOpen(false);
     } catch (failure) {
       if (failure instanceof ApiRequestError && failure.status === 401) {
         resetToSignIn();
@@ -205,7 +211,6 @@ export function OperationsEntry() {
               : false;
             if (!activeStillAllowed) {
               setActiveScope(null);
-              setPickerOpen(false);
               setView(refreshed.items.length > 0 ? 'scope-picker' : 'no-access');
             }
           } catch (refreshFailure) {
@@ -232,7 +237,6 @@ export function OperationsEntry() {
       }
     }
     setActiveScope(null);
-    setPickerOpen(false);
     setView(refreshed.items.length > 0 ? 'scope-picker' : 'no-access');
   }, [activeScope]);
 
@@ -255,30 +259,32 @@ export function OperationsEntry() {
     user?.phoneE164;
 
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} ${view === 'active' ? styles.pageActive : ''}`}>
       <div className={styles.ambient} aria-hidden="true" />
-      <header className={styles.topbar}>
-        <a className={styles.brand} href="/" aria-label="صفحه‌ی آغاز پنل فانتینو">
-          <Image src="/brand/funtino-logo.png" alt="فانتینو" width={126} height={42} priority />
-          <span>پنل عملیات</span>
-        </a>
-        {user && (
-          <div className={styles.account}>
-            <span className={styles.accountAvatar} aria-hidden="true">
-              {(userLabel || 'ک').slice(0, 1)}
-            </span>
-            <span className={styles.accountLabel}>{userLabel}</span>
-            <Button
-              tone="ghost"
-              type="button"
-              onClick={logout}
-              disabled={busy || selectingKey !== null}
-            >
-              خروج
-            </Button>
-          </div>
-        )}
-      </header>
+      {view !== 'active' && (
+        <header className={styles.topbar}>
+          <a className={styles.brand} href="/" aria-label="صفحه‌ی آغاز پنل فانتینو">
+            <Image src="/brand/funtino-logo.png" alt="فانتینو" width={126} height={42} priority />
+            <span>پنل عملیات</span>
+          </a>
+          {user && (
+            <div className={styles.account}>
+              <span className={styles.accountAvatar} aria-hidden="true">
+                {(userLabel || 'ک').slice(0, 1)}
+              </span>
+              <span className={styles.accountLabel}>{userLabel}</span>
+              <Button
+                tone="ghost"
+                type="button"
+                onClick={logout}
+                disabled={busy || selectingKey !== null}
+              >
+                خروج
+              </Button>
+            </div>
+          )}
+        </header>
+      )}
 
       <div
         className={view === 'active' ? `${styles.content} ${styles.contentWide}` : styles.content}
@@ -423,93 +429,40 @@ export function OperationsEntry() {
         )}
 
         {view === 'active' && activeScope && (
-          <section className={styles.workspace} aria-labelledby="active-scope-title">
-            <div className={styles.workspaceHeading}>
-              <div>
-                <div className={styles.eyebrow}>محدوده‌ی فعال و تأییدشده</div>
-                <h1 id="active-scope-title">
-                  {activeScope.branch?.name ?? activeScope.organization.name}
-                </h1>
-                <p>
-                  {activeScope.branch
-                    ? `${activeScope.organization.name} · ${activeScope.branch.city}`
-                    : 'دسترسی در سطح مجموعه'}
-                </p>
-              </div>
-              {scopes.length > 1 && (
-                <Button
-                  onClick={() => {
-                    setError('');
-                    setPickerOpen((open) => !open);
-                  }}
-                  tone="ghost"
-                  type="button"
-                >
-                  {pickerOpen ? 'بستن انتخابگر' : 'تغییر محدوده'}
-                </Button>
-              )}
-            </div>
-            <Surface className={styles.confirmation}>
-              <span className={styles.confirmationIcon} aria-hidden="true">
-                ✓
-              </span>
-              <div>
-                <strong>عضویت و وضعیت مجموعه/شعبه تأیید شد</strong>
-                <p>
-                  انتخاب در گزارش امنیتی ثبت شده است. دسترسی به هر داده یا عملیات نیز در هر درخواست
-                  جداگانه و بر اساس مجوز سمت سرور کنترل می‌شود.
-                </p>
-              </div>
-            </Surface>
-            <div className={styles.workspaceTabs} role="group" aria-label="بخش‌های پنل عملیات">
-              <Button
-                id="operations-staff-tab"
-                aria-pressed={workspaceTab === 'staff'}
-                onClick={() => setWorkspaceTab('staff')}
-                tone={workspaceTab === 'staff' ? 'primary' : 'ghost'}
-                type="button"
-              >
-                کارکنان و دسترسی
-              </Button>
-              <Button
-                id="operations-devices-tab"
-                aria-pressed={workspaceTab === 'devices'}
-                onClick={() => setWorkspaceTab('devices')}
-                tone={workspaceTab === 'devices' ? 'primary' : 'ghost'}
-                type="button"
-              >
-                دستگاه‌ها و پایش
-              </Button>
-              <Button
-                id="operations-cards-tab"
-                aria-pressed={workspaceTab === 'cards'}
-                onClick={() => setWorkspaceTab('cards')}
-                tone={workspaceTab === 'cards' ? 'primary' : 'ghost'}
-                type="button"
-              >
-                موجودی کارت‌ها
-              </Button>
-              <Button
-                id="operations-reports-tab"
-                aria-pressed={workspaceTab === 'reports'}
-                onClick={() => setWorkspaceTab('reports')}
-                tone={workspaceTab === 'reports' ? 'primary' : 'ghost'}
-                type="button"
-              >
-                گزارش‌ها
-              </Button>
-              <Button
-                id="operations-forms-tab"
-                aria-pressed={workspaceTab === 'forms'}
-                onClick={() => setWorkspaceTab('forms')}
-                tone={workspaceTab === 'forms' ? 'primary' : 'ghost'}
-                type="button"
-              >
-                فرم‌ها
-              </Button>
-            </div>
-            {workspaceTab === 'staff' ? (
-              <div>
+          <OperationsWorkspaceShell
+            activeSection={workspaceTab}
+            activeScope={activeScope}
+            scopeOptions={scopes}
+            selectingScopeKey={selectingKey}
+            scopeError={error}
+            userLabel={userLabel || 'کاربر عملیاتی'}
+            logoutBusy={busy}
+            onLogout={() => void logout()}
+            onSectionChange={(section) => {
+              setError('');
+              setWorkspaceTab(section);
+            }}
+            onSelectScope={chooseScope}
+          >
+            {workspaceTab === 'overview' ? (
+              <OperationsOverview
+                key={scopeKey(activeScope.scope)}
+                scope={activeScope.scope}
+                scopeOption={activeScope}
+                onNavigate={setWorkspaceTab}
+                onSelectScope={chooseScope}
+                onSessionExpired={resetToSignIn}
+              />
+            ) : workspaceTab === 'branches' && activeScope.scope.type === 'organization' ? (
+              <OperationsBranchDirectory
+                key={scopeKey(activeScope.scope)}
+                scope={activeScope.scope}
+                scopeOption={activeScope}
+                onSelectScope={chooseScope}
+                onSessionExpired={resetToSignIn}
+              />
+            ) : workspaceTab === 'staff' ? (
+              <div className={styles.moduleStack}>
                 <StaffInvitationInbox
                   onAccepted={refreshScopesAfterInvitation}
                   onSessionExpired={resetToSignIn}
@@ -517,16 +470,14 @@ export function OperationsEntry() {
                 <StaffAccessManager onSessionExpired={resetToSignIn} scope={activeScope.scope} />
               </div>
             ) : workspaceTab === 'devices' ? (
-              <div>
-                <DeviceManagement
-                  key={scopeKey(activeScope.scope)}
-                  mfaStepUpUntil={mfaStepUpUntil}
-                  onMfaStepUp={setMfaStepUpUntil}
-                  onSessionExpired={resetToSignIn}
-                  scope={activeScope.scope}
-                  scopeOption={activeScope}
-                />
-              </div>
+              <DeviceManagement
+                key={scopeKey(activeScope.scope)}
+                mfaStepUpUntil={mfaStepUpUntil}
+                onMfaStepUp={setMfaStepUpUntil}
+                onSessionExpired={resetToSignIn}
+                scope={activeScope.scope}
+                scopeOption={activeScope}
+              />
             ) : workspaceTab === 'cards' ? (
               <CardInventoryManagement
                 key={scopeKey(activeScope.scope)}
@@ -554,23 +505,7 @@ export function OperationsEntry() {
                 scopeOptions={scopes}
               />
             )}
-            {error && (
-              <p className={styles.error} role="alert">
-                {error}
-              </p>
-            )}
-            {pickerOpen && (
-              <div className={styles.changePanel}>
-                <h2>محدوده‌ی دیگری انتخاب کنید</h2>
-                <ScopeOptions
-                  activeScope={activeScope.scope}
-                  busyKey={selectingKey}
-                  onChoose={chooseScope}
-                  options={scopes}
-                />
-              </div>
-            )}
-          </section>
+          </OperationsWorkspaceShell>
         )}
 
         {view === 'no-access' && (
@@ -631,9 +566,11 @@ export function OperationsEntry() {
         )}
       </div>
 
-      <footer className={styles.footer}>
-        فانتینو · دسترسی‌ها بر اساس عضویت فعال و سیاست سرور کنترل می‌شوند
-      </footer>
+      {view !== 'active' && (
+        <footer className={styles.footer}>
+          فانتینو · دسترسی‌ها بر اساس عضویت فعال و سیاست سرور کنترل می‌شوند
+        </footer>
+      )}
     </main>
   );
 }

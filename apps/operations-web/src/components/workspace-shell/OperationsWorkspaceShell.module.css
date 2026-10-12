@@ -1,0 +1,991 @@
+.shell {
+  --ops-canvas: #f5f7fb;
+  --ops-sidebar: #202341;
+  --ops-sidebar-muted: #b9bfd3;
+  --ops-line: #e9ebf2;
+  --ops-accent: var(--ft-teal);
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: 268px minmax(0, 1fr);
+  color: var(--ft-ink);
+  background: var(--ops-canvas);
+  transition: grid-template-columns 180ms ease;
+}
+
+.collapsed {
+  grid-template-columns: 82px minmax(0, 1fr);
+}
+
+.sidebar {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  display: flex;
+  height: 100vh;
+  min-height: 560px;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 15px 14px;
+  color: #fff;
+  background: var(--ops-sidebar);
+}
+
+.brandRow {
+  display: flex;
+  min-height: 84px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
+  padding: 0 2px;
+}
+
+.brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.brandImage {
+  display: block;
+  width: 102px;
+  height: 38px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  padding: 2px 4px;
+  background: #fff;
+  object-fit: contain;
+}
+
+.brandDivider {
+  width: 1px;
+  height: 26px;
+  flex: 0 0 auto;
+  background: rgb(255 255 255 / 24%);
+}
+
+.brandLabel {
+  white-space: nowrap;
+}
+
+.mobileClose {
+  display: none;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 15%);
+  border-radius: 12px;
+  color: #fff;
+  background: rgb(255 255 255 / 7%);
+  cursor: pointer;
+}
+
+.mobileClose svg,
+.collapseButton svg,
+.mobileMenuButton svg,
+.navIcon svg,
+.scopeMark svg,
+.scopeButtonIcon svg,
+.optionIcon svg,
+.breadcrumb svg,
+.scopeVerified svg,
+.inlineVerified svg,
+.footerShield svg,
+.scopeError svg {
+  display: block;
+  width: 19px;
+  height: 19px;
+}
+
+.scopeCard {
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  gap: 11px;
+  margin-top: 16px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 15px;
+  padding: 11px;
+  background: rgb(255 255 255 / 6%);
+}
+
+.scopeMark,
+.scopeButtonIcon,
+.optionIcon {
+  display: grid;
+  width: 39px;
+  height: 39px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--ft-teal);
+  background: rgb(14 207 193 / 13%);
+}
+
+.scopeCopy,
+.scopeButtonCopy,
+.optionText {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.scopeCaption,
+.actionCaption {
+  color: var(--ops-sidebar-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.scopeCopy strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeCopy > span:last-child {
+  overflow: hidden;
+  color: var(--ops-sidebar-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeVerified,
+.inlineVerified {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  flex: 0 0 auto;
+  place-items: center;
+  margin-inline-start: auto;
+  border-radius: 50%;
+  color: var(--ft-success);
+  background: rgb(58 175 120 / 13%);
+}
+
+.scopeVerified svg,
+.inlineVerified svg {
+  width: 14px;
+  height: 14px;
+}
+
+.navigation {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  margin: 22px -3px 12px;
+  padding: 0 3px 8px;
+  scrollbar-color: rgb(255 255 255 / 26%) transparent;
+  scrollbar-width: thin;
+}
+
+.navGroup {
+  display: grid;
+  gap: 4px;
+}
+
+.groupLabel {
+  margin: 0 8px 5px;
+  color: #8f96b0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.navItem {
+  position: relative;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 0 11px;
+  color: #d1d5e2;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.navItem:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 7%);
+}
+
+.navItem:focus-visible,
+.mobileClose:focus-visible,
+.collapseButton:focus-visible,
+.mobileMenuButton:focus-visible,
+.scopeButton:focus-visible,
+.scopeOption:focus-visible,
+.backdrop:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(14 207 193 / 35%);
+}
+
+.navItemActive {
+  border-color: rgb(14 207 193 / 20%);
+  color: #fff;
+  background: rgb(14 207 193 / 15%);
+}
+
+.navItemActive::before {
+  position: absolute;
+  inset-block: 9px;
+  inset-inline-start: -4px;
+  width: 3px;
+  border-radius: 4px;
+  background: var(--ft-teal);
+  content: '';
+}
+
+.navIcon {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #aeb5ca;
+}
+
+.navIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.navItemActive .navIcon {
+  color: var(--ft-teal);
+}
+
+.navLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebarFooter {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  gap: 9px;
+  border-top: 1px solid rgb(255 255 255 / 10%);
+  padding: 12px 4px 0;
+}
+
+.footerShield {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  color: #9ca6c0;
+  background: rgb(255 255 255 / 7%);
+}
+
+.footerShield svg {
+  width: 16px;
+  height: 16px;
+}
+
+.footerText {
+  flex: 1;
+  color: #aeb5ca;
+  font-size: 9px;
+  line-height: 1.8;
+}
+
+.collapseButton {
+  display: grid;
+  width: 33px;
+  height: 33px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 10px;
+  color: #d4d8e5;
+  background: rgb(255 255 255 / 5%);
+  cursor: pointer;
+}
+
+.collapseButton:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 12%);
+}
+
+.mainColumn {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  min-height: 112px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 26px;
+  border-bottom: 1px solid var(--ops-line);
+  padding: 17px clamp(20px, 3vw, 40px);
+  background: #fff;
+}
+
+.headingCopy {
+  min-width: 0;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  color: #81869a;
+  font-size: 10px;
+}
+
+.breadcrumb svg {
+  width: 12px;
+  height: 12px;
+  transform: rotate(180deg);
+}
+
+.breadcrumb [aria-current='page'] {
+  color: var(--ft-teal-dark);
+  font-weight: 800;
+}
+
+.headingCopy h1 {
+  margin: 0;
+  color: var(--ft-ink);
+  font-size: clamp(18px, 2vw, 23px);
+  font-weight: 900;
+  line-height: 1.45;
+  letter-spacing: -0.035em;
+}
+
+.headingCopy p {
+  margin: 3px 0 0;
+  color: var(--ft-muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.headerActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 19px;
+}
+
+.scopeSwitcher {
+  position: relative;
+  display: grid;
+  min-width: 220px;
+  gap: 4px;
+}
+
+.actionCaption {
+  color: var(--ft-muted);
+  font-size: 9px;
+}
+
+.scopeButton,
+.scopeButtonStatic {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--ops-line);
+  border-radius: 13px;
+  padding: 5px 9px;
+  color: var(--ft-ink);
+  background: #fff;
+  text-align: right;
+}
+
+.scopeButton {
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+}
+
+.scopeButton:hover {
+  border-color: rgb(0 107 112 / 38%);
+  background: #fbfefd;
+}
+
+.scopeButtonIcon {
+  width: 34px;
+  height: 34px;
+}
+
+.scopeButtonIcon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.scopeButtonCopy {
+  flex: 1;
+}
+
+.scopeButtonCopy strong,
+.optionText strong {
+  overflow: hidden;
+  color: var(--ft-ink);
+  font-size: 11px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeButtonCopy small,
+.optionText small {
+  overflow: hidden;
+  color: var(--ft-muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scopeButton > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--ft-muted);
+}
+
+.scopeMenu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  inset-inline: 0;
+  display: grid;
+  gap: 5px;
+  max-height: min(62vh, 430px);
+  overflow-y: auto;
+  border: 1px solid var(--ops-line);
+  border-radius: 15px;
+  padding: 9px;
+  background: #fff;
+  box-shadow: var(--ft-shadow-md);
+}
+
+.scopeMenuTitle {
+  padding: 3px 8px 6px;
+  color: var(--ft-muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.scopeOption {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  padding: 6px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: right;
+}
+
+.scopeOption:hover:not(:disabled) {
+  background: var(--ft-surface-soft);
+}
+
+.scopeOption:disabled {
+  cursor: default;
+}
+
+.scopeOptionActive {
+  border-color: rgb(0 107 112 / 15%);
+  background: #effaf8;
+}
+
+.optionIcon {
+  width: 34px;
+  height: 34px;
+}
+
+.optionIcon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.optionText {
+  flex: 1;
+}
+
+.currentScope {
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: var(--ft-teal-dark);
+  background: #ddf7f3;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.scopeMenuNote {
+  margin: 4px 3px 1px;
+  border-top: 1px solid var(--ops-line);
+  padding: 8px 5px 0;
+  color: var(--ft-muted);
+  font-size: 9px;
+  line-height: 1.8;
+}
+
+.tinySpinner {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border: 2px solid #d6eeeb;
+  border-top-color: var(--ft-teal-dark);
+  border-radius: 50%;
+  animation: spin 750ms linear infinite;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.avatar {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #d9e8ec;
+  border-radius: 13px;
+  color: var(--ft-teal-dark);
+  background: #edf8f8;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.accountCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.accountCopy strong {
+  max-width: 160px;
+  overflow: hidden;
+  color: var(--ft-ink);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountCopy small {
+  color: var(--ft-muted);
+  font-size: 9px;
+}
+
+.logoutButton {
+  min-height: 38px !important;
+  border-radius: 11px !important;
+  padding-inline: 11px !important;
+  font-size: 10px !important;
+}
+
+.scopeError {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 18px clamp(16px, 3vw, 40px) 0;
+  border: 1px solid #f2d2d5;
+  border-radius: 13px;
+  padding: 11px 14px;
+  color: #983e4c;
+  background: #fff7f7;
+}
+
+.scopeError > span {
+  flex: 0 0 auto;
+}
+
+.scopeError p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.content {
+  width: min(100%, 1680px);
+  flex: 1;
+  margin-inline: auto;
+  padding: clamp(18px, 2.8vw, 38px);
+}
+
+.mobileMenuButton,
+.backdrop {
+  display: none;
+}
+
+.collapsed .brand {
+  justify-content: center;
+}
+
+.collapsed .brandImage {
+  width: 48px;
+  height: 38px;
+}
+
+.collapsed .brandDivider,
+.collapsed .brandLabel,
+.collapsed .scopeCopy,
+.collapsed .scopeVerified,
+.collapsed .groupLabel,
+.collapsed .navLabel,
+.collapsed .footerText {
+  display: none;
+}
+
+.collapsed .brandRow {
+  justify-content: center;
+}
+
+.collapsed .scopeCard {
+  justify-content: center;
+  padding: 9px 5px;
+}
+
+.collapsed .navItem {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.collapsed .navItemActive::before {
+  inset-inline-start: -6px;
+}
+
+.collapsed .sidebarFooter {
+  flex-wrap: wrap;
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.collapsed .footerShield {
+  display: none;
+}
+
+.collapsed .collapseButton {
+  width: 37px;
+  height: 37px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1200px) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .scopeSwitcher {
+    min-width: min(48%, 300px);
+  }
+}
+
+@media (max-width: 900px) {
+  .shell,
+  .collapsed {
+    display: block;
+  }
+
+  .sidebar {
+    position: fixed;
+    z-index: 80;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: min(310px, 86vw);
+    min-height: 100dvh;
+    height: 100dvh;
+    padding: 0 15px 14px;
+    transform: translateX(110%);
+    visibility: hidden;
+    transition:
+      transform 190ms ease,
+      visibility 190ms ease;
+  }
+
+  .sidebar.mobileOpen {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  .brandDivider,
+  .brandLabel,
+  .scopeCopy,
+  .scopeVerified,
+  .groupLabel,
+  .navLabel,
+  .footerText,
+  .footerShield {
+    display: initial;
+  }
+
+  .brandRow {
+    justify-content: space-between;
+  }
+
+  .brandImage {
+    width: 102px;
+  }
+
+  .brandDivider {
+    display: block;
+  }
+
+  .brandLabel {
+    display: block;
+  }
+
+  .scopeCard {
+    justify-content: flex-start;
+    padding: 11px;
+  }
+
+  .scopeCopy {
+    display: grid;
+  }
+
+  .scopeVerified {
+    display: grid;
+  }
+
+  .groupLabel {
+    display: block;
+  }
+
+  .navItem {
+    justify-content: flex-start;
+    padding-inline: 11px;
+  }
+
+  .navLabel {
+    display: block;
+  }
+
+  .sidebarFooter {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    padding-inline: 4px;
+  }
+
+  .footerShield {
+    display: grid;
+  }
+
+  .footerText {
+    display: block;
+  }
+
+  .collapseButton {
+    display: none;
+  }
+
+  .mobileClose {
+    display: grid;
+  }
+
+  .mobileMenuButton {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    place-items: center;
+    border: 1px solid var(--ops-line);
+    border-radius: 12px;
+    color: var(--ft-ink);
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .backdrop {
+    position: fixed;
+    z-index: 70;
+    inset: 0;
+    display: block;
+    border: 0;
+    background: rgb(18 24 48 / 44%);
+  }
+
+  .header {
+    min-height: 88px;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+  }
+
+  .headingCopy {
+    flex: 1;
+  }
+
+  .headerActions {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .scopeSwitcher {
+    min-width: 0;
+  }
+
+  .scopeSwitcher > .actionCaption,
+  .accountCopy {
+    display: none;
+  }
+
+  .scopeButton,
+  .scopeButtonStatic {
+    min-height: 42px;
+    width: min(132px, 28vw);
+    min-width: 82px;
+    justify-content: flex-start;
+    padding: 3px 6px;
+  }
+
+  .scopeButtonCopy {
+    display: grid;
+    flex: 1;
+  }
+
+  .scopeButtonCopy small {
+    display: none;
+  }
+
+  .scopeButton > svg,
+  .scopeButtonStatic .inlineVerified {
+    display: none;
+  }
+
+  .scopeButtonIcon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .scopeMenu {
+    inset-inline: auto 0;
+    width: min(310px, 84vw);
+  }
+
+  .account {
+    gap: 6px;
+  }
+
+  .logoutButton {
+    min-height: 37px !important;
+    padding-inline: 8px !important;
+    font-size: 9px !important;
+  }
+
+  .content {
+    padding: 18px 16px 28px;
+  }
+}
+
+@media (max-width: 620px) {
+  .header {
+    min-height: 76px;
+    align-items: flex-start;
+    padding: 12px 12px;
+  }
+
+  .mobileMenuButton {
+    width: 38px;
+    height: 38px;
+    margin-top: 4px;
+  }
+
+  .breadcrumb {
+    gap: 5px;
+    margin-bottom: 2px;
+    font-size: 8px;
+  }
+
+  .breadcrumb svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  .headingCopy h1 {
+    font-size: 16px;
+  }
+
+  .headingCopy p {
+    display: none;
+  }
+
+  .headerActions {
+    gap: 6px;
+    padding-top: 2px;
+  }
+
+  .avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  .logoutButton {
+    min-height: 36px !important;
+    padding-inline: 7px !important;
+  }
+
+  .content {
+    padding: 14px 12px 24px;
+  }
+
+  .scopeError {
+    margin: 12px 12px 0;
+    padding: 9px 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell,
+  .shell *,
+  .shell *::before,
+  .shell *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
