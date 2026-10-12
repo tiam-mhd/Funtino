@@ -137,7 +137,7 @@ const overrideSchema = z.object({
   startsAt: z.string().datetime({ offset: true }),
   expiresAt: z.string().datetime({ offset: true }).nullable(),
   revokedAt: z.string().datetime({ offset: true }).nullable(),
-  reason: z.string().optional(),
+  reason: z.string().nullable().optional(),
   createdAt: z.string().datetime({ offset: true }).optional(),
 });
 const overrideResultSchema = mutationResultSchema(overrideSchema);
@@ -156,7 +156,7 @@ const auditListSchema = z.object({
       targetType: z.string(),
       targetId: z.string(),
       scope: accessScopeSchema,
-      reason: z.string(),
+      reason: z.string().nullable(),
       beforeState: z.unknown().nullable(),
       afterState: z.unknown().nullable(),
       policyVersion: z.number().int().nullable(),
@@ -283,7 +283,7 @@ export class IdentityAccessClient {
     userId: string,
     session: Session,
     managementSessionTtlHours: number,
-    reason: string,
+    reason: string | undefined,
     expectedVersion: number,
     correlationId: string,
     idempotencyKey: string,
@@ -509,7 +509,7 @@ export class IdentityAccessClient {
     userId: string,
     session: Session,
     invitationId: string,
-    reason: string,
+    reason: string | undefined,
     correlationId: string,
     idempotencyKey: string,
   ) {
@@ -537,7 +537,7 @@ export class IdentityAccessClient {
     membershipId: string,
     expectedVersion: number,
     roleId: string,
-    reason: string,
+    reason: string | undefined,
     correlationId: string,
     idempotencyKey: string,
   ) {
@@ -563,7 +563,7 @@ export class IdentityAccessClient {
     session: Session,
     membershipId: string,
     action: 'suspend' | 'reactivate' | 'revoke',
-    reason: string,
+    reason: string | undefined,
     correlationId: string,
     idempotencyKey: string,
   ) {

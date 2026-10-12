@@ -460,6 +460,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: revokeStaffInvitation
+      description: Closes a pending invitation before the invitee gains access. A reason is optional; the actor and state change are always audited.
       parameters:
         - name: invitationId
           in: path
@@ -479,7 +480,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReasonRequest'
+              $ref: '#/components/schemas/OptionalReasonRequest'
       responses:
         '200':
           description: Pending invitation revoked.
@@ -631,6 +632,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: suspendStaffMembership
+      description: Reversibly suspends membership access. A reason is optional; the actor and state change are always audited.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - $ref: '#/components/parameters/ActorUserId'
@@ -645,7 +647,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReasonRequest'
+              $ref: '#/components/schemas/OptionalReasonRequest'
       responses:
         '200':
           description: Membership suspended and denied immediately.
@@ -659,6 +661,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: reactivateStaffMembership
+      description: Reversibly restores suspended membership access. A reason is optional; the actor and state change are always audited.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - $ref: '#/components/parameters/ActorUserId'
@@ -673,7 +676,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReasonRequest'
+              $ref: '#/components/schemas/OptionalReasonRequest'
       responses:
         '200':
           description: Membership reactivated after policy validation.
@@ -689,6 +692,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: revokeStaffMembership
+      description: Permanently revokes active staff membership access. A reason is required; the actor and state change are always audited.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - $ref: '#/components/parameters/ActorUserId'
@@ -773,6 +777,7 @@ paths:
     delete:
       x-funtino-availability: implemented
       operationId: revokeMembershipPermissionOverride
+      description: Permanently revokes a permission override. A reason is required; the actor and state change are always audited.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - name: overrideId
@@ -1288,7 +1293,7 @@ components:
     RoleCreate:
       type: object
       additionalProperties: false
-      required: [name, scope, permissionKeys, reason]
+      required: [name, scope, permissionKeys]
       properties:
         name:
           type: string
@@ -1309,8 +1314,11 @@ components:
     RoleUpdate:
       type: object
       additionalProperties: false
-      required: [reason]
-      minProperties: 2
+      minProperties: 1
+      anyOf:
+        - required: [name]
+        - required: [permissionKeys]
+        - required: [status]
       properties:
         name:
           type: string
@@ -1332,7 +1340,7 @@ components:
     StaffInvitationCreate:
       type: object
       additionalProperties: false
-      required: [phoneE164, scope, roleId, reason]
+      required: [phoneE164, scope, roleId]
       properties:
         phoneE164:
           type: string
@@ -1478,7 +1486,7 @@ components:
     PermissionOverrideCreate:
       type: object
       additionalProperties: false
-      required: [permission, effect, scope, reason]
+      required: [permission, effect, scope]
       properties:
         permission:
           type: string
@@ -1535,7 +1543,7 @@ components:
     StaffMembershipUpdate:
       type: object
       additionalProperties: false
-      required: [roleId, reason]
+      required: [roleId]
       properties:
         roleId:
           type: string
@@ -1565,7 +1573,7 @@ components:
     ManagementSessionPolicyUpdate:
       type: object
       additionalProperties: false
-      required: [managementSessionTtlHours, reason]
+      required: [managementSessionTtlHours]
       properties:
         managementSessionTtlHours:
           type: integer
@@ -1692,6 +1700,14 @@ components:
           type: string
           minLength: 8
           maxLength: 500
+    OptionalReasonRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
     PermissionOverrideSummary:
       type: object
       required:
@@ -1748,6 +1764,7 @@ components:
           format: date-time
         reason:
           type: string
+          nullable: true
     PermissionOverrideListResponse:
       type: object
       required: [data, policyVersion]
@@ -1820,6 +1837,7 @@ components:
                 $ref: '#/components/schemas/AccessScope'
               reason:
                 type: string
+                nullable: true
               beforeState:
                 type: object
                 nullable: true

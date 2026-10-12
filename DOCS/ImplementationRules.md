@@ -50,9 +50,9 @@
 
 - نقش فقط ظرفی برای permissionهای کاتالوگ نسخه‌دار است؛ شرط‌های نقش ثابت و پراکنده در controller، UI یا query ممنوع است.
 - نقش‌های پایه seed می‌شوند و نقش سفارشی در scope مجاز سازمان/شعبه قابل‌ساخت و ویرایش است. permissionهای کاتالوگ از کد/قرارداد نسخه‌دار می‌آیند و tenant نمی‌تواند کلید دلخواه را فعال کند.
-- override فردی فقط روی membership همان scope ذخیره می‌شود، نه User سراسری؛ شامل allow/deny، محدوده‌ی resource، دلیل، actor و زمان/انقضا است. deny بر allow مقدم است.
+- override فردی فقط روی membership همان scope ذخیره می‌شود، نه User سراسری؛ شامل allow/deny، محدوده‌ی resource، actor و زمان/انقضا است. دلیل mutation اختیاری است؛ برای لغو override فعال دلیل الزامی است. deny بر allow مقدم است.
 - permission مؤثر همواره به عضویت فعال، scope عضویت، scope منبع و invariant دامنه محدود می‌شود. مدیر نمی‌تواند permission یا scopeی فراتر از اختیار واگذاری خود اعطا کند.
-- تغییر role، permission، assignment، override و scope باید MFA/reauth متناسب، audit قبل/بعد و جلوگیری از حذف آخرین مدیر مجاز داشته باشد.
+- تغییر role، permission، assignment، override و scope باید MFA/reauth متناسب، audit قبل/بعد و جلوگیری از حذف آخرین مدیر مجاز داشته باشد. در پنل System دلیل برای ایجاد، ویرایش و گذارهای برگشت‌پذیر اختیاری است؛ لغو عضویت فعال و لغو override فعال به دلیل نیاز دارد.
 - authorization هر درخواست server-side و fail-closed است. cache فقط با versioning/invalidation قابل اتکا و revocation فوری مجاز است؛ browser، localStorage یا claim بلندعمر منبع حقیقت نیست.
 - نقش `system_admin` تنها با CLI یک‌باره‌ی دارای MFA به حسابی داده می‌شود که API Gateway از `SYSTEM_ADMIN_OWNER_PHONE_E164` در runtime همان item resolve می‌کند؛ CLI شناسه‌ی user نمی‌پذیرد و IAM برای resolve مستقیم به جدول Gateway وصل نمی‌شود. مدیر سراسری تمام کلیدهای کاتالوگ جاری، از جمله کلیدهای غیرقابل‌واگذاری را می‌گیرد؛ bootstrap/impersonation همچنان فقط از مسیرهایی قابل استفاده‌اند که API و MFA آن‌ها را صریحاً پیاده کنند. جزئیات [ADR-0021](decisions/0021-runflare-bound-system-admin-owner.md) است.
 - MFA مدیران طبق [ADR-0006](decisions/0006-administrative-mfa-totp.md) با TOTP و ۱۰ کد بازیابی یک‌بارمصرف است؛ OTP ورود MFA محسوب نمی‌شود. مدیر سامانه در هر ورود MFA می‌کند. نشست مدیریتی مطلق و ۱ تا ۱۲ ساعت، با پیش‌فرض ۱۲ ساعت، از تنظیم IAM خوانده می‌شود؛ پنل نشست فعال را به علت بی‌فعالیتی قطع نمی‌کند. MFA مدیر سراسری تا پایان همان نشست معتبر است و نسخه‌ی عامل، membership، scope، مجوز و policy در IAM زنده بررسی می‌شود. step-up سایر کارکنان حداکثر ۳۰۰ ثانیه باقی می‌ماند. secret با AES-256-GCM و keyring نسخه‌دار runtime محافظت می‌شود. [ADR-0020](decisions/0020-admin-session-duration-and-system-admin-capabilities.md) مرجع سیاست جدید است.
@@ -107,7 +107,7 @@
 - system-web ابزار پشتیبانی و کنترل است، نه محل دسترسی آزاد به دیتابیس.
 - همه‌ی عملیات بر اساس role، organization، branch و سطح حساسیت محدود می‌شوند.
 - تغییر role، membership، provider، feature flag، اتصال و قفل حساب نیازمند re-auth یا تأیید مجدد است.
-- هر عملیات حساس actor، دلیل، scope، قبل/بعد و نتیجه‌ی audit دارد.
+- هر عملیات حساس actor، scope، قبل/بعد و نتیجه‌ی audit دارد. در عملیات مدیریتی System، دلیل برای create/update و تغییرات برگشت‌پذیر اختیاری است و در صورت ورود ثبت می‌شود؛ لغو عضویت فعال و لغو override فعال دلیل اجباری دارند. سیاست در [ADR-0023](decisions/0023-system-admin-audit-reason-policy.md) است.
 - secret، token و password provider هرگز در UI نمایش داده نمی‌شود.
 - impersonation فقط با permission ویژه، دلیل، زمان انقضا و banner واضح مجاز است.
 - حذف داده و اتصال تا حد ممکن soft delete، two-step confirmation و امکان recovery دارد.

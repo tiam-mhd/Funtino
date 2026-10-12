@@ -5,6 +5,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   branchInputSchema,
   organizationInputSchema,
+  statusInputSchema,
   OrganizationBranchService,
 } from '../src/application/organization-branch.service.js';
 import type { PrismaService } from '../src/infrastructure/persistence/prisma/prisma.service.js';
@@ -295,6 +296,24 @@ test('organization and branch inputs reject invalid timezone and unsupported wee
       reason: 'Initial setup reason',
     }).success,
     false,
+  );
+});
+
+test('system organization and branch mutations allow an omitted reason but terminal archive requires one', () => {
+  assert.equal(
+    organizationInputSchema.safeParse({
+      name: 'Funtino',
+      slug: 'funtino',
+      timezone: 'Asia/Tehran',
+    }).success,
+    true,
+  );
+  assert.equal(statusInputSchema.safeParse({ status: 'suspended' }).success, true);
+  assert.equal(statusInputSchema.safeParse({ status: 'archived' }).success, false);
+  assert.equal(
+    statusInputSchema.safeParse({ status: 'archived', reason: 'Approved terminal archive' })
+      .success,
+    true,
   );
 });
 

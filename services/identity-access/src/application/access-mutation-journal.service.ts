@@ -80,7 +80,7 @@ export type RecordCommittedAccessChange = ChangePayload & {
   actorLabel?: string;
   targetId: string;
   scope: AccessScope;
-  reason: string;
+  reason?: string;
   correlationId: string;
   beforeState?: AccessAuditSnapshot | null;
   afterState?: AccessAuditSnapshot | null;
@@ -154,6 +154,7 @@ function assertValidInput(input: RecordCommittedAccessChange): {
       typeof input.actorLabel === 'string' &&
       input.actorLabel.trim().length > 0 &&
       input.actorLabel.trim().length <= 100);
+  const reason = input.reason?.trim();
 
   if (
     !payload.success ||
@@ -162,8 +163,7 @@ function assertValidInput(input: RecordCommittedAccessChange): {
     scopeIds.some((id) => !uuidPattern.test(id)) ||
     input.targetType !== expectedTargetType ||
     !targetIdValid ||
-    input.reason.trim().length < 8 ||
-    input.reason.trim().length > 500
+    (reason !== undefined && (reason.length < 8 || reason.length > 500))
   ) {
     throw new BadRequestException('Invalid access change audit context.');
   }
@@ -271,7 +271,7 @@ export class AccessMutationJournalService {
         targetType: input.targetType,
         targetId: input.targetId,
         ...scopeColumns,
-        reason: input.reason.trim(),
+        reason: input.reason?.trim() || null,
         ...(snapshots.beforeState ? { beforeState: snapshots.beforeState } : {}),
         ...(snapshots.afterState ? { afterState: snapshots.afterState } : {}),
         policyVersion,

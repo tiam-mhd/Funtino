@@ -17,7 +17,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { AccessManagementService, type AccessCommandMeta } from '../../application/access-management.service.js';
+import {
+  AccessManagementService,
+  type AccessCommandMeta,
+} from '../../application/access-management.service.js';
 import { AccessPolicyService } from '../../application/access-policy.service.js';
 import { MfaService, type MfaContext } from '../../application/mfa.service.js';
 import { ServiceTokenGuard } from './service-token.guard.js';
@@ -58,56 +61,123 @@ const rolesQuerySchema = z
     branchId: uuid.optional(),
     cursor: uuid.optional(),
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
-  }).strict()
+  })
+  .strict()
   .superRefine((value, context) => {
-    const type = value.scopeType ?? (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
-    if (!type) context.addIssue({ code: z.ZodIssueCode.custom, message: 'A valid scope is required.' });
-    if (type === 'global' && (value.organizationId || value.branchId)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Global scope cannot include organization identifiers.' });
-    if (type !== 'global' && !value.organizationId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Organization scope is required.' });
-    if (type === 'branch' && !value.branchId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Branch scope is required.' });
-    if (type !== 'branch' && value.branchId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Branch identifier requires branch scope.' });
+    const type =
+      value.scopeType ??
+      (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
+    if (!type)
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'A valid scope is required.' });
+    if (type === 'global' && (value.organizationId || value.branchId))
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Global scope cannot include organization identifiers.',
+      });
+    if (type !== 'global' && !value.organizationId)
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Organization scope is required.' });
+    if (type === 'branch' && !value.branchId)
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Branch scope is required.' });
+    if (type !== 'branch' && value.branchId)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Branch identifier requires branch scope.',
+      });
   });
 const auditQuerySchema = z
   .object({
     scopeType: z.enum(['global', 'organization', 'branch']).optional(),
-    organizationId: uuid.optional(), branchId: uuid.optional(),
+    organizationId: uuid.optional(),
+    branchId: uuid.optional(),
     cursor: z.string().min(1).max(128).optional(),
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
-  }).strict()
+  })
+  .strict()
   .superRefine((value, context) => {
-    const type = value.scopeType ?? (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
-    if (!type) context.addIssue({ code: z.ZodIssueCode.custom, message: 'A valid scope is required.' });
-    if (type === 'global' && (value.organizationId || value.branchId)) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Global scope cannot include organization identifiers.' });
-    if (type !== 'global' && !value.organizationId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Organization scope is required.' });
-    if (type === 'branch' && !value.branchId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Branch scope is required.' });
-    if (type !== 'branch' && value.branchId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Branch identifier requires branch scope.' });
+    const type =
+      value.scopeType ??
+      (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
+    if (!type)
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'A valid scope is required.' });
+    if (type === 'global' && (value.organizationId || value.branchId))
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Global scope cannot include organization identifiers.',
+      });
+    if (type !== 'global' && !value.organizationId)
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Organization scope is required.' });
+    if (type === 'branch' && !value.branchId)
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Branch scope is required.' });
+    if (type !== 'branch' && value.branchId)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Branch identifier requires branch scope.',
+      });
   });
 const reasonSchema = z.object({ reason: z.string().trim().min(8).max(500) }).strict();
-const managementSessionPolicySchema = z.object({
-  managementSessionTtlHours: z.number().int().min(1).max(12),
-  reason: z.string().trim().min(8).max(500),
-}).strict();
-const roleCreateSchema = z.object({
-  name: z.string().trim().min(2).max(80), scope: accessScopeSchema,
-  permissionKeys: z.array(z.string().min(1).max(120)).min(1).max(100).refine((items) => new Set(items).size === items.length),
-  reason: z.string().trim().min(8).max(500),
-}).strict();
-const roleUpdateSchema = z.object({
-  name: z.string().trim().min(2).max(80).optional(),
-  permissionKeys: z.array(z.string().min(1).max(120)).min(1).max(100).refine((items) => new Set(items).size === items.length).optional(),
-  status: z.enum(['active', 'disabled']).optional(), reason: z.string().trim().min(8).max(500),
-}).strict().refine((value) => value.name !== undefined || value.permissionKeys !== undefined || value.status !== undefined);
-const invitationCreateSchema = z.object({
-  phoneE164: z.string().regex(/^\+[1-9][0-9]{7,14}$/), scope: accessScopeSchema,
-  roleId: uuid, reason: z.string().trim().min(8).max(500),
-}).strict();
+const optionalReasonSchema = z
+  .object({ reason: z.string().trim().min(8).max(500).optional() })
+  .strict();
+const managementSessionPolicySchema = z
+  .object({
+    managementSessionTtlHours: z.number().int().min(1).max(12),
+    reason: z.string().trim().min(8).max(500).optional(),
+  })
+  .strict();
+const roleCreateSchema = z
+  .object({
+    name: z.string().trim().min(2).max(80),
+    scope: accessScopeSchema,
+    permissionKeys: z
+      .array(z.string().min(1).max(120))
+      .min(1)
+      .max(100)
+      .refine((items) => new Set(items).size === items.length),
+    reason: z.string().trim().min(8).max(500).optional(),
+  })
+  .strict();
+const roleUpdateSchema = z
+  .object({
+    name: z.string().trim().min(2).max(80).optional(),
+    permissionKeys: z
+      .array(z.string().min(1).max(120))
+      .min(1)
+      .max(100)
+      .refine((items) => new Set(items).size === items.length)
+      .optional(),
+    status: z.enum(['active', 'disabled']).optional(),
+    reason: z.string().trim().min(8).max(500).optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.name !== undefined || value.permissionKeys !== undefined || value.status !== undefined,
+  );
+const invitationCreateSchema = z
+  .object({
+    phoneE164: z.string().regex(/^\+[1-9][0-9]{7,14}$/),
+    scope: accessScopeSchema,
+    roleId: uuid,
+    reason: z.string().trim().min(8).max(500).optional(),
+  })
+  .strict();
 const phoneOnlySchema = z.object({ phoneE164: z.string().regex(/^\+[1-9][0-9]{7,14}$/) }).strict();
-const membershipRoleSchema = z.object({ roleId: uuid, reason: z.string().trim().min(8).max(500) }).strict();
-const overrideCreateSchema = z.object({
-  permission: z.string().min(1).max(120), effect: z.enum(['allow', 'deny']), scope: accessScopeSchema,
-  resource: z.object({ type: z.string().trim().min(1).max(80), id: z.string().trim().min(1).max(160) }).strict().optional(),
-  expiresAt: z.string().datetime({ offset: true }).optional(), reason: z.string().trim().min(8).max(500),
-}).strict();
+const membershipRoleSchema = z
+  .object({ roleId: uuid, reason: z.string().trim().min(8).max(500).optional() })
+  .strict();
+const overrideCreateSchema = z
+  .object({
+    permission: z.string().min(1).max(120),
+    effect: z.enum(['allow', 'deny']),
+    scope: accessScopeSchema,
+    resource: z
+      .object({ type: z.string().trim().min(1).max(80), id: z.string().trim().min(1).max(160) })
+      .strict()
+      .optional(),
+    expiresAt: z.string().datetime({ offset: true }).optional(),
+    reason: z.string().trim().min(8).max(500).optional(),
+  })
+  .strict();
 type AuthorizationRequestDto = z.infer<typeof authorizationRequestSchema>;
 type RolesQueryDto = z.infer<typeof rolesQuerySchema>;
 type AuditQueryDto = z.infer<typeof auditQuerySchema>;
@@ -264,10 +334,15 @@ export class IdentityAccessController {
   ) {
     const actorUserId = uuid.safeParse(rawActorUserId);
     if (!actorUserId.success) throw new UnauthorizedException('Actor context is missing.');
-    return this.accessPolicy.listRolesInScope(actorUserId.data, this.queryScope(query), {
-      cursor: query.cursor,
-      pageSize: query.pageSize,
-    }, this.correlation(rawCorrelationId));
+    return this.accessPolicy.listRolesInScope(
+      actorUserId.data,
+      this.queryScope(query),
+      {
+        cursor: query.cursor,
+        pageSize: query.pageSize,
+      },
+      this.correlation(rawCorrelationId),
+    );
   }
 
   @Get('roles/templates')
@@ -276,7 +351,11 @@ export class IdentityAccessController {
     @Headers('x-correlation-id') rawCorrelationId: string | undefined,
     @Query(new ZodValidationPipe(rolesQuerySchema)) query: RolesQueryDto,
   ) {
-    return this.accessPolicy.roleTemplates(this.actor(rawActorUserId), this.queryScope(query), this.correlation(rawCorrelationId));
+    return this.accessPolicy.roleTemplates(
+      this.actor(rawActorUserId),
+      this.queryScope(query),
+      this.correlation(rawCorrelationId),
+    );
   }
 
   @Post('roles')
@@ -285,7 +364,11 @@ export class IdentityAccessController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body(new ZodValidationPipe(roleCreateSchema)) body: z.infer<typeof roleCreateSchema>,
   ) {
-    return this.accessManagement.createRole(this.actor(this.header(headers, 'x-funtino-actor-user-id')), body, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.createRole(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      body,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Patch('roles/:roleId')
@@ -294,7 +377,12 @@ export class IdentityAccessController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body(new ZodValidationPipe(roleUpdateSchema)) body: z.infer<typeof roleUpdateSchema>,
   ) {
-    return this.accessManagement.updateRole(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.pathUuid(roleId), body, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.updateRole(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(roleId),
+      body,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Get('staff')
@@ -302,16 +390,26 @@ export class IdentityAccessController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Query(new ZodValidationPipe(rolesQuerySchema)) query: RolesQueryDto,
   ) {
-    return this.accessManagement.listStaff(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.queryScope(query), { cursor: query.cursor, pageSize: query.pageSize }, { correlationId: this.correlation(this.header(headers, 'x-correlation-id')) });
+    return this.accessManagement.listStaff(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.queryScope(query),
+      { cursor: query.cursor, pageSize: query.pageSize },
+      { correlationId: this.correlation(this.header(headers, 'x-correlation-id')) },
+    );
   }
 
   @Post('staff/invitations')
   @HttpCode(HttpStatus.ACCEPTED)
   inviteStaff(
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Body(new ZodValidationPipe(invitationCreateSchema)) body: z.infer<typeof invitationCreateSchema>,
+    @Body(new ZodValidationPipe(invitationCreateSchema))
+    body: z.infer<typeof invitationCreateSchema>,
   ) {
-    return this.accessManagement.inviteStaff(this.actor(this.header(headers, 'x-funtino-actor-user-id')), body, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.inviteStaff(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      body,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Get('staff/invitations')
@@ -349,7 +447,12 @@ export class IdentityAccessController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body(new ZodValidationPipe(phoneOnlySchema)) body: z.infer<typeof phoneOnlySchema>,
   ) {
-    return this.accessManagement.acceptInvitation(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.pathUuid(invitationId), body.phoneE164, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.acceptInvitation(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(invitationId),
+      body.phoneE164,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Post('staff/invitations/:invitationId/revoke')
@@ -357,9 +460,14 @@ export class IdentityAccessController {
   revokeInvitation(
     @Param('invitationId') invitationId: string,
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @Body(new ZodValidationPipe(optionalReasonSchema)) body: z.infer<typeof optionalReasonSchema>,
   ) {
-    return this.accessManagement.revokeInvitation(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.pathUuid(invitationId), body.reason, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.revokeInvitation(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(invitationId),
+      body.reason,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Patch('staff/:membershipId')
@@ -368,7 +476,13 @@ export class IdentityAccessController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body(new ZodValidationPipe(membershipRoleSchema)) body: z.infer<typeof membershipRoleSchema>,
   ) {
-    return this.accessManagement.updateMembershipRole(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.pathUuid(membershipId), body.roleId, body.reason, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.updateMembershipRole(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(membershipId),
+      body.roleId,
+      body.reason,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Post('staff/:membershipId/suspend')
@@ -376,9 +490,15 @@ export class IdentityAccessController {
   suspendMembership(
     @Param('membershipId') membershipId: string,
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @Body(new ZodValidationPipe(optionalReasonSchema)) body: z.infer<typeof optionalReasonSchema>,
   ) {
-    return this.accessManagement.changeMembershipStatus(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.pathUuid(membershipId), 'suspended', body.reason, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.changeMembershipStatus(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(membershipId),
+      'suspended',
+      body.reason,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Post('staff/:membershipId/reactivate')
@@ -386,9 +506,15 @@ export class IdentityAccessController {
   reactivateMembership(
     @Param('membershipId') membershipId: string,
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @Body(new ZodValidationPipe(optionalReasonSchema)) body: z.infer<typeof optionalReasonSchema>,
   ) {
-    return this.accessManagement.changeMembershipStatus(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.pathUuid(membershipId), 'active', body.reason, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.changeMembershipStatus(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(membershipId),
+      'active',
+      body.reason,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Post('staff/:membershipId/revoke')
@@ -398,7 +524,13 @@ export class IdentityAccessController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
   ) {
-    return this.accessManagement.changeMembershipStatus(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.pathUuid(membershipId), 'revoked', body.reason, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.changeMembershipStatus(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(membershipId),
+      'revoked',
+      body.reason,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Get('memberships/:membershipId/permission-overrides')
@@ -406,7 +538,11 @@ export class IdentityAccessController {
     @Param('membershipId') membershipId: string,
     @Headers() headers: Record<string, string | string[] | undefined>,
   ) {
-    return this.accessManagement.listOverrides(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.pathUuid(membershipId), this.correlation(this.header(headers, 'x-correlation-id')));
+    return this.accessManagement.listOverrides(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(membershipId),
+      this.correlation(this.header(headers, 'x-correlation-id')),
+    );
   }
 
   @Put('memberships/:membershipId/permission-overrides')
@@ -416,7 +552,12 @@ export class IdentityAccessController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body(new ZodValidationPipe(overrideCreateSchema)) body: z.infer<typeof overrideCreateSchema>,
   ) {
-    return this.accessManagement.createOverride(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.pathUuid(membershipId), body, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.createOverride(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(membershipId),
+      body,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Delete('memberships/:membershipId/permission-overrides/:overrideId')
@@ -427,7 +568,13 @@ export class IdentityAccessController {
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
   ) {
-    return this.accessManagement.revokeOverride(this.actor(this.header(headers, 'x-funtino-actor-user-id')), this.pathUuid(membershipId), this.pathUuid(overrideId), body.reason, this.commandMetaFromHeaders(headers));
+    return this.accessManagement.revokeOverride(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(membershipId),
+      this.pathUuid(overrideId),
+      body.reason,
+      this.commandMetaFromHeaders(headers),
+    );
   }
 
   @Get('audit')
@@ -444,7 +591,10 @@ export class IdentityAccessController {
     );
   }
 
-  private header(headers: Record<string, string | string[] | undefined>, name: string): string | undefined {
+  private header(
+    headers: Record<string, string | string[] | undefined>,
+    name: string,
+  ): string | undefined {
     const value = headers[name.toLowerCase()];
     return typeof value === 'string' ? value : undefined;
   }
@@ -465,11 +615,17 @@ export class IdentityAccessController {
     return value.data;
   }
 
-  private queryScope(query: Pick<RolesQueryDto, 'scopeType' | 'organizationId' | 'branchId'>): AccessScopeDto {
-    const type = query.scopeType ?? (query.branchId ? 'branch' : query.organizationId ? 'organization' : 'global');
+  private queryScope(
+    query: Pick<RolesQueryDto, 'scopeType' | 'organizationId' | 'branchId'>,
+  ): AccessScopeDto {
+    const type =
+      query.scopeType ??
+      (query.branchId ? 'branch' : query.organizationId ? 'organization' : 'global');
     if (type === 'global') return { type: 'global' };
-    if (!query.organizationId) throw new BadRequestException('Organization identifier is required.');
-    if (type === 'organization') return { type: 'organization', organizationId: query.organizationId };
+    if (!query.organizationId)
+      throw new BadRequestException('Organization identifier is required.');
+    if (type === 'organization')
+      return { type: 'organization', organizationId: query.organizationId };
     if (!query.branchId) throw new BadRequestException('Branch identifier is required.');
     return { type: 'branch', organizationId: query.organizationId, branchId: query.branchId };
   }
@@ -488,11 +644,13 @@ export class IdentityAccessController {
       const match = /^"([1-9][0-9]*)"$/.exec(rawIfMatch);
       if (!match) throw new BadRequestException('If-Match must contain a quoted positive version.');
       expectedVersion = Number(match[1]);
-      if (!Number.isSafeInteger(expectedVersion)) throw new BadRequestException('If-Match version is invalid.');
+      if (!Number.isSafeInteger(expectedVersion))
+        throw new BadRequestException('If-Match version is invalid.');
     }
     const stepUp = this.stepUpFromHeaders(headers);
     return {
-      correlationId, idempotencyKey,
+      correlationId,
+      idempotencyKey,
       ...(expectedVersion !== undefined ? { expectedVersion } : {}),
       ...(stepUp ? { stepUp } : {}),
     };
@@ -504,15 +662,26 @@ export class IdentityAccessController {
     const rawVerifiedAt = this.header(headers, 'x-funtino-mfa-verified-at');
     const rawFactorVersion = this.header(headers, 'x-funtino-mfa-factor-version');
     const rawMethod = this.header(headers, 'x-funtino-mfa-method');
-    const hasMfa = rawVerifiedAt !== undefined || rawFactorVersion !== undefined || rawMethod !== undefined;
+    const hasMfa =
+      rawVerifiedAt !== undefined || rawFactorVersion !== undefined || rawMethod !== undefined;
     if (!hasMfa) return undefined;
     const sessionId = uuid.safeParse(this.header(headers, 'x-funtino-session-id'));
     const verifiedAt = z.string().datetime({ offset: true }).safeParse(rawVerifiedAt);
     const version = z.coerce.number().int().positive().safeParse(rawFactorVersion);
-    if (!sessionId.success || !verifiedAt.success || !version.success || (rawMethod !== 'totp' && rawMethod !== 'recovery')) {
+    if (
+      !sessionId.success ||
+      !verifiedAt.success ||
+      !version.success ||
+      (rawMethod !== 'totp' && rawMethod !== 'recovery')
+    ) {
       throw new UnauthorizedException('Trusted MFA session evidence is invalid.');
     }
-    return { sessionId: sessionId.data, verifiedAt: verifiedAt.data, factorVersion: version.data, method: rawMethod };
+    return {
+      sessionId: sessionId.data,
+      verifiedAt: verifiedAt.data,
+      factorVersion: version.data,
+      method: rawMethod,
+    };
   }
 
   private mfaContext(

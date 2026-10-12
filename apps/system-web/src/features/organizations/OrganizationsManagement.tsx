@@ -43,6 +43,13 @@ type BranchDraft = {
   openingHours: OpeningHours;
   reason: string;
 };
+
+function withoutReason<T extends { reason: string }>(
+  value: T,
+): Omit<T, 'reason'> & { reason?: string } {
+  const { reason, ...fields } = value;
+  return { ...fields, ...(reason.trim() ? { reason: reason.trim() } : {}) };
+}
 type BranchPageState = {
   items: Branch[];
   nextCursor: string | null;
@@ -320,9 +327,8 @@ export function OrganizationsManagement() {
       const created = await apiRequest<Organization>('/api/v1/system/organizations', {
         method: 'POST',
         body: {
-          ...organizationDraft,
+          ...withoutReason(organizationDraft),
           name: organizationDraft.name.trim(),
-          reason: organizationDraft.reason.trim(),
         },
         headers: actionHeaders(organizationDraftKey),
       });
@@ -353,9 +359,8 @@ export function OrganizationsManagement() {
         {
           method: 'PATCH',
           body: {
-            ...organizationEditDraft,
+            ...withoutReason(organizationEditDraft),
             name: organizationEditDraft.name.trim(),
-            reason: organizationEditDraft.reason.trim(),
           },
           headers: actionHeaders(
             organizationEditKey,
@@ -413,11 +418,10 @@ export function OrganizationsManagement() {
         {
           method: 'POST',
           body: {
-            ...branchDraft,
+            ...withoutReason(branchDraft),
             name: branchDraft.name.trim(),
             address: branchDraft.address.trim(),
             city: branchDraft.city.trim(),
-            reason: branchDraft.reason.trim(),
           },
           headers: actionHeaders(branchDraftKey),
         },
@@ -494,11 +498,10 @@ export function OrganizationsManagement() {
         {
           method: 'PATCH',
           body: {
-            ...branchEditDraft,
+            ...withoutReason(branchEditDraft),
             name: branchEditDraft.name.trim(),
             address: branchEditDraft.address.trim(),
             city: branchEditDraft.city.trim(),
-            reason: branchEditDraft.reason.trim(),
           },
           headers: actionHeaders(branchEditKey, branchEditVersion ?? branch.version),
         },
@@ -552,7 +555,7 @@ export function OrganizationsManagement() {
           `/api/v1/system/organizations/${encodeURIComponent(organization.id)}/status`,
           {
             method: 'POST',
-            body: { status, reason: statusReason.trim() },
+            body: { status, ...(statusReason.trim() ? { reason: statusReason.trim() } : {}) },
             headers: actionHeaders(statusKey, organization.version),
           },
         );
@@ -565,7 +568,7 @@ export function OrganizationsManagement() {
           `/api/v1/system/organizations/${encodeURIComponent(organizationId)}/branches/${encodeURIComponent(branch.id)}/status`,
           {
             method: 'POST',
-            body: { status, reason: statusReason.trim() },
+            body: { status, ...(statusReason.trim() ? { reason: statusReason.trim() } : {}) },
             headers: actionHeaders(statusKey, branch.version),
           },
         );
@@ -672,8 +675,9 @@ export function OrganizationsManagement() {
         <div className={styles.policyNote} role="note">
           <span aria-hidden="true">ⓘ</span>
           <p>
-            همه‌ی عملیات در سرور با مجوز IAM، محدوده‌ی سازمان/شعبه، دلیل ممیزی و نسخه‌ی رکورد کنترل
-            می‌شوند. «تعلیق» قابل‌بازگشت است؛ آرشیوکردن از این صفحه انجام نمی‌شود.
+            همه‌ی عملیات در سرور با مجوز IAM، محدوده‌ی سازمان/شعبه، actor و نسخه‌ی رکورد کنترل و
+            ممیزی می‌شوند. دلیل اختیاری است؛ «تعلیق» قابل‌بازگشت است و آرشیوکردن از این صفحه انجام
+            نمی‌شود.
           </p>
         </div>
 
@@ -1121,7 +1125,8 @@ export function OrganizationsManagement() {
 
         <p className={styles.footerNote}>
           شناسه‌ی نسخه برای جلوگیری از بازنویسی تغییر هم‌زمان استفاده می‌شود. رخدادهای ایجاد، ویرایش
-          و تغییر وضعیت در سرویس مالک همراه با actor، دلیل و audit ثبت می‌شوند.
+          و تغییر وضعیت در سرویس مالک همراه با actor و audit ثبت می‌شوند؛ دلیل در صورت ورود ثبت
+          می‌شود.
         </p>
       </div>
     </main>
@@ -1197,7 +1202,7 @@ function OrganizationEditor({
           <small>شناسه‌ی معتبر IANA؛ نمونه: Asia/Tehran</small>
         </label>
         <label className={styles.fullField} htmlFor={`${idPrefix}-reason`}>
-          دلیل تغییر برای ممیزی
+          دلیل تغییر برای ممیزی (اختیاری)
           <textarea
             id={`${idPrefix}-reason`}
             value={draft.reason}
@@ -1205,7 +1210,6 @@ function OrganizationEditor({
             minLength={8}
             maxLength={500}
             rows={2}
-            required
           />
         </label>
       </div>
@@ -1372,7 +1376,7 @@ function BranchEditor({
           </div>
         </fieldset>
         <label className={styles.fullField} htmlFor={`${idPrefix}-reason`}>
-          دلیل تغییر برای ممیزی
+          دلیل تغییر برای ممیزی (اختیاری)
           <textarea
             id={`${idPrefix}-reason`}
             value={draft.reason}
@@ -1380,7 +1384,6 @@ function BranchEditor({
             minLength={8}
             maxLength={500}
             rows={2}
-            required
           />
         </label>
       </div>
@@ -1423,7 +1426,7 @@ function StatusConfirmation({
           : `${resourceLabel} دوباره فعال می‌شود.`}
       </p>
       <label htmlFor="status-change-reason">
-        دلیل این اقدام
+        دلیل این اقدام (اختیاری)
         <textarea
           id="status-change-reason"
           autoFocus
@@ -1432,7 +1435,6 @@ function StatusConfirmation({
           minLength={8}
           maxLength={500}
           rows={2}
-          required
         />
       </label>
       <div className={styles.formActions}>

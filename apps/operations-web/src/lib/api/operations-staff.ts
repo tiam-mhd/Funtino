@@ -63,7 +63,7 @@ export type PermissionOverride = {
   startsAt: string;
   expiresAt: string | null;
   revokedAt: string | null;
-  reason?: string;
+  reason?: string | null;
   createdAt?: string;
 };
 

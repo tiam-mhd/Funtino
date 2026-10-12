@@ -16,8 +16,14 @@ import {
 } from '@nestjs/common';
 import { DomainError } from '@funtino/backend-core';
 import { z } from 'zod';
-import { IdentityAccessClient, type AccessScopeDto } from '../../infrastructure/identity-access/identity-access.client.js';
-import { OrganizationBranchClient, type OrganizationBranchCommandMeta } from '../../infrastructure/organization-branch/organization-branch.client.js';
+import {
+  IdentityAccessClient,
+  type AccessScopeDto,
+} from '../../infrastructure/identity-access/identity-access.client.js';
+import {
+  OrganizationBranchClient,
+  type OrganizationBranchCommandMeta,
+} from '../../infrastructure/organization-branch/organization-branch.client.js';
 import { CurrentUser, requestCorrelationId, success } from './current-user.decorator.js';
 import type { AuthenticatedRequest } from './current-user.decorator.js';
 import { SessionGuard } from './session.guard.js';
@@ -31,11 +37,16 @@ const pageQuerySchema = z
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
   })
   .strict();
-const reason = z.string().trim().min(8).max(500);
+const reason = z.string().trim().min(8).max(500).optional();
 const organizationCreateSchema = z
   .object({
     name: z.string().trim().min(2).max(160),
-    slug: z.string().trim().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(80)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     timezone: z.string().trim().min(1).max(64),
     reason,
   })
@@ -43,12 +54,20 @@ const organizationCreateSchema = z
 const organizationUpdateSchema = z
   .object({
     name: z.string().trim().min(2).max(160).optional(),
-    slug: z.string().trim().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(80)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
     timezone: z.string().trim().min(1).max(64).optional(),
     reason,
   })
   .strict()
-  .refine((value) => value.name !== undefined || value.slug !== undefined || value.timezone !== undefined);
+  .refine(
+    (value) => value.name !== undefined || value.slug !== undefined || value.timezone !== undefined,
+  );
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const openingHours = z.record(
   z.enum(['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday']),
@@ -57,7 +76,12 @@ const openingHours = z.record(
 const branchCreateSchema = z
   .object({
     name: z.string().trim().min(2).max(160),
-    slug: z.string().trim().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(80)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     address: z.string().trim().min(3).max(500),
     city: z.string().trim().min(2).max(120),
     timezone: z.string().trim().min(1).max(64),
@@ -68,7 +92,13 @@ const branchCreateSchema = z
 const branchUpdateSchema = z
   .object({
     name: z.string().trim().min(2).max(160).optional(),
-    slug: z.string().trim().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
+    slug: z
+      .string()
+      .trim()
+      .min(2)
+      .max(80)
+      .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
     address: z.string().trim().min(3).max(500).optional(),
     city: z.string().trim().min(2).max(120).optional(),
     timezone: z.string().trim().min(1).max(64).optional(),
@@ -76,17 +106,16 @@ const branchUpdateSchema = z
     reason,
   })
   .strict()
-  .refine((value) =>
-    value.name !== undefined ||
-    value.slug !== undefined ||
-    value.address !== undefined ||
-    value.city !== undefined ||
-    value.timezone !== undefined ||
-    value.openingHours !== undefined,
+  .refine(
+    (value) =>
+      value.name !== undefined ||
+      value.slug !== undefined ||
+      value.address !== undefined ||
+      value.city !== undefined ||
+      value.timezone !== undefined ||
+      value.openingHours !== undefined,
   );
-const statusSchema = z
-  .object({ status: z.enum(['active', 'suspended']), reason })
-  .strict();
+const statusSchema = z.object({ status: z.enum(['active', 'suspended']), reason }).strict();
 type PageQuery = z.infer<typeof pageQuerySchema>;
 
 const scopedOrganizationBatchSize = 10;
@@ -117,7 +146,10 @@ export class SystemOrganizationController {
     );
     if (globalRead.allowed) {
       const page = await this.organizationBranch.listOrganizations(query);
-      return success({ items: page.items.map(presentOrganization), nextCursor: page.nextCursor }, request);
+      return success(
+        { items: page.items.map(presentOrganization), nextCursor: page.nextCursor },
+        request,
+      );
     }
 
     // Organization-scoped users receive only the organizations they can read.
@@ -127,7 +159,10 @@ export class SystemOrganizationController {
     const candidateIds = [
       ...new Set(
         context.memberships
-          .filter((membership) => membership.status === 'active' && membership.scope.type === 'organization')
+          .filter(
+            (membership) =>
+              membership.status === 'active' && membership.scope.type === 'organization',
+          )
           .map((membership) =>
             membership.scope.type === 'organization' ? membership.scope.organizationId : '',
           )
@@ -156,7 +191,9 @@ export class SystemOrganizationController {
         ),
       );
       const remaining = query.pageSize - items.length;
-      const permittedIds = batch.filter((_, itemIndex) => decisions[itemIndex]?.allowed).slice(0, remaining);
+      const permittedIds = batch
+        .filter((_, itemIndex) => decisions[itemIndex]?.allowed)
+        .slice(0, remaining);
       const permittedOrganizations = await Promise.all(
         permittedIds.map(async (organizationId) => {
           try {
@@ -167,12 +204,16 @@ export class SystemOrganizationController {
           }
         }),
       );
-      items.push(...permittedOrganizations.filter((item): item is NonNullable<typeof item> => item !== null));
+      items.push(
+        ...permittedOrganizations.filter((item): item is NonNullable<typeof item> => item !== null),
+      );
       index += batch.length;
 
       if (items.length >= query.pageSize) {
         const lastId = items.at(-1)?.id;
-        const hasMoreCandidates = Boolean(lastId && candidateIds.some((id) => id.toLowerCase() > lastId.toLowerCase()));
+        const hasMoreCandidates = Boolean(
+          lastId && candidateIds.some((id) => id.toLowerCase() > lastId.toLowerCase()),
+        );
         return success(
           {
             items: items.slice(0, query.pageSize).map(presentOrganization),
@@ -191,12 +232,20 @@ export class SystemOrganizationController {
   @HttpCode(HttpStatus.CREATED)
   async createOrganization(
     @CurrentUser() user: { id: string },
-    @Body(new ZodValidationPipe(organizationCreateSchema)) body: z.infer<typeof organizationCreateSchema>,
+    @Body(new ZodValidationPipe(organizationCreateSchema))
+    body: z.infer<typeof organizationCreateSchema>,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, this.session(request), 'organization.create', { type: 'global' }, undefined, correlationId);
+    await this.authorize(
+      user.id,
+      this.session(request),
+      'organization.create',
+      { type: 'global' },
+      undefined,
+      correlationId,
+    );
     return success(
       presentOrganization(
         await this.organizationBranch.createOrganization(
@@ -218,8 +267,18 @@ export class SystemOrganizationController {
   ) {
     const organizationId = this.uuid(rawOrganizationId, 'شناسه‌ی مجموعه معتبر نیست.');
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, this.session(request), 'organization.read', this.organizationScope(organizationId), { type: 'organization', id: organizationId }, correlationId);
-    return success(presentOrganization(await this.organizationBranch.getOrganization(organizationId)), request);
+    await this.authorize(
+      user.id,
+      this.session(request),
+      'organization.read',
+      this.organizationScope(organizationId),
+      { type: 'organization', id: organizationId },
+      correlationId,
+    );
+    return success(
+      presentOrganization(await this.organizationBranch.getOrganization(organizationId)),
+      request,
+    );
   }
 
   @Patch(':organizationId')
@@ -229,12 +288,20 @@ export class SystemOrganizationController {
     @Param('organizationId') rawOrganizationId: string,
     @Headers('if-match') ifMatch: string | undefined,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
-    @Body(new ZodValidationPipe(organizationUpdateSchema)) body: z.infer<typeof organizationUpdateSchema>,
+    @Body(new ZodValidationPipe(organizationUpdateSchema))
+    body: z.infer<typeof organizationUpdateSchema>,
     @Req() request: AuthenticatedRequest,
   ) {
     const organizationId = this.uuid(rawOrganizationId, 'شناسه‌ی مجموعه معتبر نیست.');
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, this.session(request), 'organization.update', this.organizationScope(organizationId), { type: 'organization', id: organizationId }, correlationId);
+    await this.authorize(
+      user.id,
+      this.session(request),
+      'organization.update',
+      this.organizationScope(organizationId),
+      { type: 'organization', id: organizationId },
+      correlationId,
+    );
     return success(
       presentOrganization(
         await this.organizationBranch.updateOrganization(
@@ -261,7 +328,14 @@ export class SystemOrganizationController {
   ) {
     const organizationId = this.uuid(rawOrganizationId, 'شناسه‌ی مجموعه معتبر نیست.');
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, this.session(request), 'organization.update', this.organizationScope(organizationId), { type: 'organization', id: organizationId }, correlationId);
+    await this.authorize(
+      user.id,
+      this.session(request),
+      'organization.update',
+      this.organizationScope(organizationId),
+      { type: 'organization', id: organizationId },
+      correlationId,
+    );
     return success(
       presentOrganization(
         await this.organizationBranch.changeOrganizationStatus(
@@ -286,7 +360,14 @@ export class SystemOrganizationController {
   ) {
     const organizationId = this.uuid(rawOrganizationId, 'شناسه‌ی مجموعه معتبر نیست.');
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, this.session(request), 'branch.read', this.organizationScope(organizationId), { type: 'organization', id: organizationId }, correlationId);
+    await this.authorize(
+      user.id,
+      this.session(request),
+      'branch.read',
+      this.organizationScope(organizationId),
+      { type: 'organization', id: organizationId },
+      correlationId,
+    );
     const page = await this.organizationBranch.listOrganizationBranches(organizationId, query);
     return success({ items: page.items.map(presentBranch), nextCursor: page.nextCursor }, request);
   }
@@ -303,7 +384,14 @@ export class SystemOrganizationController {
   ) {
     const organizationId = this.uuid(rawOrganizationId, 'شناسه‌ی مجموعه معتبر نیست.');
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, this.session(request), 'branch.create', this.organizationScope(organizationId), { type: 'organization', id: organizationId }, correlationId);
+    await this.authorize(
+      user.id,
+      this.session(request),
+      'branch.create',
+      this.organizationScope(organizationId),
+      { type: 'organization', id: organizationId },
+      correlationId,
+    );
     return success(
       presentBranch(
         await this.organizationBranch.createBranch(
@@ -328,7 +416,14 @@ export class SystemOrganizationController {
     const organizationId = this.uuid(rawOrganizationId, 'شناسه‌ی مجموعه معتبر نیست.');
     const branchId = this.uuid(rawBranchId, 'شناسه‌ی شعبه معتبر نیست.');
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, this.session(request), 'branch.read', this.branchScope(organizationId, branchId), { type: 'branch', id: branchId }, correlationId);
+    await this.authorize(
+      user.id,
+      this.session(request),
+      'branch.read',
+      this.branchScope(organizationId, branchId),
+      { type: 'branch', id: branchId },
+      correlationId,
+    );
     return success(
       presentBranch(await this.organizationBranch.getOrganizationBranch(organizationId, branchId)),
       request,
@@ -349,7 +444,14 @@ export class SystemOrganizationController {
     const organizationId = this.uuid(rawOrganizationId, 'شناسه‌ی مجموعه معتبر نیست.');
     const branchId = this.uuid(rawBranchId, 'شناسه‌ی شعبه معتبر نیست.');
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, this.session(request), 'branch.update', this.branchScope(organizationId, branchId), { type: 'branch', id: branchId }, correlationId);
+    await this.authorize(
+      user.id,
+      this.session(request),
+      'branch.update',
+      this.branchScope(organizationId, branchId),
+      { type: 'branch', id: branchId },
+      correlationId,
+    );
     return success(
       presentBranch(
         await this.organizationBranch.updateBranch(
@@ -380,7 +482,14 @@ export class SystemOrganizationController {
     const branchId = this.uuid(rawBranchId, 'شناسه‌ی شعبه معتبر نیست.');
     const correlationId = requestCorrelationId(request);
     const permission = body.status === 'suspended' ? 'branch.deactivate' : 'branch.update';
-    await this.authorize(user.id, this.session(request), permission, this.branchScope(organizationId, branchId), { type: 'branch', id: branchId }, correlationId);
+    await this.authorize(
+      user.id,
+      this.session(request),
+      permission,
+      this.branchScope(organizationId, branchId),
+      { type: 'branch', id: branchId },
+      correlationId,
+    );
     return success(
       presentBranch(
         await this.organizationBranch.changeBranchStatus(
@@ -428,14 +537,16 @@ export class SystemOrganizationController {
     idempotencyKey: string | undefined,
   ): OrganizationBranchCommandMeta {
     const parsedKey = uuid.safeParse(idempotencyKey);
-    if (!parsedKey.success) throw new BadRequestException('A valid UUID Idempotency-Key is required.');
+    if (!parsedKey.success)
+      throw new BadRequestException('A valid UUID Idempotency-Key is required.');
     return { actorUserId, correlationId, idempotencyKey: parsedKey.data };
   }
 
   private expectedVersion(value: string | undefined): number {
     const match = /^"([1-9][0-9]*)"$/.exec(value ?? '');
     const version = match ? Number(match[1]) : Number.NaN;
-    if (!Number.isSafeInteger(version)) throw new BadRequestException('A quoted If-Match version is required.');
+    if (!Number.isSafeInteger(version))
+      throw new BadRequestException('A quoted If-Match version is required.');
     return version;
   }
 
@@ -469,7 +580,9 @@ function presentOrganization(
   };
 }
 
-function presentBranch(branch: Awaited<ReturnType<OrganizationBranchClient['getOrganizationBranch']>>) {
+function presentBranch(
+  branch: Awaited<ReturnType<OrganizationBranchClient['getOrganizationBranch']>>,
+) {
   return {
     id: branch.id,
     organizationId: branch.organizationId,

@@ -166,7 +166,7 @@ model PermissionOverride {
   expiresAt       DateTime?                @map("expires_at") @db.Timestamptz(6)
   revokedAt       DateTime?                @map("revoked_at") @db.Timestamptz(6)
   createdByUserId String                   @map("created_by_user_id") @db.Uuid
-  reason          String                   @db.VarChar(500)
+    reason          String?                  @db.VarChar(500)
   membership      StaffMembership          @relation(fields: [membershipId], references: [id], onDelete: Restrict)
   createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -185,7 +185,7 @@ model AccessAuditLog {
   scopeType      AccessScopeType    @map("scope_type")
   organizationId String?            @map("organization_id") @db.Uuid
   branchId       String?            @map("branch_id") @db.Uuid
-  reason         String             @db.VarChar(500)
+    reason         String?            @db.VarChar(500)
   beforeState    Json?              @map("before_state")
   afterState     Json?              @map("after_state")
   policyVersion  Int?               @map("policy_version")

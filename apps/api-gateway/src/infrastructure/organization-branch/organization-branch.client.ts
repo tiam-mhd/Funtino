@@ -146,7 +146,7 @@ export class OrganizationBranchClient {
   }
 
   async createOrganization(
-    input: { name: string; slug: string; timezone: string; reason: string },
+    input: { name: string; slug: string; timezone: string; reason?: string },
     meta: OrganizationBranchCommandMeta,
   ) {
     const result = ownerOrganizationSchema.safeParse(
@@ -163,7 +163,7 @@ export class OrganizationBranchClient {
   async updateOrganization(
     organizationId: string,
     version: number,
-    input: { name?: string; slug?: string; timezone?: string; reason: string },
+    input: { name?: string; slug?: string; timezone?: string; reason?: string },
     meta: OrganizationBranchCommandMeta,
   ) {
     const result = ownerOrganizationSchema.safeParse(
@@ -181,7 +181,7 @@ export class OrganizationBranchClient {
   async changeOrganizationStatus(
     organizationId: string,
     version: number,
-    input: { status: 'active' | 'suspended'; reason: string },
+    input: { status: 'active' | 'suspended'; reason?: string },
     meta: OrganizationBranchCommandMeta,
   ) {
     const result = ownerOrganizationSchema.safeParse(
@@ -225,7 +225,7 @@ export class OrganizationBranchClient {
       city: string;
       timezone: string;
       openingHours: Record<string, { open: string; close: string } | null>;
-      reason: string;
+      reason?: string;
     },
     meta: OrganizationBranchCommandMeta,
   ) {
@@ -250,7 +250,7 @@ export class OrganizationBranchClient {
       city?: string;
       timezone?: string;
       openingHours?: Record<string, { open: string; close: string } | null>;
-      reason: string;
+      reason?: string;
     },
     meta: OrganizationBranchCommandMeta,
   ) {
@@ -268,7 +268,7 @@ export class OrganizationBranchClient {
     organizationId: string,
     branchId: string,
     version: number,
-    input: { status: 'active' | 'suspended'; reason: string },
+    input: { status: 'active' | 'suspended'; reason?: string },
     meta: OrganizationBranchCommandMeta,
   ) {
     const result = ownerBranchSchema.safeParse(

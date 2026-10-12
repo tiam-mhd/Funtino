@@ -47,7 +47,7 @@ type Override = {
   scope: Scope;
   expiresAt: string | null;
   revokedAt: string | null;
-  reason?: string;
+  reason?: string | null;
 };
 type AuditItem = {
   id: string;
@@ -57,7 +57,7 @@ type AuditItem = {
   action: string;
   targetType: string;
   targetId: string;
-  reason: string;
+  reason: string | null;
   outcome: string;
   createdAt: string;
   policyVersion: number | null;
@@ -95,6 +95,11 @@ type ScopedInvitationPage = {
 };
 
 const iranPhonePattern = /^\+?[1-9][0-9]{7,14}$/;
+
+function optionalReason(reason: string): { reason?: string } {
+  const value = reason.trim();
+  return value ? { reason: value } : {};
+}
 
 function scopeQuery(scope: Scope): string {
   const query = new URLSearchParams({ scopeType: scope.type });
@@ -363,7 +368,7 @@ export function AccessManagement() {
           name: roleName,
           scope: targetScope,
           permissionKeys: rolePermissions,
-          reason: roleReason,
+          ...optionalReason(roleReason),
         },
       });
       setRoleName('');
@@ -375,15 +380,15 @@ export function AccessManagement() {
 
   async function saveRole(role: Role) {
     const edit = roleEdits[role.id];
-    if (!edit || !reason.trim()) {
-      setError('برای ذخیره‌ی نقش، دلیل تغییر را وارد کنید.');
+    if (!edit) {
+      setError('ابتدا تغییرات نقش را مشخص کنید.');
       return;
     }
     await perform('تغییرات نقش ذخیره شد.', async () => {
       await apiRequest(`/api/v1/operations/roles/${role.id}`, {
         method: 'PATCH',
         headers: { 'Idempotency-Key': freshIdempotencyKey(), 'If-Match': `"${role.version}"` },
-        body: { ...edit, reason },
+        body: { ...edit, ...optionalReason(reason) },
       });
       setRoleEdits((current) => {
         const next = { ...current };
@@ -419,7 +424,7 @@ export function AccessManagement() {
             phoneE164: normalizedPhone.startsWith('+') ? normalizedPhone : `+${normalizedPhone}`,
             scope: targetScope,
             roleId: inviteRoleId,
-            reason: inviteReason,
+            ...optionalReason(inviteReason),
           },
         });
         setInvitePhone('');
@@ -430,8 +435,14 @@ export function AccessManagement() {
   }
 
   async function changeStaffStatus(member: Staff, action: 'suspend' | 'reactivate' | 'revoke') {
-    if (!reason.trim()) {
-      setError('برای تغییر وضعیت عضویت، دلیل را وارد کنید.');
+    if (action === 'revoke' && reason.trim().length < 8) {
+      setError('برای لغو عضویت فعال، دلیل حداقل ۸ نویسه‌ای الزامی است.');
+      return;
+    }
+    if (
+      action === 'revoke' &&
+      !window.confirm('لغو عضویت، دسترسی این کارمند را متوقف می‌کند. ادامه می‌دهید؟')
+    ) {
       return;
     }
     const labels = {
@@ -443,7 +454,7 @@ export function AccessManagement() {
       await apiRequest(`/api/v1/operations/staff/${member.membershipId}/${action}`, {
         method: 'POST',
         headers: { 'Idempotency-Key': freshIdempotencyKey() },
-        body: { reason },
+        body: optionalReason(reason),
       });
       setReason('');
     });
@@ -451,15 +462,15 @@ export function AccessManagement() {
 
   async function changeStaffRole(member: Staff) {
     const roleId = staffRoleEdits[member.membershipId];
-    if (!roleId || !reason.trim()) {
-      setError('نقش جدید و دلیل تغییر را مشخص کنید.');
+    if (!roleId) {
+      setError('نقش جدید را مشخص کنید.');
       return;
     }
     await perform('نقش کارمند تغییر کرد.', async () => {
       await apiRequest(`/api/v1/operations/staff/${member.membershipId}`, {
         method: 'PATCH',
         headers: { 'Idempotency-Key': freshIdempotencyKey(), 'If-Match': `"${member.version}"` },
-        body: { roleId, reason },
+        body: { roleId, ...optionalReason(reason) },
       });
       setStaffRoleEdits((current) => {
         const next = { ...current };
@@ -483,8 +494,8 @@ export function AccessManagement() {
   }
 
   async function createOverride(member: Staff) {
-    if (!scope || !overridePermission || !reason.trim()) {
-      setError('مجوز، محدوده و دلیل override را تکمیل کنید.');
+    if (!scope || !overridePermission) {
+      setError('مجوز و محدوده‌ی override را تکمیل کنید.');
       return;
     }
     await perform('override دسترسی ثبت شد.', async () => {
@@ -496,7 +507,7 @@ export function AccessManagement() {
           effect: overrideEffect,
           scope,
           ...(overrideExpiry ? { expiresAt: new Date(overrideExpiry).toISOString() } : {}),
-          reason,
+          ...optionalReason(reason),
         },
       });
       setReason('');
@@ -510,10 +521,11 @@ export function AccessManagement() {
   }
 
   async function revokeOverride(member: Staff, override: Override) {
-    if (!reason.trim()) {
-      setError('برای لغو override دلیل را وارد کنید.');
+    if (reason.trim().length < 8) {
+      setError('برای لغو override، دلیل حداقل ۸ نویسه‌ای الزامی است.');
       return;
     }
+    if (!window.confirm('این مجوز اختصاصی فوراً لغو می‌شود. ادامه می‌دهید؟')) return;
     await perform('override لغو شد.', async () => {
       await apiRequest(
         `/api/v1/operations/staff/${member.membershipId}/permission-overrides/${override.id}`,
@@ -542,15 +554,11 @@ export function AccessManagement() {
   }
 
   async function revokeIssuedInvitation(invitation: ScopedInvitation) {
-    if (!reason.trim()) {
-      setError('برای لغو دعوت، دلیل قابل ممیزی را وارد کنید.');
-      return;
-    }
     await perform('دعوت صادرشده لغو شد.', async () => {
       await apiRequest(`/api/v1/operations/staff/invitations/${invitation.id}/revoke`, {
         method: 'POST',
         headers: { 'Idempotency-Key': freshIdempotencyKey() },
-        body: { reason },
+        body: optionalReason(reason),
       });
       setReason('');
     });
@@ -570,7 +578,8 @@ export function AccessManagement() {
           <p className={styles.eyebrow}>کنترل مرکزی · امنیت و دسترسی</p>
           <h1>مدیریت نقش‌ها و کارکنان</h1>
           <p className={styles.lead}>
-            مجوزها در سرور ارزیابی می‌شوند؛ هر تغییر حساس به تأیید مجدد MFA و ثبت دلیل نیاز دارد.
+            مجوزها در سرور ارزیابی می‌شوند؛ احراز هویت و ثبت actor برای همه‌ی تغییرها انجام می‌شود و
+            دلیل فقط برای لغو دسترسی فعال الزامی است.
           </p>
         </div>
         <div className={styles.headerLinks}>
@@ -887,13 +896,12 @@ export function AccessManagement() {
               ))}
             </fieldset>
             <label>
-              دلیل ثبت نقش
+              دلیل ثبت نقش (اختیاری)
               <textarea
                 value={roleReason}
                 onChange={(event) => setRoleReason(event.target.value)}
                 minLength={8}
                 maxLength={500}
-                required
                 rows={2}
               />
             </label>
@@ -1065,13 +1073,12 @@ export function AccessManagement() {
               </select>
             </label>
             <label>
-              دلیل دعوت
+              دلیل دعوت (اختیاری)
               <textarea
                 value={inviteReason}
                 onChange={(event) => setInviteReason(event.target.value)}
                 minLength={8}
                 maxLength={500}
-                required
                 rows={2}
               />
             </label>
@@ -1080,14 +1087,14 @@ export function AccessManagement() {
             </button>
           </form>
           <label className={styles.reasonField}>
-            دلیل عملیات کارکنان / override
+            دلیل عملیات کارکنان / override (اختیاری؛ برای لغو دسترسی فعال الزامی)
             <textarea
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               minLength={8}
               maxLength={500}
               rows={2}
-              placeholder="برای هر تغییر مدیریتی دلیل قابل ممیزی ثبت کنید."
+              placeholder="در صورت نیاز دلیل را ثبت کنید؛ لغو عضویت فعال یا override به دلیل نیاز دارد."
             />
           </label>
           <div className={styles.list}>
@@ -1271,7 +1278,8 @@ export function AccessManagement() {
                   <bdi>{item.action}</bdi>
                 </strong>
                 <small>
-                  {item.actorType === 'system' ? item.actorLabel : item.actorUserId} · {item.reason}
+                  {item.actorType === 'system' ? item.actorLabel : item.actorUserId}
+                  {item.reason ? ` · ${item.reason}` : ''}
                 </small>
               </div>
               <time dateTime={item.createdAt}>

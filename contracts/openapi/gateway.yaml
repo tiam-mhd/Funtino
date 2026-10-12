@@ -306,7 +306,7 @@ paths:
     put:
       x-funtino-availability: implemented
       operationId: updateManagementSessionPolicy
-      description: Requires an active session, global system.session_policy.manage permission, a trusted browser origin, a reason, an idempotency key, and the current policy version. The change applies to future management logins and is audited by IAM.
+      description: Requires an active session, global system.session_policy.manage permission, a trusted browser origin, an idempotency key, and the current policy version. A reason is optional; IAM always audits the actor and change.
       parameters:
         - $ref: '#/components/parameters/SystemIdempotencyKey'
         - $ref: '#/components/parameters/IfMatchVersion'
@@ -357,7 +357,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: createSystemOrganization
-      description: Requires organization.create at global scope, fresh MFA step-up, trusted browser origin and an auditable reason.
+      description: Requires organization.create at global scope, fresh MFA step-up and trusted browser origin. A reason is optional and is recorded when supplied.
       parameters:
         - $ref: '#/components/parameters/SystemIdempotencyKey'
       requestBody:
@@ -407,7 +407,7 @@ paths:
     patch:
       x-funtino-availability: implemented
       operationId: updateSystemOrganization
-      description: Requires organization.update at this organization scope, fresh MFA step-up, a reason and optimistic concurrency.
+      description: Requires organization.update at this organization scope, fresh MFA step-up and optimistic concurrency. A reason is optional.
       parameters:
         - $ref: '#/components/parameters/IfMatchVersion'
         - $ref: '#/components/parameters/SystemIdempotencyKey'
@@ -442,7 +442,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: changeSystemOrganizationStatus
-      description: This management surface supports reversible active/suspended transitions only. Archiving is terminal and is not offered here. Requires organization.update, fresh MFA step-up and a reason.
+      description: This management surface supports reversible active/suspended transitions only. Archiving is terminal and is not offered here. Requires organization.update and fresh MFA step-up; a reason is optional.
       parameters:
         - $ref: '#/components/parameters/IfMatchVersion'
         - $ref: '#/components/parameters/SystemIdempotencyKey'
@@ -499,7 +499,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: createSystemOrganizationBranch
-      description: Requires branch.create at the organization scope, fresh MFA step-up, a reason and trusted browser origin.
+      description: Requires branch.create at the organization scope, fresh MFA step-up and trusted browser origin. A reason is optional.
       parameters:
         - $ref: '#/components/parameters/SystemIdempotencyKey'
       requestBody:
@@ -552,7 +552,7 @@ paths:
     patch:
       x-funtino-availability: implemented
       operationId: updateSystemOrganizationBranch
-      description: Requires branch.update at this branch scope, fresh MFA step-up, a reason and optimistic concurrency.
+      description: Requires branch.update at this branch scope, fresh MFA step-up and optimistic concurrency. A reason is optional.
       parameters:
         - $ref: '#/components/parameters/IfMatchVersion'
         - $ref: '#/components/parameters/SystemIdempotencyKey'
@@ -588,7 +588,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: changeSystemOrganizationBranchStatus
-      description: Supports reversible active/suspended transitions only. Suspension requires branch.deactivate; reactivation requires branch.update. Both require fresh MFA step-up and a reason.
+      description: Supports reversible active/suspended transitions only. Suspension requires branch.deactivate; reactivation requires branch.update. Both require fresh MFA step-up; a reason is optional.
       parameters:
         - $ref: '#/components/parameters/IfMatchVersion'
         - $ref: '#/components/parameters/SystemIdempotencyKey'
@@ -1473,7 +1473,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReasonRequest'
+              $ref: '#/components/schemas/OptionalReasonRequest'
       responses:
         '200':
           description: Invitation revoked; it cannot be accepted afterward.
@@ -1503,7 +1503,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReasonRequest'
+              $ref: '#/components/schemas/OptionalReasonRequest'
       responses:
         '200':
           description: Membership suspended; subsequent requests are denied immediately.
@@ -1564,7 +1564,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReasonRequest'
+              $ref: '#/components/schemas/OptionalReasonRequest'
       responses:
         '200':
           description: Suspended membership reactivated after scope and policy validation.
@@ -1586,6 +1586,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: revokeOperationsStaffMembership
+      description: Revokes an active staff membership and immediately removes access. A reason is required and the System Management UI confirms this destructive action.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1660,6 +1661,7 @@ paths:
     delete:
       x-funtino-availability: implemented
       operationId: revokeStaffPermissionOverride
+      description: Revokes a permission override immediately. A reason is required and the System Management UI confirms this destructive action.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - name: overrideId
@@ -1986,7 +1988,7 @@ components:
     SystemManagementSessionPolicyUpdate:
       type: object
       additionalProperties: false
-      required: [managementSessionTtlHours, reason]
+      required: [managementSessionTtlHours]
       properties:
         managementSessionTtlHours: { type: integer, minimum: 1, maximum: 12 }
         reason: { type: string, minLength: 8, maxLength: 500 }
@@ -2034,7 +2036,7 @@ components:
     SystemOrganizationCreate:
       type: object
       additionalProperties: false
-      required: [name, slug, timezone, reason]
+      required: [name, slug, timezone]
       properties:
         name: { type: string, minLength: 2, maxLength: 160 }
         slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
@@ -2049,8 +2051,11 @@ components:
     SystemOrganizationUpdate:
       type: object
       additionalProperties: false
-      minProperties: 2
-      required: [reason]
+      minProperties: 1
+      anyOf:
+        - required: [name]
+        - required: [slug]
+        - required: [timezone]
       properties:
         name: { type: string, minLength: 2, maxLength: 160 }
         slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
@@ -2065,7 +2070,7 @@ components:
     SystemResourceStatusChange:
       type: object
       additionalProperties: false
-      required: [status, reason]
+      required: [status]
       properties:
         status:
           type: string
@@ -2150,7 +2155,7 @@ components:
     SystemBranchCreate:
       type: object
       additionalProperties: false
-      required: [name, slug, address, city, timezone, openingHours, reason]
+      required: [name, slug, address, city, timezone, openingHours]
       properties:
         name: { type: string, minLength: 2, maxLength: 160 }
         slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
@@ -2168,8 +2173,14 @@ components:
     SystemBranchUpdate:
       type: object
       additionalProperties: false
-      minProperties: 2
-      required: [reason]
+      minProperties: 1
+      anyOf:
+        - required: [name]
+        - required: [slug]
+        - required: [address]
+        - required: [city]
+        - required: [timezone]
+        - required: [openingHours]
       properties:
         name: { type: string, minLength: 2, maxLength: 160 }
         slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
@@ -2651,7 +2662,7 @@ components:
     RoleCreate:
       type: object
       additionalProperties: false
-      required: [name, scope, permissionKeys, reason]
+      required: [name, scope, permissionKeys]
       properties:
         name:
           type: string
@@ -2672,8 +2683,11 @@ components:
     RoleUpdate:
       type: object
       additionalProperties: false
-      required: [reason]
-      minProperties: 2
+      minProperties: 1
+      anyOf:
+        - required: [name]
+        - required: [permissionKeys]
+        - required: [status]
       properties:
         name:
           type: string
@@ -3309,7 +3323,7 @@ components:
     StaffMembershipUpdate:
       type: object
       additionalProperties: false
-      required: [roleId, reason]
+      required: [roleId]
       properties:
         roleId:
           type: string
@@ -3494,7 +3508,7 @@ components:
     StaffInvitationCreate:
       type: object
       additionalProperties: false
-      required: [phoneE164, scope, roleId, reason]
+      required: [phoneE164, scope, roleId]
       properties:
         phoneE164:
           type: string
@@ -3699,7 +3713,7 @@ components:
     PermissionOverrideCreate:
       type: object
       additionalProperties: false
-      required: [permission, effect, scope, reason]
+      required: [permission, effect, scope]
       properties:
         permission:
           type: string
@@ -3786,6 +3800,7 @@ components:
           format: date-time
         reason:
           type: string
+          nullable: true
     PermissionOverrideListSuccess:
       type: object
       required: [status, data, meta]
@@ -3881,6 +3896,7 @@ components:
                     $ref: '#/components/schemas/AccessScope'
                   reason:
                     type: string
+                    nullable: true
                   beforeState:
                     type: object
                     nullable: true
@@ -3915,6 +3931,14 @@ components:
       type: object
       additionalProperties: false
       required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
+    OptionalReasonRequest:
+      type: object
+      additionalProperties: false
       properties:
         reason:
           type: string

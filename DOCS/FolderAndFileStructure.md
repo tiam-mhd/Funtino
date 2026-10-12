@@ -388,7 +388,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 قواعد system-web:
 
 - scope و نقش فعلی در همه‌ی صفحات مدیریتی آشکار باشد.
-- تغییر نقش، حذف اتصال، impersonation، برگشت یا تغییر feature flag نیازمند تأیید مجدد و audit است.
+- تغییر نقش، حذف اتصال، impersonation، برگشت یا تغییر feature flag نیازمند تأیید مجدد و audit است. دلیل در mutationهای عادی اختیاری است و فقط هنگام لغو عضویت فعال یا override فعال اجباری می‌شود؛ [ADR-0023](decisions/0023-system-admin-audit-reason-policy.md) مرجع است.
 - صفحه‌ی system-health برای مشاهده است؛ restart یا عملیات زیرساختی حساس پشت permission جدا باشد.
 - داده‌ی خام secret، token provider یا credential در رابط نمایش داده نمی‌شود.
 - پنل سیستمی با density بالاتر ساخته می‌شود، اما خوانایی، focus و خطای قابل‌اقدام حفظ می‌شود.

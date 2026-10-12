@@ -75,6 +75,51 @@ test('records policy version, audit and outbox event through the caller transact
   });
 });
 
+test('records an audit and outbox event with no reason when an ordinary mutation omits it', async () => {
+  const writes: Array<{ model: string; args: { data: Record<string, unknown> } }> = [];
+  const tx = {
+    policyState: { update: async () => ({ version: 9 }) },
+    accessAuditLog: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        writes.push({ model: 'audit', args });
+        return args.data;
+      },
+    },
+    outboxEvent: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        writes.push({ model: 'outbox', args });
+        return args.data;
+      },
+    },
+  } as unknown as Prisma.TransactionClient;
+
+  const result = await new AccessMutationJournalService().recordCommittedChange(tx, {
+    actorUserId,
+    changeType: 'role.created',
+    targetType: 'role',
+    targetId,
+    scope: { type: 'organization', organizationId },
+    correlationId,
+    afterState: {
+      kind: 'role',
+      id: targetId,
+      name: 'Support',
+      status: 'active',
+      scope: { type: 'organization', organizationId },
+      systemManaged: false,
+      version: 1,
+      permissionKeys: ['access.role.read'],
+    },
+  });
+
+  assert.equal(result.policyVersion, 9);
+  assert.equal(writes[0]?.model, 'audit');
+  assert.equal(writes[0]?.args.data.actorUserId, actorUserId);
+  assert.equal(writes[0]?.args.data.reason, null);
+  assert.equal(writes[0]?.args.data.afterState && typeof writes[0]?.args.data.afterState, 'object');
+  assert.equal(writes[1]?.model, 'outbox');
+});
+
 test('records authorized sensitive reads without changing policy version or creating an outbox event', async () => {
   const writes: Array<Record<string, unknown>> = [];
   const tx = {
@@ -84,7 +129,9 @@ test('records authorized sensitive reads without changing policy version or crea
         return { id: 'a791b641-e825-47e1-99c2-e8bc5f340a67' };
       },
     },
-    policyState: { update: async () => assert.fail('read auditing must not change policy version') },
+    policyState: {
+      update: async () => assert.fail('read auditing must not change policy version'),
+    },
     outboxEvent: { create: async () => assert.fail('read auditing must not emit mutation events') },
   } as unknown as Prisma.TransactionClient;
 

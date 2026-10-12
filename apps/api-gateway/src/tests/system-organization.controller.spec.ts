@@ -189,6 +189,35 @@ test('organization creation fails closed before calling the owner when IAM denie
   assert.equal(ownerCalled, false);
 });
 
+test('organization creation accepts no reason and still forwards trusted command metadata', async () => {
+  let received: unknown;
+  const instance = controller(
+    {
+      evaluateAuthorization: async () => ({ allowed: true, policyVersion: 1, catalogVersion: 1 }),
+    },
+    {
+      createOrganization: async (input) => {
+        received = input;
+        return organization(firstOrganizationId);
+      },
+    },
+  );
+
+  const result = await instance.createOrganization(
+    { id: userId },
+    { name: 'New Organization', slug: 'new-organization', timezone: 'Asia/Tehran' },
+    idempotencyKey,
+    request(),
+  );
+
+  assert.deepEqual(received, {
+    name: 'New Organization',
+    slug: 'new-organization',
+    timezone: 'Asia/Tehran',
+  });
+  assert.equal(result.data.id, firstOrganizationId);
+});
+
 test('branch status writes authorize the exact parent/branch scope and pass trusted actor metadata', async () => {
   const authorizationRequests: Array<{ permission: string; scope: unknown; resource?: unknown }> =
     [];

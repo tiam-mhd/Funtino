@@ -44,7 +44,7 @@ export function SessionPolicySettings() {
 
   async function savePolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!policy || reason.trim().length < 8) return;
+    if (!policy) return;
     setSaving(true);
     setError('');
     setNotice('');
@@ -55,7 +55,10 @@ export function SessionPolicySettings() {
           'If-Match': `"${policy.policyVersion}"`,
           'Idempotency-Key': idempotencyKey(),
         },
-        body: { managementSessionTtlHours: Number(hours), reason: reason.trim() },
+        body: {
+          managementSessionTtlHours: Number(hours),
+          ...(reason.trim() ? { reason: reason.trim() } : {}),
+        },
       });
       setPolicy(result);
       setHours(String(result.managementSessionTtlHours));
@@ -116,18 +119,17 @@ export function SessionPolicySettings() {
               ))}
             </select>
 
-            <label htmlFor="session-policy-reason">دلیل تغییر (برای ممیزی)</label>
+            <label htmlFor="session-policy-reason">دلیل تغییر (اختیاری؛ برای ممیزی)</label>
             <textarea
               id="session-policy-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               minLength={8}
               maxLength={500}
-              required
               rows={3}
               disabled={saving}
             />
-            <button type="submit" disabled={saving || reason.trim().length < 8}>
+            <button type="submit" disabled={saving}>
               {saving ? 'در حال ذخیره...' : 'ذخیره تنظیم'}
             </button>
           </form>

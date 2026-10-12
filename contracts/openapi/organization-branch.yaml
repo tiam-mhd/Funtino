@@ -415,7 +415,7 @@ components:
       additionalProperties: false
     OrganizationCreate:
       type: object
-      required: [name, slug, timezone, reason]
+      required: [name, slug, timezone]
       properties:
         name: { type: string, minLength: 2, maxLength: 160 }
         slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
@@ -424,8 +424,11 @@ components:
       additionalProperties: false
     OrganizationUpdate:
       type: object
-      minProperties: 2
-      required: [reason]
+      minProperties: 1
+      anyOf:
+        - required: [name]
+        - required: [slug]
+        - required: [timezone]
       properties:
         name: { type: string, minLength: 2, maxLength: 160 }
         slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
@@ -434,7 +437,14 @@ components:
       additionalProperties: false
     StatusChange:
       type: object
-      required: [status, reason]
+      required: [status]
+      allOf:
+        - if:
+            properties:
+              status: { const: archived }
+            required: [status]
+          then:
+            required: [reason]
       properties:
         status: { $ref: '#/components/schemas/ResourceStatus' }
         reason: { type: string, minLength: 8, maxLength: 500 }
@@ -505,7 +515,7 @@ components:
       additionalProperties: false
     BranchCreate:
       type: object
-      required: [name, slug, address, city, timezone, openingHours, reason]
+      required: [name, slug, address, city, timezone, openingHours]
       properties:
         name: { type: string, minLength: 2, maxLength: 160 }
         slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }
@@ -529,8 +539,14 @@ components:
       additionalProperties: false
     BranchUpdate:
       type: object
-      minProperties: 2
-      required: [reason]
+      minProperties: 1
+      anyOf:
+        - required: [name]
+        - required: [slug]
+        - required: [address]
+        - required: [city]
+        - required: [timezone]
+        - required: [openingHours]
       properties:
         name: { type: string, minLength: 2, maxLength: 160 }
         slug: { type: string, pattern: '^[a-z0-9]+(?:-[a-z0-9]+)*$', maxLength: 80 }

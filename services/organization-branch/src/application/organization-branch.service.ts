@@ -41,7 +41,7 @@ export const organizationInputSchema = z
       .max(80)
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     timezone,
-    reason: z.string().trim().min(8).max(500),
+    reason: z.string().trim().min(8).max(500).optional(),
   })
   .strict();
 
@@ -56,7 +56,7 @@ export const organizationUpdateSchema = z
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
       .optional(),
     timezone: timezone.optional(),
-    reason: z.string().trim().min(8).max(500),
+    reason: z.string().trim().min(8).max(500).optional(),
   })
   .strict()
   .refine(
@@ -76,7 +76,7 @@ export const branchInputSchema = z
     city: z.string().trim().min(2).max(120),
     timezone,
     openingHours: openingHoursSchema,
-    reason: z.string().trim().min(8).max(500),
+    reason: z.string().trim().min(8).max(500).optional(),
   })
   .strict();
 
@@ -94,7 +94,7 @@ export const branchUpdateSchema = z
     city: z.string().trim().min(2).max(120).optional(),
     timezone: timezone.optional(),
     openingHours: openingHoursSchema.optional(),
-    reason: z.string().trim().min(8).max(500),
+    reason: z.string().trim().min(8).max(500).optional(),
   })
   .strict()
   .refine(
@@ -110,9 +110,18 @@ export const branchUpdateSchema = z
 export const statusInputSchema = z
   .object({
     status: z.enum(statuses),
-    reason: z.string().trim().min(8).max(500),
+    reason: z.string().trim().min(8).max(500).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.status === 'archived' && !value.reason) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reason'],
+        message: 'Archiving an organization or branch requires a reason.',
+      });
+    }
+  });
 
 export type CommandMeta = {
   callerService: 'api-gateway' | 'identity-access';
@@ -666,7 +675,7 @@ export class OrganizationBranchService {
   private async writeMutation(
     tx: Prisma.TransactionClient,
     meta: CommandMeta,
-    reason: string,
+    reason: string | undefined,
     action: string,
     resourceType: string,
     resourceId: string,
@@ -686,7 +695,7 @@ export class OrganizationBranchService {
         organizationId,
         branchId,
         correlationId: meta.correlationId,
-        reason,
+        reason: reason?.trim() || null,
         before: before ? json(before) : Prisma.JsonNull,
         after: json(after),
       },

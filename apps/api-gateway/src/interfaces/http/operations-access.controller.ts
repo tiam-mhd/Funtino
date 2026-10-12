@@ -96,6 +96,9 @@ const scopeSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('branch'), organizationId: uuid, branchId: uuid }).strict(),
 ]);
 const reasonSchema = z.object({ reason: z.string().trim().min(8).max(500) }).strict();
+const optionalReasonSchema = z
+  .object({ reason: z.string().trim().min(8).max(500).optional() })
+  .strict();
 const roleCreateSchema = z
   .object({
     name: z.string().trim().min(2).max(80),
@@ -105,7 +108,7 @@ const roleCreateSchema = z
       .min(1)
       .max(100)
       .refine((items) => new Set(items).size === items.length),
-    reason: z.string().trim().min(8).max(500),
+    reason: z.string().trim().min(8).max(500).optional(),
   })
   .strict();
 const roleUpdateSchema = z
@@ -118,7 +121,7 @@ const roleUpdateSchema = z
       .refine((items) => new Set(items).size === items.length)
       .optional(),
     status: z.enum(['active', 'disabled']).optional(),
-    reason: z.string().trim().min(8).max(500),
+    reason: z.string().trim().min(8).max(500).optional(),
   })
   .strict()
   .refine(
@@ -130,11 +133,11 @@ const invitationCreateSchema = z
     phoneE164: z.string().regex(/^\+[1-9][0-9]{7,14}$/),
     scope: scopeSchema,
     roleId: uuid,
-    reason: z.string().trim().min(8).max(500),
+    reason: z.string().trim().min(8).max(500).optional(),
   })
   .strict();
 const membershipRoleSchema = z
-  .object({ roleId: uuid, reason: z.string().trim().min(8).max(500) })
+  .object({ roleId: uuid, reason: z.string().trim().min(8).max(500).optional() })
   .strict();
 const overrideCreateSchema = z
   .object({
@@ -146,7 +149,7 @@ const overrideCreateSchema = z
       .strict()
       .optional(),
     expiresAt: z.string().datetime({ offset: true }).optional(),
-    reason: z.string().trim().min(8).max(500),
+    reason: z.string().trim().min(8).max(500).optional(),
   })
   .strict();
 type RolesQuery = z.infer<typeof rolesQuerySchema>;
@@ -374,7 +377,7 @@ export class OperationsAccessController {
     @CurrentUser() user: { id: string },
     @Param('invitationId') invitationId: string,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
-    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @Body(new ZodValidationPipe(optionalReasonSchema)) body: z.infer<typeof optionalReasonSchema>,
     @Req() request: AuthenticatedRequest,
   ) {
     return success(
@@ -422,7 +425,7 @@ export class OperationsAccessController {
     @CurrentUser() user: { id: string },
     @Param('membershipId') membershipId: string,
     @Headers('idempotency-key') key: string | undefined,
-    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @Body(new ZodValidationPipe(optionalReasonSchema)) body: z.infer<typeof optionalReasonSchema>,
     @Req() request: AuthenticatedRequest,
   ) {
     return success(
@@ -446,7 +449,7 @@ export class OperationsAccessController {
     @CurrentUser() user: { id: string },
     @Param('membershipId') membershipId: string,
     @Headers('idempotency-key') key: string | undefined,
-    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @Body(new ZodValidationPipe(optionalReasonSchema)) body: z.infer<typeof optionalReasonSchema>,
     @Req() request: AuthenticatedRequest,
   ) {
     return success(

@@ -47,7 +47,12 @@ test('Gateway client sends only server-derived actor context and maps access mem
     });
 
     const result = await client.currentAccessContext(userId, correlationId);
-    assert.deepEqual(result, { memberships: [], policyVersion: 4, catalogVersion: 1 });
+    assert.deepEqual(result, {
+      memberships: [],
+      policyVersion: 4,
+      catalogVersion: 1,
+      managementSessionTtlHours: 12,
+    });
   } finally {
     restore();
   }
@@ -249,16 +254,43 @@ test('sensitive audit reads forward fresh MFA evidence only from the persisted G
       assert.equal(headers.get('x-funtino-mfa-factor-version'), '3');
       assert.equal(headers.get('x-funtino-mfa-method'), 'totp');
       assert.equal(JSON.stringify(init.headers).includes(session.tokenHash), false);
-      return new Response(JSON.stringify({ data: [], nextCursor: null, policyVersion: 4 }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: '77777777-7777-4777-8777-777777777777',
+              actorType: 'user',
+              actorUserId: userId,
+              actorLabel: null,
+              action: 'role.created',
+              targetType: 'role',
+              targetId: '88888888-8888-4888-8888-888888888888',
+              scope: { type: 'global' },
+              reason: null,
+              beforeState: null,
+              afterState: null,
+              policyVersion: 4,
+              correlationId,
+              outcome: 'succeeded',
+              createdAt: '2026-09-30T10:00:00.000Z',
+            },
+          ],
+          nextCursor: null,
+          policyVersion: 4,
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
     });
 
     const result = await client.listAudit(userId, session, { type: 'global' }, correlationId, {
       pageSize: 10,
     });
-    assert.deepEqual(result, { data: [], nextCursor: null, policyVersion: 4 });
+    assert.equal(result.data[0]?.reason, null);
+    assert.equal(result.data[0]?.actorUserId, userId);
+    assert.equal(result.policyVersion, 4);
   } finally {
     restore();
   }

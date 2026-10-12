@@ -131,7 +131,7 @@ Repository فقط abstraction دسترسی مالک داده است و query ر�
 
 ### ۵.۱۰ Audit Trail
 
-برای هر عملیات حساس actor، نقش، سازمان، شعبه، هدف، زمان، correlation id، نتیجه و دلیل ثبت شود. Audit قابل‌حذف توسط کاربر عادی نیست و با log فنی یکی تلقی نمی‌شود.
+برای هر عملیات حساس actor، نقش، سازمان، شعبه، هدف، زمان، correlation id و نتیجه ثبت شود؛ دلیل مطابق policy دامنه دریافت و در صورت ثبت نگهداری می‌شود. در پنل System دلیل تغییرات عادی اختیاری است و فقط برای لغو عضویت فعال یا لغو override فعال اجباری است. Audit تغییرناپذیر است و با log فنی یکی تلقی نمی‌شود. جزئیات در [ADR-0023](decisions/0023-system-admin-audit-reason-policy.md) است.
 
 ## ۶. الگوهای رابط کاربری
 
@@ -149,7 +149,7 @@ Repository فقط abstraction دسترسی مالک داده است و query ر�
 - layout مبتنی بر scope فعلی شعبه؛
 - table، filter و keyboard workflow برای عملیات پرتکرار؛
 - فرم‌های مالی با step تأیید و نمایش واضح وضعیت؛
-- actionهای مخرب یا برگشت‌پذیر با permission، reason و confirmation؛
+- actionهای مخرب و برگشت‌پذیر با permission و confirmation؛ دلیل برای تغییرات عادی اختیاری و برای لغو دسترسی‌های بحرانی اجباری است؛
 - query و mutation جدا؛ refresh دستی و realtime status مشخص.
 
 ### پنل سیستمی
