@@ -16,6 +16,7 @@ export type WorkspaceSection =
   | 'staff'
   | 'devices'
   | 'cards'
+  | 'family'
   | 'reports'
   | 'forms';
 
@@ -39,6 +40,7 @@ const sectionLabels: Record<WorkspaceSection, string> = {
   staff: 'کارکنان و دسترسی‌ها',
   devices: 'دستگاه‌ها و پایش',
   cards: 'موجودی کارت‌ها',
+  family: 'خانواده‌ی مشتری',
   reports: 'گزارش‌ها',
   forms: 'فرم‌ها و پاسخ‌ها',
 };
@@ -49,13 +51,14 @@ const sectionDescriptions: Record<WorkspaceSection, string> = {
   staff: 'دعوت‌ها، کارکنان و دسترسی‌های محدودهٔ فعلی',
   devices: 'وضعیت دستگاه‌ها و پیگیری موارد نیازمند رسیدگی',
   cards: 'موجودی کارت و تخصیص‌های مجاز شعبه',
+  family: 'مشاهده‌ی محدود خانواده‌ی مشتری در شعبه‌ی انتخاب‌شده',
   reports: 'گزارش تجمیعی رویدادها و سلامت دستگاه‌ها',
   forms: 'فرم‌های مجموعه و پاسخ‌های ثبت‌شده',
 };
 
 const navigationGroups: Array<{ label: string; sections: WorkspaceSection[] }> = [
   { label: 'پیشخوان', sections: ['overview', 'branches'] },
-  { label: 'مدیریت', sections: ['staff', 'forms'] },
+  { label: 'مدیریت', sections: ['staff', 'family', 'forms'] },
   { label: 'عملیات', sections: ['devices', 'cards'] },
   { label: 'پایش', sections: ['reports'] },
 ];
@@ -265,6 +268,7 @@ export function OperationsWorkspaceShell({
           <span
             aria-label="محدوده توسط سرور تأیید شده"
             className={styles.scopeVerified}
+            role="img"
             title="محدوده تأیید شده"
           >
             <Icon name="check" />
@@ -381,7 +385,7 @@ export function OperationsWorkspaceShell({
                     <strong>{scopeLabel(activeScope)}</strong>
                     <small>{scopeDescription(activeScope)}</small>
                   </span>
-                  <span aria-label="تأییدشده" className={styles.inlineVerified}>
+                  <span aria-label="تأییدشده" className={styles.inlineVerified} role="img">
                     <Icon name="check" />
                   </span>
                 </div>
@@ -526,6 +530,13 @@ function Icon({
       <>
         <rect x="3" y="5" width="18" height="14" rx="2" />
         <path d="M3 10h18M7 15h3" />
+      </>
+    ),
+    family: (
+      <>
+        <circle cx="9" cy="8" r="3" />
+        <circle cx="17" cy="9" r="2.2" />
+        <path d="M3.5 20v-1.3a4 4 0 0 1 4-4h3a4 4 0 0 1 4 4V20M15 15a3.5 3.5 0 0 1 5.5 2.8V20" />
       </>
     ),
     reports: (

@@ -72,6 +72,116 @@ export type CustomerHouseholdSummary = {
   members: Array<{ id: string; displayName: string }>;
 };
 
+export type CustomerFamilyRelationshipKind =
+  | 'parent_of'
+  | 'spouse_of'
+  | 'sibling_of'
+  | 'guardian_of';
+export type CustomerFamilyRelationshipBasis =
+  | 'biological'
+  | 'legal'
+  | 'adoptive'
+  | 'step'
+  | 'partner'
+  | 'unspecified';
+export type CustomerFamilyInvitationStatus =
+  | 'pending'
+  | 'accepted'
+  | 'declined'
+  | 'revoked'
+  | 'expired'
+  | 'claim_pending'
+  | 'linked'
+  | 'conflict_review';
+
+export type CustomerFamilyInvitation = {
+  id: string;
+  householdId: string;
+  memberId: string;
+  kind: 'adult_account' | 'dependent_claim';
+  status: CustomerFamilyInvitationStatus;
+  expiresAt: string | null;
+  createdAt: string;
+  householdName?: string;
+  memberName?: string;
+};
+
+export type CustomerFamilyMember = {
+  id: string;
+  householdId: string;
+  displayName: string;
+  relationship: string;
+  relationshipLabel: string;
+  relationshipStatus: 'verified' | 'ambiguous' | 'needs_review';
+  displayGender: 'female' | 'male' | 'unspecified' | null;
+  isAccountLinked: boolean;
+  isViewer: boolean;
+  birthDate: string | null;
+  status: 'active' | 'pending' | 'archived';
+  isDependent: boolean;
+  version: number;
+  createdAt: string;
+};
+
+export type CustomerFamilyHousehold = {
+  id: string;
+  name: string;
+  status: 'active' | 'suspended' | 'archived';
+  version: number;
+  createdAt: string;
+  accessRole: 'owner' | 'guardian' | 'member';
+  canManage: boolean;
+  viewerMemberId: string | null;
+  members: CustomerFamilyMember[];
+  relationships: Array<{
+    id?: string;
+    fromMemberId: string;
+    toMemberId: string;
+    kind: CustomerFamilyRelationshipKind;
+    basis: CustomerFamilyRelationshipBasis;
+  }>;
+  invitations: CustomerFamilyInvitation[];
+};
+
+export type CustomerFamilyData = {
+  items: CustomerFamilyHousehold[];
+  invitations: CustomerFamilyInvitation[];
+};
+
+export type CustomerCreatedFamilyMember = {
+  id: string;
+  householdId: string;
+  displayName: string;
+  relationship: string;
+  birthDate: string | null;
+  status: 'active' | 'pending' | 'archived';
+  isDependent: boolean;
+  version: number;
+  createdAt: string;
+};
+
+export type AddCustomerFamilyMemberInput = {
+  displayName: string;
+  relativeMemberId?: string | 'viewer' | null;
+  relationship: 'parent' | 'child' | 'spouse' | 'sibling' | 'guardian' | 'ward';
+  basis: CustomerFamilyRelationshipBasis;
+  displayGender?: 'female' | 'male' | 'unspecified';
+  birthDate?: string | null;
+  isDependent: boolean;
+  phone?: string;
+  createClaimLink?: boolean;
+};
+export type UpdateCustomerFamilyMemberInput = {
+  expectedVersion: number;
+  displayName?: string;
+  displayGender?: 'female' | 'male' | 'unspecified' | null;
+  birthDate?: string | null;
+  relationshipId?: string;
+  relativeMemberId?: string;
+  relationship?: AddCustomerFamilyMemberInput['relationship'];
+  basis?: AddCustomerFamilyMemberInput['basis'];
+};
+
 export type CustomerBranchSummary = {
   id: string;
   name: string;
@@ -149,6 +259,146 @@ export function getCustomerCards(): Promise<CustomerCard[]> {
 
 export function getCustomerHouseholds(): Promise<CustomerHouseholdSummary[]> {
   return apiFetch<unknown>('/api/v1/customer/households').then(parseCustomerHouseholds);
+}
+
+export function getCustomerFamily(): Promise<CustomerFamilyData> {
+  return apiFetch<CustomerFamilyData>('/api/v1/customer/family', { cache: 'no-store' });
+}
+
+export function createCustomerHousehold(name: string) {
+  return apiFetch<{
+    id: string;
+    name: string;
+    status: string;
+    version: number;
+    createdAt: string;
+    members: [];
+  }>('/api/v1/customer/households', {
+    method: 'POST',
+    headers: { 'idempotency-key': crypto.randomUUID() },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function addCustomerFamilyMember(
+  householdId: string,
+  input: AddCustomerFamilyMemberInput,
+  idempotencyKey = crypto.randomUUID(),
+) {
+  return apiFetch<{
+    member: CustomerCreatedFamilyMember;
+    relationship: CustomerFamilyHousehold['relationships'][number] | null;
+    invitation: (CustomerFamilyInvitation & { shareToken?: string }) | null;
+  }>(`/api/v1/customer/family/households/${encodeURIComponent(householdId)}/members`, {
+    method: 'POST',
+    headers: { 'idempotency-key': idempotencyKey },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateCustomerFamilyMember(
+  householdId: string,
+  memberId: string,
+  input: UpdateCustomerFamilyMemberInput,
+  idempotencyKey = crypto.randomUUID(),
+) {
+  return apiFetch<CustomerCreatedFamilyMember>(
+    `/api/v1/customer/family/households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(memberId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'idempotency-key': idempotencyKey },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function archiveCustomerFamilyMember(
+  householdId: string,
+  memberId: string,
+  expectedVersion: number,
+  idempotencyKey = crypto.randomUUID(),
+) {
+  return apiFetch<CustomerCreatedFamilyMember>(
+    `/api/v1/customer/family/households/${encodeURIComponent(householdId)}/members/${encodeURIComponent(memberId)}/archive`,
+    {
+      method: 'POST',
+      headers: { 'idempotency-key': idempotencyKey },
+      body: JSON.stringify({ expectedVersion }),
+    },
+  );
+}
+
+export function removeCustomerFamilyRelationship(
+  householdId: string,
+  relationshipId: string,
+  input: { memberId: string; expectedVersion: number },
+  idempotencyKey = crypto.randomUUID(),
+) {
+  return apiFetch<{
+    relationshipId: string;
+    householdId: string;
+    memberId: string;
+    version: number;
+  }>(
+    `/api/v1/customer/family/households/${encodeURIComponent(householdId)}/relationships/${encodeURIComponent(relationshipId)}/remove`,
+    {
+      method: 'POST',
+      headers: { 'idempotency-key': idempotencyKey },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function previewCustomerFamilyInvitation(token: string) {
+  return apiFetch<
+    | {
+        valid: true;
+        invitationId: string;
+        householdName: string;
+        memberName: string;
+        kind: 'adult_account' | 'dependent_claim';
+        expiresAt: string | null;
+      }
+    | { valid: false }
+  >('/api/v1/customer/family/invitations/preview', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function acceptCustomerFamilyInvitation(input: { token?: string; invitationId?: string }) {
+  return apiFetch<CustomerFamilyInvitation>('/api/v1/customer/family/invitations/accept', {
+    method: 'POST',
+    headers: { 'idempotency-key': crypto.randomUUID() },
+    body: JSON.stringify(input),
+  });
+}
+
+export function linkCustomerFamilyInvitation(invitationId: string) {
+  return familyInvitationCommand(invitationId, 'link');
+}
+
+export function approveCustomerDependentClaim(invitationId: string) {
+  return familyInvitationCommand(invitationId, 'approve-claim');
+}
+
+export function declineCustomerFamilyInvitation(invitationId: string) {
+  return familyInvitationCommand(invitationId, 'decline');
+}
+
+export function revokeCustomerFamilyInvitation(invitationId: string) {
+  return familyInvitationCommand(invitationId, 'revoke');
+}
+
+function familyInvitationCommand(invitationId: string, action: string) {
+  return apiFetch<CustomerFamilyInvitation>(
+    `/api/v1/customer/family/invitations/${encodeURIComponent(invitationId)}/${action}`,
+    {
+      method: 'POST',
+      headers: { 'idempotency-key': crypto.randomUUID() },
+      body: JSON.stringify({}),
+    },
+  );
 }
 
 export function getCustomerBranches(): Promise<CustomerBranchSummary[]> {

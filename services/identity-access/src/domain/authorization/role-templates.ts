@@ -23,6 +23,7 @@ export const accessRoleTemplates: readonly AccessRoleTemplate[] = [
       'report.read',
       'audit.read',
       'system.health.read',
+      'customer.family.read',
     ],
   },
   {
@@ -69,7 +70,15 @@ export const accessRoleTemplates: readonly AccessRoleTemplate[] = [
     key: 'organization_crm_manager',
     name: 'مدیر ارتباط با مشتریان مجموعه',
     scopeType: 'organization',
-    permissionKeys: ['staff.read', 'customer.lookup.limited', 'report.read', 'report.export', 'forms.read', 'forms.responses.read'],
+    permissionKeys: [
+      'staff.read',
+      'customer.lookup.limited',
+      'customer.family.read',
+      'report.read',
+      'report.export',
+      'forms.read',
+      'forms.responses.read',
+    ],
   },
   {
     key: 'organization_support',
@@ -134,7 +143,14 @@ export const accessRoleTemplates: readonly AccessRoleTemplate[] = [
     key: 'branch_crm_manager',
     name: 'مدیر ارتباط با مشتریان شعبه',
     scopeType: 'branch',
-    permissionKeys: ['staff.read', 'customer.lookup.limited', 'report.read', 'forms.read', 'forms.responses.read'],
+    permissionKeys: [
+      'staff.read',
+      'customer.lookup.limited',
+      'customer.family.read',
+      'report.read',
+      'forms.read',
+      'forms.responses.read',
+    ],
   },
   {
     key: 'branch_support',

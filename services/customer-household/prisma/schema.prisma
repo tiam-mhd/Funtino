@@ -23,6 +23,7 @@ enum HouseholdStatus {
 enum HouseholdAccessRole {
   owner
   guardian
+  member
 
   @@map("household_access_role")
   @@schema("customer_household")
@@ -39,9 +40,63 @@ enum HouseholdAccessStatus {
 
 enum HouseholdMemberStatus {
   active
+  pending
   archived
 
   @@map("household_member_status")
+  @@schema("customer_household")
+}
+
+enum HouseholdMemberGender {
+  female
+  male
+  unspecified
+
+  @@map("household_member_gender")
+  @@schema("customer_household")
+}
+
+enum HouseholdRelationshipKind {
+  parent_of
+  spouse_of
+  sibling_of
+  guardian_of
+
+  @@map("household_relationship_kind")
+  @@schema("customer_household")
+}
+
+enum HouseholdRelationshipBasis {
+  biological
+  legal
+  adoptive
+  step
+  partner
+  unspecified
+
+  @@map("household_relationship_basis")
+  @@schema("customer_household")
+}
+
+enum HouseholdInvitationKind {
+  adult_account
+  dependent_claim
+
+  @@map("household_invitation_kind")
+  @@schema("customer_household")
+}
+
+enum HouseholdInvitationStatus {
+  pending
+  accepted
+  declined
+  revoked
+  expired
+  claim_pending
+  linked
+  conflict_review
+
+  @@map("household_invitation_status")
   @@schema("customer_household")
 }
 
@@ -55,6 +110,8 @@ model Household {
   updatedAt   DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
   accesses    HouseholdAccess[]
   members     HouseholdMember[]
+  relationships HouseholdRelationship[]
+  invitations HouseholdInvitation[]
 
   @@index([ownerUserId, status, createdAt], map: "customer_household_owner_status_idx")
   @@map("households")
@@ -81,6 +138,9 @@ model HouseholdMember {
   householdId  String               @map("household_id") @db.Uuid
   displayName  String               @map("display_name") @db.VarChar(80)
   relationship String               @db.VarChar(40)
+  familyPersonId String?             @map("family_person_id") @db.Uuid
+  displayGender HouseholdMemberGender? @map("display_gender")
+  isSelf       Boolean              @default(false) @map("is_self")
   birthDate    DateTime?            @map("birth_date") @db.Date
   isDependent  Boolean              @default(true) @map("is_dependent")
   status       HouseholdMemberStatus @default(active)
@@ -88,9 +148,81 @@ model HouseholdMember {
   createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
   household    Household            @relation(fields: [householdId], references: [id], onDelete: Restrict)
+  familyPerson FamilyPerson?        @relation(fields: [familyPersonId], references: [id], onDelete: Restrict)
+  outgoingRelationships HouseholdRelationship[] @relation("HouseholdRelationshipFrom")
+  incomingRelationships HouseholdRelationship[] @relation("HouseholdRelationshipTo")
+  invitations HouseholdInvitation[]
+  relatedInvitations HouseholdInvitation[] @relation("HouseholdInvitationRelative")
 
   @@index([householdId, status, createdAt], map: "customer_household_member_household_status_idx")
+  @@unique([householdId, id], map: "customer_household_member_household_id_id_key")
+  @@unique([householdId, familyPersonId], map: "customer_household_member_household_person_key")
+  @@index([familyPersonId], map: "customer_household_member_person_idx")
+  @@index([householdId, isSelf, status], map: "customer_household_member_self_idx")
   @@map("household_members")
+  @@schema("customer_household")
+}
+
+model FamilyPerson {
+  id            String           @id @default(uuid()) @db.Uuid
+  accountUserId String?          @unique(map: "customer_household_family_person_account_user_key") @map("account_user_id") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  members       HouseholdMember[]
+
+  @@map("family_people")
+  @@schema("customer_household")
+}
+
+model HouseholdRelationship {
+  id          String                      @id @db.Uuid
+  householdId String                      @map("household_id") @db.Uuid
+  fromMemberId String                     @map("from_member_id") @db.Uuid
+  toMemberId  String                      @map("to_member_id") @db.Uuid
+  kind        HouseholdRelationshipKind
+  basis       HouseholdRelationshipBasis  @default(unspecified)
+  createdByUserId String                  @map("created_by_user_id") @db.Uuid
+  createdAt   DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  household   Household                  @relation(fields: [householdId], references: [id], onDelete: Restrict)
+  fromMember  HouseholdMember            @relation("HouseholdRelationshipFrom", fields: [householdId, fromMemberId], references: [householdId, id], onDelete: Restrict)
+  toMember    HouseholdMember            @relation("HouseholdRelationshipTo", fields: [householdId, toMemberId], references: [householdId, id], onDelete: Restrict)
+
+  @@unique([householdId, fromMemberId, toMemberId, kind], map: "customer_household_relationship_edge_key")
+  @@index([householdId, kind, fromMemberId], map: "customer_household_relationship_from_idx")
+  @@index([householdId, kind, toMemberId], map: "customer_household_relationship_to_idx")
+  @@map("household_relationships")
+  @@schema("customer_household")
+}
+
+model HouseholdInvitation {
+  id              String                    @id @db.Uuid
+  householdId     String                    @map("household_id") @db.Uuid
+  memberId        String                    @map("member_id") @db.Uuid
+  relativeMemberId String?                  @map("relative_member_id") @db.Uuid
+  kind            HouseholdInvitationKind
+  status          HouseholdInvitationStatus @default(pending)
+  relationshipKind HouseholdRelationshipKind? @map("relationship_kind")
+  relationshipBasis HouseholdRelationshipBasis? @map("relationship_basis")
+  newMemberIsFrom Boolean?                  @map("new_member_is_from")
+  targetUserId    String?                   @map("target_user_id") @db.Uuid
+  targetPhoneHash String?                   @map("target_phone_hash") @db.Char(64)
+  tokenHash       String                    @unique(map: "customer_household_invitation_token_hash_key") @map("token_hash") @db.Char(64)
+  tokenKeyVersion String                    @default("v1") @map("token_key_version") @db.VarChar(16)
+  createdByUserId String                    @map("created_by_user_id") @db.Uuid
+  acceptedByUserId String?                  @map("accepted_by_user_id") @db.Uuid
+  claimUserId     String?                   @map("claim_user_id") @db.Uuid
+  expiresAt       DateTime?                 @map("expires_at") @db.Timestamptz(6)
+  acceptedAt      DateTime?                 @map("accepted_at") @db.Timestamptz(6)
+  createdAt       DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  household       Household                 @relation(fields: [householdId], references: [id], onDelete: Restrict)
+  member          HouseholdMember           @relation(fields: [householdId, memberId], references: [householdId, id], onDelete: Restrict)
+  relativeMember  HouseholdMember?          @relation("HouseholdInvitationRelative", fields: [householdId, relativeMemberId], references: [householdId, id], onDelete: Restrict)
+
+  @@index([targetUserId, status, createdAt], map: "customer_household_invitation_target_user_idx")
+  @@index([householdId, status, createdAt], map: "customer_household_invitation_household_status_idx")
+  @@index([expiresAt, status], map: "customer_household_invitation_expiry_idx")
+  @@map("household_invitations")
   @@schema("customer_household")
 }
 

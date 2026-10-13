@@ -2,6 +2,7 @@ html,
 body {
   min-height: 100%;
   margin: 0;
+  overflow-x: clip;
   background: #f6f7fb;
   color: var(--ft-ink);
   font-family: 'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif;

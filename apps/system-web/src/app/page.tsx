@@ -43,6 +43,9 @@ export default function SystemHome() {
           <a href="/fa/organizations">
             <span aria-hidden="true">▦</span> سازمان‌ها و شعب
           </a>
+          <a href="/fa/customer-family">
+            <span aria-hidden="true">♧</span> مشاهده‌ی خانواده‌ی مشتری
+          </a>
           <a href="/fa/access">
             <span aria-hidden="true">♙</span> کاربران و دسترسی
           </a>
@@ -103,6 +106,11 @@ export default function SystemHome() {
               <IconBadge icon="◷" label="امنیت" tone="purple" />
               <strong>مدت نشست کارکنان</strong>
               <span>تنظیم انقضای مطلق نشست پنل از ۱ تا ۱۲ ساعت</span>
+            </a>
+            <a className="system-quick-card system-quick-card--link" href="/fa/customer-family">
+              <IconBadge icon="♧" label="پشتیبانی خانواده" tone="teal" />
+              <strong>مشاهده‌ی خانواده‌ی مشتری</strong>
+              <span>جست‌وجوی دقیق و فقط‌خواندنی با انتخاب شعبه و شماره‌ی کامل</span>
             </a>
             <a className="system-quick-card system-quick-card--link" href="/fa/organizations">
               <IconBadge icon="▦" label="سازمان‌ها" tone="purple" />

@@ -38,24 +38,70 @@ test('system telemetry permission is global-only and included in the read-only s
   );
 });
 
+test('family support is independently scoped, step-up protected, and limited to CRM/read-only support templates', () => {
+  const family = getPermissionDefinition('customer.family.read');
+  assert.deepEqual(family?.scopes, ['branch', 'organization', 'global']);
+  assert.equal(family?.stepUp, true);
+  assert.equal(family?.delegable, true);
+  for (const key of ['system_support', 'organization_crm_manager', 'branch_crm_manager']) {
+    assert.ok(
+      accessRoleTemplates
+        .find((template) => template.key === key)
+        ?.permissionKeys.includes('customer.family.read'),
+    );
+  }
+  for (const key of [
+    'organization_manager',
+    'branch_manager',
+    'branch_cashier',
+    'branch_operator',
+    'organization_support',
+    'branch_support',
+  ]) {
+    assert.equal(
+      accessRoleTemplates
+        .find((template) => template.key === key)
+        ?.permissionKeys.includes('customer.family.read'),
+      false,
+    );
+  }
+});
+
 test('Forms PII access is a separate step-up permission and is absent from default tenant roles', () => {
   const pii = getPermissionDefinition('forms.responses.pii.read');
   assert.deepEqual(pii?.scopes, ['branch', 'organization']);
   assert.equal(pii?.delegable, true);
   assert.equal(pii?.stepUp, true);
 
-  for (const template of accessRoleTemplates.filter((item) => ['organization_manager', 'branch_manager', 'organization_crm_manager', 'branch_crm_manager'].includes(item.key))) {
+  for (const template of accessRoleTemplates.filter((item) =>
+    [
+      'organization_manager',
+      'branch_manager',
+      'organization_crm_manager',
+      'branch_crm_manager',
+    ].includes(item.key),
+  )) {
     assert.equal(template.permissionKeys.includes('forms.responses.pii.read'), false);
   }
-  assert.ok(accessRoleTemplates.find((item) => item.key === 'branch_manager')?.permissionKeys.includes('forms.manage'));
-  assert.ok(accessRoleTemplates.find((item) => item.key === 'organization_crm_manager')?.permissionKeys.includes('forms.responses.read'));
+  assert.ok(
+    accessRoleTemplates
+      .find((item) => item.key === 'branch_manager')
+      ?.permissionKeys.includes('forms.manage'),
+  );
+  assert.ok(
+    accessRoleTemplates
+      .find((item) => item.key === 'organization_crm_manager')
+      ?.permissionKeys.includes('forms.responses.read'),
+  );
 });
 
 test('response correction is separately scoped and does not grant PII access', () => {
   const correction = getPermissionDefinition('forms.responses.correct');
   assert.deepEqual(correction?.scopes, ['branch', 'organization']);
   assert.equal(correction?.stepUp, false);
-  for (const template of accessRoleTemplates.filter((item) => ['organization_manager', 'branch_manager'].includes(item.key))) {
+  for (const template of accessRoleTemplates.filter((item) =>
+    ['organization_manager', 'branch_manager'].includes(item.key),
+  )) {
     assert.ok(template.permissionKeys.includes('forms.responses.correct'));
     assert.equal(template.permissionKeys.includes('forms.responses.pii.read'), false);
   }

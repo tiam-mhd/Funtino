@@ -4,6 +4,9 @@ export const eventTypes = {
   userRegistered: 'identity.user-registered.v1',
   householdCreated: 'customer.household-created.v1',
   householdMemberCreated: 'customer.household-member-created.v1',
+  householdMemberUpdated: 'customer.household-member-updated.v1',
+  familyRelationshipChanged: 'customer.family-relationship-changed.v1',
+  familyInvitationChanged: 'customer.family-invitation-changed.v1',
   cardLinked: 'wallet.card-linked.v1',
   deviceTransactionImported: 'device.transaction-imported.v1',
   deviceRegistered: 'device.device-registered.v1',
@@ -64,6 +67,40 @@ export const householdMemberCreatedPayloadSchema = z
   .object({
     householdId: z.string().uuid(),
     memberId: z.string().uuid(),
+  })
+  .strict();
+
+export const householdMemberUpdatedPayloadSchema = z
+  .object({
+    householdId: z.string().uuid(),
+    memberId: z.string().uuid(),
+    status: z.enum(['active', 'archived']),
+    version: z.number().int().positive(),
+  })
+  .strict();
+
+export const familyRelationshipChangedPayloadSchema = z
+  .object({
+    householdId: z.string().uuid(),
+    relationshipId: z.string().uuid(),
+  })
+  .strict();
+
+export const familyInvitationChangedPayloadSchema = z
+  .object({
+    householdId: z.string().uuid(),
+    invitationId: z.string().uuid(),
+    memberId: z.string().uuid(),
+    status: z.enum([
+      'pending',
+      'accepted',
+      'declined',
+      'revoked',
+      'expired',
+      'claim_pending',
+      'linked',
+      'conflict_review',
+    ]),
   })
   .strict();
 
@@ -333,6 +370,9 @@ export const eventPayloadSchemas = {
   [eventTypes.userRegistered]: userRegisteredPayloadSchema,
   [eventTypes.householdCreated]: householdCreatedPayloadSchema,
   [eventTypes.householdMemberCreated]: householdMemberCreatedPayloadSchema,
+  [eventTypes.householdMemberUpdated]: householdMemberUpdatedPayloadSchema,
+  [eventTypes.familyRelationshipChanged]: familyRelationshipChangedPayloadSchema,
+  [eventTypes.familyInvitationChanged]: familyInvitationChangedPayloadSchema,
   [eventTypes.cardLinked]: cardLinkedPayloadSchema,
   [eventTypes.deviceTransactionImported]: deviceTransactionImportedPayloadSchema,
   [eventTypes.deviceRegistered]: deviceRegisteredPayloadSchema,

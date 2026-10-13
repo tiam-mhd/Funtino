@@ -768,6 +768,367 @@ paths:
       responses:
         '200':
           description: Household member created.
+  /api/v1/customer/family:
+    get:
+      operationId: getCustomerFamily
+      summary: Read active households and relationships from the authenticated customer’s perspective
+      x-funtino-availability: implemented
+      responses:
+        '200':
+          description: Includes viewer-specific labels and the authenticated account’s invitation inbox; no phone or token hashes are returned.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilySuccess' }
+        '401': { description: A valid customer session is required. }
+        '503': { description: Customer & Household owner is unavailable. }
+  /api/v1/customer/family/households/{householdId}/members:
+    post:
+      operationId: addCustomerFamilyMember
+      summary: Add a structured family member or invite an account with explicit acceptance
+      x-funtino-availability: implemented
+      parameters:
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerFamilyMemberCreateRequest' }
+      responses:
+        '201':
+          description: Invited adults remain pending; a relationship activates only after the invited account accepts.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilyMemberCreateSuccess' }
+        '400': { description: Input validation failed. }
+        '401': { description: A valid customer session is required. }
+        '403': { description: The active household role cannot perform this operation. }
+        '404': { description: Household is unavailable. }
+        '409': { description: Relationship or invitation state conflicts with the current graph. }
+        '503': { description: Customer & Household owner or identity store is unavailable. }
+  /api/v1/customer/family/households/{householdId}/members/{memberId}:
+    patch:
+      operationId: updateCustomerFamilyMember
+      summary: Update the caller's own profile or a managed dependent and optionally one family relationship
+      x-funtino-availability: implemented
+      parameters:
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerFamilyMemberUpdateRequest' }
+      responses:
+        '200':
+          description: Optimistic version is checked and linked adult consent is enforced by Customer & Household.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilyMemberUpdateSuccess' }
+        '400': { description: Input validation failed. }
+        '401': { description: A valid customer session is required. }
+        '403': { description: Active household role or consent does not permit the change. }
+        '404': { description: Household member is unavailable. }
+        '409': { description: Member version or relationship graph changed. }
+        '503': { description: Customer & Household owner is unavailable. }
+  /api/v1/customer/family/households/{householdId}/members/{memberId}/archive:
+    post:
+      operationId: archiveCustomerFamilyMember
+      summary: Soft-archive a managed dependent or leave a household as a linked non-owner member
+      x-funtino-availability: implemented
+      parameters:
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion]
+              properties: { expectedVersion: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Membership is archived with audit; household card assignment remains intact.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilyMemberUpdateSuccess' }
+        '401': { description: A valid customer session is required. }
+        '403': { description: Active household role cannot archive this member. }
+        '404': { description: Household member is unavailable. }
+        '409':
+          { description: Member version changed or household ownership must be transferred first. }
+        '503': { description: Customer & Household owner is unavailable. }
+  /api/v1/customer/family/households/{householdId}/relationships/{relationshipId}/remove:
+    post:
+      operationId: removeCustomerFamilyRelationship
+      summary: Remove one relationship while keeping household memberships intact
+      x-funtino-availability: implemented
+      parameters:
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: relationshipId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [memberId, expectedVersion]
+              properties:
+                memberId: { type: string, format: uuid }
+                expectedVersion: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: One relationship is removed and audited; neither member nor their Wallet household reference is deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilyRelationshipRemoveSuccess' }
+        '400': { description: Input validation failed. }
+        '401': { description: A valid customer session is required. }
+        '403': { description: Role or linked-adult consent does not permit the change. }
+        '404': { description: Relationship is unavailable. }
+        '409': { description: Member version or relationship graph changed. }
+        '503': { description: Customer & Household owner is unavailable. }
+  /api/v1/customer/family/invitations/preview:
+    post:
+      operationId: previewCustomerFamilyInvitation
+      summary: Show minimal invitation context before a customer signs in or accepts
+      x-funtino-availability: implemented
+      security: []
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string, minLength: 40, maxLength: 128, writeOnly: true }
+      responses:
+        '200':
+          description: Tokens are submitted only in a body; invalid, used, revoked and expired links have a generic response.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+            Referrer-Policy: { schema: { type: string, const: no-referrer } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilyInvitationPreviewSuccess' }
+        '503': { description: Customer & Household owner is unavailable. }
+  /api/v1/customer/family/invitations/accept:
+    post:
+      operationId: acceptCustomerFamilyInvitation
+      summary: Accept an invitation for the signed-in, phone-verified customer
+      x-funtino-availability: implemented
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerFamilyInvitationAcceptRequest' }
+      responses:
+        '200':
+          description: Adult accounts are linked atomically after acceptance; child account claims wait for guardian approval.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilyInvitationSuccess' }
+        '400': { description: Input validation failed. }
+        '401': { description: A valid customer session is required. }
+        '404': { description: Invitation is unavailable to this account. }
+        '409': { description: Invitation state changed concurrently. }
+        '503': { description: Customer & Household owner is unavailable. }
+  /api/v1/customer/family/invitations/{invitationId}/link:
+    post:
+      operationId: linkAcceptedCustomerFamilyInvitation
+      summary: Complete a previously accepted adult invitation for the signed-in account
+      x-funtino-availability: implemented
+      parameters:
+        - $ref: '#/components/parameters/CustomerFamilyInvitationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: Account and household membership are linked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilyInvitationSuccess' }
+        '401': { description: A valid customer session is required. }
+        '403': { description: Only the account that accepted this invitation may link it. }
+        '404': { description: Invitation is unavailable. }
+        '409': { description: Invitation state changed concurrently. }
+  /api/v1/customer/family/invitations/{invitationId}/approve-claim:
+    post:
+      operationId: approveCustomerDependentClaim
+      summary: Approve an account claim for a dependent as an active owner or guardian
+      x-funtino-availability: implemented
+      parameters:
+        - $ref: '#/components/parameters/CustomerFamilyInvitationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: Account link, household access and claim state are committed atomically.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilyInvitationSuccess' }
+        '401': { description: A valid customer session is required. }
+        '403': { description: The active household role cannot approve this claim. }
+        '404': { description: Claim is unavailable. }
+        '409': { description: Claim state changed concurrently or requires review. }
+  /api/v1/customer/family/invitations/{invitationId}/decline:
+    post:
+      operationId: declineCustomerFamilyInvitation
+      summary: Decline an invitation addressed to the authenticated account
+      x-funtino-availability: implemented
+      parameters:
+        - $ref: '#/components/parameters/CustomerFamilyInvitationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: Invitation state and audit are updated atomically.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilyInvitationSuccess' }
+        '401': { description: A valid customer session is required. }
+        '404': { description: Invitation is unavailable to this account. }
+        '409': { description: Invitation state changed concurrently. }
+  /api/v1/customer/family/invitations/{invitationId}/revoke:
+    post:
+      operationId: revokeCustomerFamilyInvitation
+      summary: Revoke an invitation as an active owner or permitted guardian
+      x-funtino-availability: implemented
+      parameters:
+        - $ref: '#/components/parameters/CustomerFamilyInvitationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false }
+      responses:
+        '200':
+          description: Pending placeholder members are archived; audit history remains available.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilyInvitationSuccess' }
+        '401': { description: A valid customer session is required. }
+        '403': { description: The active household role cannot revoke this invitation. }
+        '404': { description: Invitation is unavailable. }
+        '409': { description: Invitation state changed concurrently. }
+  /api/v1/operations/customer-family/lookup:
+    post:
+      operationId: lookupOperationsCustomerFamily
+      summary: Read family details for an exact phone in a selected authorized branch
+      x-funtino-availability: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerFamilySupportLookupRequest' }
+      responses:
+        '200':
+          description: Only households with an active Wallet assignment in this branch are returned; PII, broad search and export are excluded.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilySupportLookupSuccess' }
+        '401': { description: A valid operations session is required. }
+        '403': { description: customer.family.read scope or fresh step-up is missing. }
+        '404': { description: The selected branch is unavailable. }
+        '429': { description: The actor and branch lookup quota is exhausted. }
+        '503':
+          {
+            description: IAM,
+            Organization & Branch,
+            Customer & Household or Wallet is unavailable.,
+          }
+  /api/v1/system/customer-family/lookup:
+    post:
+      operationId: lookupSystemCustomerFamily
+      summary: Read family details after selecting an organization and branch with global support permission
+      x-funtino-availability: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerFamilySupportLookupRequest' }
+      responses:
+        '200':
+          description: No cross-tenant data is aggregated; only households assigned to the selected active branch are returned.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerFamilySupportLookupSuccess' }
+        '401': { description: A valid system session is required. }
+        '403': { description: Global customer.family.read permission or fresh step-up is missing. }
+        '404': { description: The selected branch is unavailable. }
+        '429': { description: The actor and branch lookup quota is exhausted. }
+        '503':
+          {
+            description: IAM,
+            Organization & Branch,
+            Customer & Household or Wallet is unavailable.,
+          }
   /api/v1/customer/cards:
     get:
       operationId: listCards
@@ -1851,6 +2212,13 @@ components:
       schema:
         type: string
         format: uuid
+    CustomerFamilyInvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     Cursor:
       name: cursor
       in: query
@@ -1908,6 +2276,409 @@ components:
         type: string
         pattern: '^"[1-9][0-9]*"$'
   schemas:
+    CustomerFamilyRelationship:
+      type: object
+      additionalProperties: false
+      required: [fromMemberId, toMemberId, kind, basis]
+      properties:
+        id: { type: string, format: uuid }
+        fromMemberId: { type: string, format: uuid }
+        toMemberId: { type: string, format: uuid }
+        kind: { type: string, enum: [parent_of, spouse_of, sibling_of, guardian_of] }
+        basis: { type: string, enum: [biological, legal, adoptive, step, partner, unspecified] }
+    CustomerFamilyInvitation:
+      type: object
+      additionalProperties: false
+      required: [id, householdId, memberId, kind, status, expiresAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        memberId: { type: string, format: uuid }
+        kind: { type: string, enum: [adult_account, dependent_claim] }
+        status:
+          {
+            type: string,
+            enum:
+              [
+                pending,
+                accepted,
+                declined,
+                revoked,
+                expired,
+                claim_pending,
+                linked,
+                conflict_review,
+              ],
+          }
+        expiresAt:
+          {
+            type: [string, 'null'],
+            format: date-time,
+            description: Always null in household lists to prevent account-state inference.,
+          }
+        createdAt: { type: string, format: date-time }
+        householdName: { type: string, minLength: 2, maxLength: 80 }
+        memberName: { type: string, minLength: 2, maxLength: 80 }
+    CustomerFamilyMember:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          householdId,
+          displayName,
+          relationship,
+          relationshipLabel,
+          relationshipStatus,
+          displayGender,
+          isAccountLinked,
+          isViewer,
+          birthDate,
+          status,
+          isDependent,
+          version,
+          createdAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        displayName: { type: string, minLength: 2, maxLength: 80 }
+        relationship:
+          {
+            type: string,
+            minLength: 2,
+            maxLength: 40,
+            description: Legacy user-entered text; never used to infer graph facts.,
+          }
+        relationshipLabel: { type: string, minLength: 1, maxLength: 80 }
+        relationshipStatus: { type: string, enum: [verified, ambiguous, needs_review] }
+        displayGender: { type: [string, 'null'], enum: [female, male, unspecified, null] }
+        isAccountLinked: { type: boolean }
+        isViewer: { type: boolean }
+        birthDate: { type: [string, 'null'], format: date }
+        status: { type: string, enum: [active, pending, archived] }
+        isDependent: { type: boolean }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+    CustomerFamilyHousehold:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          name,
+          status,
+          version,
+          createdAt,
+          accessRole,
+          canManage,
+          viewerMemberId,
+          members,
+          relationships,
+          invitations,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 2, maxLength: 80 }
+        status: { type: string, enum: [active, suspended, archived] }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        accessRole: { type: string, enum: [owner, guardian, member] }
+        canManage: { type: boolean }
+        viewerMemberId: { type: [string, 'null'], format: uuid }
+        members: { type: array, items: { $ref: '#/components/schemas/CustomerFamilyMember' } }
+        relationships:
+          { type: array, items: { $ref: '#/components/schemas/CustomerFamilyRelationship' } }
+        invitations:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/CustomerFamilyInvitation'
+              - type: object
+                required: [memberName]
+                properties:
+                  memberName: { type: string, minLength: 2, maxLength: 80 }
+    CustomerFamilyData:
+      type: object
+      additionalProperties: false
+      required: [items, invitations]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CustomerFamilyHousehold' } }
+        invitations:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/CustomerFamilyInvitation'
+              - type: object
+                required: [householdName, memberName]
+                properties:
+                  householdName: { type: string, minLength: 2, maxLength: 80 }
+                  memberName: { type: string, minLength: 2, maxLength: 80 }
+    CustomerFamilySuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data: { $ref: '#/components/schemas/CustomerFamilyData' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    CustomerFamilyMemberCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [displayName, relationship, basis, isDependent]
+      properties:
+        displayName: { type: string, minLength: 2, maxLength: 80 }
+        relativeMemberId:
+          description: Adult account invitations must use viewer so the relationship is anchored to the inviter; relationships with another linked adult require that adult's consent.
+          oneOf:
+            - { type: string, enum: [viewer] }
+            - { type: string, format: uuid }
+            - { type: 'null' }
+        relationship: { type: string, enum: [parent, child, spouse, sibling, guardian, ward] }
+        basis: { type: string, enum: [biological, legal, adoptive, step, partner, unspecified] }
+        displayGender: { type: string, enum: [female, male, unspecified] }
+        birthDate: { type: [string, 'null'], format: date }
+        isDependent: { type: boolean }
+        phone:
+          {
+            type: string,
+            minLength: 8,
+            maxLength: 20,
+            writeOnly: true,
+            description: Normalized only in Gateway; never forwarded to Customer & Household.,
+          }
+        createClaimLink: { type: boolean }
+    CustomerFamilyMemberUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        displayName: { type: string, minLength: 2, maxLength: 80 }
+        displayGender: { type: [string, 'null'], enum: [female, male, unspecified, null] }
+        birthDate: { type: [string, 'null'], format: date }
+        relationshipId: { type: string, format: uuid }
+        relativeMemberId: { type: string, format: uuid }
+        relationship: { type: string, enum: [parent, child, spouse, sibling, guardian, ward] }
+        basis: { type: string, enum: [biological, legal, adoptive, step, partner, unspecified] }
+      anyOf:
+        - required: [displayName]
+        - required: [displayGender]
+        - required: [birthDate]
+        - required: [relativeMemberId, relationship, basis]
+    CustomerFamilyMemberCreated:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          householdId,
+          displayName,
+          relationship,
+          birthDate,
+          status,
+          isDependent,
+          version,
+          createdAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        displayName: { type: string, minLength: 2, maxLength: 80 }
+        relationship: { type: string, minLength: 2, maxLength: 40 }
+        birthDate: { type: [string, 'null'], format: date }
+        status: { type: string, enum: [active, pending, archived] }
+        isDependent: { type: boolean }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+    CustomerFamilyMemberCreateSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data:
+          type: object
+          additionalProperties: false
+          required: [member, relationship, invitation]
+          properties:
+            member: { $ref: '#/components/schemas/CustomerFamilyMemberCreated' }
+            relationship:
+              oneOf:
+                - { $ref: '#/components/schemas/CustomerFamilyRelationship' }
+                - { type: 'null' }
+            invitation:
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  required: [id, householdId, memberId, kind, status, expiresAt, createdAt]
+                  properties:
+                    id: { type: string, format: uuid }
+                    householdId: { type: string, format: uuid }
+                    memberId: { type: string, format: uuid }
+                    kind: { type: string, enum: [adult_account, dependent_claim] }
+                    status: { type: string, const: pending }
+                    expiresAt: { type: [string, 'null'], format: date-time }
+                    createdAt: { type: string, format: date-time }
+                    shareToken:
+                      {
+                        type: string,
+                        minLength: 40,
+                        maxLength: 128,
+                        description: Returned only on the first successful create response; idempotent replays omit it. The token is random,
+                        and only its hash is persisted.,
+                      }
+                - { type: 'null' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    CustomerFamilyMemberUpdateSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data: { $ref: '#/components/schemas/CustomerFamilyMemberCreated' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    CustomerFamilyRelationshipRemoveSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data:
+          type: object
+          additionalProperties: false
+          required: [relationshipId, householdId, memberId, version]
+          properties:
+            relationshipId: { type: string, format: uuid }
+            householdId: { type: string, format: uuid }
+            memberId: { type: string, format: uuid }
+            version: { type: integer, minimum: 1 }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    CustomerFamilyInvitationPreviewSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [valid]
+              properties: { valid: { type: boolean, const: false } }
+            - type: object
+              additionalProperties: false
+              required: [valid, invitationId, householdName, memberName, kind, expiresAt]
+              properties:
+                valid: { type: boolean, const: true }
+                invitationId: { type: string, format: uuid }
+                householdName: { type: string, minLength: 2, maxLength: 80 }
+                memberName: { type: string, minLength: 2, maxLength: 80 }
+                kind: { type: string, enum: [adult_account, dependent_claim] }
+                expiresAt: { type: [string, 'null'], format: date-time }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    CustomerFamilyInvitationAcceptRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        token: { type: string, minLength: 40, maxLength: 128, writeOnly: true }
+        invitationId: { type: string, format: uuid }
+      oneOf:
+        - required: [token]
+        - required: [invitationId]
+    CustomerFamilyInvitationSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data: { $ref: '#/components/schemas/CustomerFamilyInvitation' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    CustomerFamilySupportLookupRequest:
+      type: object
+      additionalProperties: false
+      required: [organizationId, branchId, phone]
+      properties:
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        phone: { type: string, minLength: 8, maxLength: 20, writeOnly: true }
+    CustomerFamilySupportLookupSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, const: success }
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [householdId, householdName, members, relationships, invitations, history]
+                properties:
+                  householdId: { type: string, format: uuid }
+                  householdName: { type: string, minLength: 2, maxLength: 80 }
+                  members:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                        [
+                          id,
+                          displayName,
+                          relationshipLabel,
+                          relationshipStatus,
+                          legacyRelationship,
+                          isAccountLinked,
+                          isDependent,
+                          status,
+                        ]
+                      properties:
+                        id: { type: string, format: uuid }
+                        displayName: { type: string, minLength: 2, maxLength: 80 }
+                        relationshipLabel: { type: string, minLength: 1, maxLength: 80 }
+                        relationshipStatus:
+                          { type: string, enum: [verified, ambiguous, needs_review] }
+                        legacyRelationship: { type: [string, 'null'], maxLength: 40 }
+                        isAccountLinked: { type: boolean }
+                        isDependent: { type: boolean }
+                        status: { type: string, enum: [active, pending, archived] }
+                  relationships:
+                    {
+                      type: array,
+                      items: { $ref: '#/components/schemas/CustomerFamilyRelationship' },
+                    }
+                  invitations:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [memberName, status]
+                      properties:
+                        memberName: { type: string, minLength: 2, maxLength: 80 }
+                        status:
+                          {
+                            type: string,
+                            enum:
+                              [
+                                pending,
+                                accepted,
+                                declined,
+                                revoked,
+                                expired,
+                                claim_pending,
+                                linked,
+                                conflict_review,
+                              ],
+                          }
+                  history:
+                    type: array
+                    maxItems: 25
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [action, createdAt]
+                      properties:
+                        action: { type: string, minLength: 1, maxLength: 120 }
+                        createdAt: { type: string, format: date-time }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
     SystemHealthStatus:
       type: string
       enum: [healthy, degraded, down, stale, unknown]

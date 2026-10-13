@@ -14,6 +14,7 @@ import { OperationsReports } from '../reports/OperationsReports';
 import { OperationsForms } from '../forms/OperationsForms';
 import { OperationsOverview } from '../reports/OperationsOverview';
 import { OperationsBranchDirectory } from '../reports/OperationsBranchDirectory';
+import { CustomerFamilySupport } from '../customer-family/CustomerFamilySupport';
 import {
   OperationsWorkspaceShell,
   type WorkspaceSection,
@@ -257,9 +258,10 @@ export function OperationsEntry() {
     user?.displayName ||
     [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
     user?.phoneE164;
+  const PageContainer = view === 'active' ? 'div' : 'main';
 
   return (
-    <main className={`${styles.page} ${view === 'active' ? styles.pageActive : ''}`}>
+    <PageContainer className={`${styles.page} ${view === 'active' ? styles.pageActive : ''}`}>
       <div className={styles.ambient} aria-hidden="true" />
       {view !== 'active' && (
         <header className={styles.topbar}>
@@ -495,6 +497,12 @@ export function OperationsEntry() {
                 onSessionExpired={resetToSignIn}
                 scope={activeScope.scope}
               />
+            ) : workspaceTab === 'family' ? (
+              <CustomerFamilySupport
+                key={scopeKey(activeScope.scope)}
+                scope={activeScope.scope}
+                scopeOptions={scopes}
+              />
             ) : (
               <OperationsForms
                 key={scopeKey(activeScope.scope)}
@@ -571,7 +579,7 @@ export function OperationsEntry() {
           فانتینو · دسترسی‌ها بر اساس عضویت فعال و سیاست سرور کنترل می‌شوند
         </footer>
       )}
-    </main>
+    </PageContainer>
   );
 }
 

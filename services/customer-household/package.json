@@ -9,7 +9,7 @@
     "start": "node dist/main.js",
     "lint": "eslint .",
     "typecheck": "pnpm prisma:generate && tsc --noEmit -p tsconfig.json",
-    "test": "pnpm prisma:generate && pnpm --filter @funtino/event-contracts build && pnpm --filter @funtino/backend-core build && tsx --test tests/household-policy.spec.ts tests/startup-failure.spec.ts && node --test ../../scripts/worker-startup.spec.mjs",
+    "test": "pnpm prisma:generate && pnpm --filter @funtino/event-contracts build && pnpm --filter @funtino/backend-core build && tsx --test tests/household-policy.spec.ts tests/family-graph.spec.ts tests/customer-family-service.spec.ts tests/startup-failure.spec.ts && node --test ../../scripts/worker-startup.spec.mjs",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:schema": "node ../../scripts/worker-startup.mjs --bootstrap-only customer-household",
     "prisma:bootstrap": "pnpm prisma:migrate",

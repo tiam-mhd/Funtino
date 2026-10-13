@@ -21,9 +21,13 @@ export class HealthController {
       process.env.CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN,
       process.env.CUSTOMER_HOUSEHOLD_WALLET_TOKEN,
     ];
+    const ttlDays = Number(process.env.CUSTOMER_FAMILY_UNREGISTERED_INVITATION_TTL_DAYS ?? '7');
     if (
       tokens.some((token) => !token || token.length < 32 || token.length > 512) ||
-      new Set(tokens).size !== tokens.length
+      new Set(tokens).size !== tokens.length ||
+      !Number.isInteger(ttlDays) ||
+      ttlDays < 1 ||
+      ttlDays > 30
     ) {
       writeStructuredLog({
         level: 'error',
@@ -35,6 +39,7 @@ export class HealthController {
         configurationKeys: [
           'CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN',
           'CUSTOMER_HOUSEHOLD_WALLET_TOKEN',
+          'CUSTOMER_FAMILY_UNREGISTERED_INVITATION_TTL_DAYS',
         ],
       });
       throw new ServiceUnavailableException('Service authentication is not configured.');

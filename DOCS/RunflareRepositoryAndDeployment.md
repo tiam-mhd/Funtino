@@ -53,6 +53,13 @@ Supervisor برای هر bundle processها را به ترتیب manifest و ت�
 
 Environment هر child از system environment محدود و allow-list همان process ساخته می‌شود. API Gateway نباید secretهای runtime سرویس‌های دیگر را بگیرد؛ migration URLهای Worker فقط در startup runner خود همان Worker حضور دارند. NODE_ENV و APP_VERSION مشترک‌اند. envهای public فرانت هنگام build تزریق می‌شوند، نه از Secret runtime.
 
+### Environment خانواده و دعوت
+
+- در process `api-gateway`، `CUSTOMER_FAMILY_PHONE_HASH_SECRET` را به‌صورت Secret مستقل و تصادفی با حداقل ۳۲ کاراکتر تنظیم کن. این کلید فقط HMAC شماره‌ی normalize‌شده‌ی دعوت‌های خانواده و match کردن inbox همان حساب را می‌سازد؛ به process Worker خانواده داده نمی‌شود.
+- در process `customer-household`، `CUSTOMER_FAMILY_UNREGISTERED_INVITATION_TTL_DAYS` عدد ۱ تا ۳۰ و پیش‌فرض ۷ است. این مقدار فقط لینک شماره‌ی ثبت‌نشده را کنترل می‌کند؛ invitation حساب ثبت‌شده expiry ندارد.
+- توکن اشتراک دعوت با ۳۲ بایت CSPRNG ساخته می‌شود؛ `CUSTOMER_FAMILY_INVITATION_TOKEN_SECRET` وجود ندارد و لازم نیست. فقط SHA-256 توکن در دیتابیس ذخیره می‌شود.
+- کلیدهای محیطی در `.env.example` و allow-list manifest هر process منعکس شده‌اند. مقدار secret را در Git، Docker build arg، image یا log قرار نده.
+
 ## مرز migration و داده
 
 PostgreSQL، RabbitMQ و Redis همچنان itemهای مستقل‌اند. schema، credential، queue ownership و migration هر سرویس جدا می‌ماند.

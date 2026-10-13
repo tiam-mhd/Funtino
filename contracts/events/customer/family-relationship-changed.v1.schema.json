@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/customer/family-relationship-changed.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "customer.family-relationship-changed.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["householdId", "relationshipId"],
+          "properties": {
+            "householdId": { "type": "string", "format": "uuid" },
+            "relationshipId": { "type": "string", "format": "uuid" }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,472 @@
+.page {
+  display: grid;
+  gap: 1rem;
+  padding-bottom: 2rem;
+}
+
+.section {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid rgba(40, 60, 94, 0.09);
+  border-radius: 1.35rem;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 16px 42px rgba(43, 58, 95, 0.06);
+}
+
+.sectionHeading > span,
+.wizardHeader > div:first-child > span,
+.sharePanel > div:first-child > span {
+  color: #168c85;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.sectionHeading h2,
+.sharePanel h2 {
+  margin: 0.25rem 0 0;
+  color: #1c2c4a;
+  font-size: clamp(1.1rem, 3vw, 1.35rem);
+}
+
+.householdHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.2rem 0;
+}
+
+.householdHeader h3,
+.memberText h3,
+.wizardHeader h3,
+.empty h3 {
+  margin: 0;
+  color: #1d2d4b;
+  font-size: 1rem;
+}
+
+.householdHeader p,
+.empty p,
+.privacyNote,
+.sharePanel p,
+.hint {
+  margin: 0.35rem 0 0;
+  color: #66738a;
+  font-size: 0.85rem;
+  line-height: 1.8;
+}
+
+.memberList,
+.invitationList {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.memberGroups {
+  display: grid;
+  gap: 1rem;
+}
+
+.memberGroupHeader {
+  margin: 0 0 0.65rem;
+  color: #344660;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.extendedGroup {
+  padding-top: 0.8rem;
+  border-top: 1px solid #e7eaf1;
+}
+
+.extendedGroup > summary {
+  min-height: 2.75rem;
+  color: #344660;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.memberCard,
+.invitationCard {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem;
+  border: 1px solid #e7eaf1;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.memberCard {
+  flex-wrap: wrap;
+}
+
+.memberActions {
+  display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.memberEditor {
+  display: grid;
+  flex: 1 0 100%;
+  gap: 0.9rem;
+  padding: 0.9rem;
+  border: 1px solid #e0e7ee;
+  border-radius: 0.9rem;
+  background: #f8fbfc;
+}
+
+.memberEditForm {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.relationshipToggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  color: #394a66;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+
+.relationshipToggle input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-block-start: 0.2rem;
+  accent-color: #159b91;
+}
+
+.relationshipList {
+  display: grid;
+  gap: 0.55rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e3e8ef;
+}
+
+.relationshipList h4 {
+  margin: 0;
+  color: #344660;
+  font-size: 0.86rem;
+}
+
+.relationshipList ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.relationshipList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.65rem;
+  border-radius: 0.75rem;
+  background: #fff;
+  color: #586881;
+  font-size: 0.8rem;
+}
+
+.avatar {
+  display: grid;
+  flex: 0 0 2.75rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border-radius: 0.95rem;
+  background: #e5f7f3;
+  color: #006b70;
+  font-weight: 900;
+}
+
+.memberText,
+.invitationText {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 0.15rem;
+}
+
+.memberText p,
+.memberText small,
+.invitationText span,
+.invitationText small {
+  margin: 0;
+  color: #65738c;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.memberText small {
+  color: #9a6a27;
+}
+
+.memberType,
+.status,
+.waiting {
+  flex: 0 0 auto;
+  padding: 0.32rem 0.6rem;
+  border-radius: 999px;
+  background: #f0f3f8;
+  color: #65738c;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.waiting {
+  background: #fff6e7;
+  color: #92621f;
+}
+
+.wizard {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 1.4rem);
+  border: 1px solid #dde8e8;
+  border-radius: 1.2rem;
+  background: #f7fbfa;
+}
+
+.wizardHeader {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.progress {
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e0e8e8;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #18a89b;
+  transition: width 180ms ease;
+}
+
+.formGrid,
+.createForm {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+  color: #31425e;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.field input,
+.field select,
+.copyRow input {
+  width: 100%;
+  min-height: 2.85rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #d8deea;
+  border-radius: 0.8rem;
+  background: #fff;
+  color: #1d2d4b;
+  font: inherit;
+  font-weight: 500;
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.copyRow input:focus-visible {
+  outline: 3px solid rgba(19, 164, 152, 0.22);
+  outline-offset: 1px;
+  border-color: #168c85;
+}
+
+.field small {
+  color: #78859a;
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.7;
+}
+
+.checkboxField {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  color: #394a66;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+
+.checkboxField input {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.2rem;
+  accent-color: #139d92;
+}
+
+.hint {
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.8rem;
+  background: #eef8f7;
+}
+
+.reviewList {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+}
+
+.reviewList > div {
+  display: grid;
+  grid-template-columns: minmax(6rem, 0.7fr) minmax(0, 1.3fr);
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #e2e9ee;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.reviewList dt {
+  color: #738096;
+  font-size: 0.8rem;
+}
+
+.reviewList dd {
+  margin: 0;
+  color: #243653;
+  font-size: 0.84rem;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.actions,
+.copyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.empty,
+.state {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1.2rem;
+  border: 1px dashed #cdd6e4;
+  border-radius: 1rem;
+  background: #fbfcfe;
+}
+
+.createForm {
+  margin-top: 0.35rem;
+}
+
+.invitationCard {
+  flex-wrap: wrap;
+}
+
+.sharePanel {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid #bbe6de;
+  border-radius: 1.1rem;
+  background: linear-gradient(135deg, #f1fbf8, #f8fbff);
+}
+
+.copyRow input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  font-size: 0.78rem;
+}
+
+.error,
+.notice,
+.stale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 0.9rem;
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+.error {
+  background: #fff0ef;
+  color: #a8332c;
+}
+
+.notice {
+  background: #eaf8f4;
+  color: #14766e;
+}
+
+.stale {
+  background: #fff7e8;
+  color: #8c6526;
+}
+
+.privacyNote {
+  padding: 0 0.3rem;
+  font-size: 0.78rem;
+}
+
+.spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 3px solid #d6e8e5;
+  border-top-color: #159b91;
+  border-radius: 50%;
+  animation: spin 750ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (min-width: 700px) {
+  .formGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formGrid > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .createForm {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+
+  .createForm button {
+    min-width: 10rem;
+  }
+
+  .sharePanel {
+    padding: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress span,
+  .spinner {
+    animation: none;
+    transition: none;
+  }
+}

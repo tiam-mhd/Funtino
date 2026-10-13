@@ -1,4 +1,4 @@
-export const permissionCatalogVersion = 4;
+export const permissionCatalogVersion = 5;
 
 export const permissionCatalog = [
   { key: 'organization.create', scopes: ['global'], delegable: false, stepUp: true },
@@ -120,6 +120,12 @@ export const permissionCatalog = [
     stepUp: true,
   },
   {
+    key: 'customer.family.read',
+    scopes: ['branch', 'organization', 'global'],
+    delegable: true,
+    stepUp: true,
+  },
+  {
     key: 'report.read',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
@@ -146,12 +152,42 @@ export const permissionCatalog = [
   { key: 'forms.read', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
   { key: 'forms.manage', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
   { key: 'forms.publish', scopes: ['branch', 'organization'], delegable: true, stepUp: true },
-  { key: 'forms.responses.read', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
-  { key: 'forms.responses.manage', scopes: ['branch', 'organization'], delegable: true, stepUp: true },
-  { key: 'forms.responses.correct', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
-  { key: 'forms.responses.pii.read', scopes: ['branch', 'organization'], delegable: true, stepUp: true },
-  { key: 'forms.responses.export', scopes: ['branch', 'organization'], delegable: true, stepUp: true },
-  { key: 'forms.templates.manage', scopes: ['branch', 'organization', 'global'], delegable: true, stepUp: true },
+  {
+    key: 'forms.responses.read',
+    scopes: ['branch', 'organization'],
+    delegable: true,
+    stepUp: false,
+  },
+  {
+    key: 'forms.responses.manage',
+    scopes: ['branch', 'organization'],
+    delegable: true,
+    stepUp: true,
+  },
+  {
+    key: 'forms.responses.correct',
+    scopes: ['branch', 'organization'],
+    delegable: true,
+    stepUp: false,
+  },
+  {
+    key: 'forms.responses.pii.read',
+    scopes: ['branch', 'organization'],
+    delegable: true,
+    stepUp: true,
+  },
+  {
+    key: 'forms.responses.export',
+    scopes: ['branch', 'organization'],
+    delegable: true,
+    stepUp: true,
+  },
+  {
+    key: 'forms.templates.manage',
+    scopes: ['branch', 'organization', 'global'],
+    delegable: true,
+    stepUp: true,
+  },
 ] as const;
 
 export type PermissionKey = (typeof permissionCatalog)[number]['key'];

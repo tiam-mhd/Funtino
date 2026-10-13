@@ -29,6 +29,10 @@ export class HealthController {
         walletConfigured: Boolean(
           process.env.WALLET_URL && (process.env.WALLET_GATEWAY_TOKEN?.length ?? 0) >= 32,
         ),
+        customerFamilyConfigured: Boolean(
+          (process.env.CUSTOMER_FAMILY_PHONE_HASH_SECRET?.length ?? 0) >= 32 &&
+            (process.env.CUSTOMER_FAMILY_PHONE_HASH_SECRET?.length ?? 0) <= 512,
+        ),
       },
       request,
     );

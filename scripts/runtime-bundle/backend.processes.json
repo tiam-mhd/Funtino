@@ -65,7 +65,8 @@
         "RABBITMQ_URL",
         "CUSTOMER_HOUSEHOLD_METRICS_TOKEN",
         "CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN",
-        "CUSTOMER_HOUSEHOLD_WALLET_TOKEN"
+        "CUSTOMER_HOUSEHOLD_WALLET_TOKEN",
+        "CUSTOMER_FAMILY_UNREGISTERED_INVITATION_TTL_DAYS"
       ]
     },
     {
@@ -112,7 +113,12 @@
       "portEnv": "FORMS_PORT",
       "readinessPath": "/health/ready",
       "startupTimeoutMs": 60000,
-      "env": ["FORMS_DATABASE_URL", "FORMS_METRICS_TOKEN", "FORMS_API_GATEWAY_TOKEN", "RABBITMQ_URL"]
+      "env": [
+        "FORMS_DATABASE_URL",
+        "FORMS_METRICS_TOKEN",
+        "FORMS_API_GATEWAY_TOKEN",
+        "RABBITMQ_URL"
+      ]
     },
     {
       "name": "device-integration",
@@ -193,6 +199,7 @@
         "WALLET_GATEWAY_TOKEN",
         "CUSTOMER_HOUSEHOLD_URL",
         "CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN",
+        "CUSTOMER_FAMILY_PHONE_HASH_SECRET",
         "ANALYTICS_READ_MODEL_URL",
         "ANALYTICS_API_GATEWAY_TOKEN",
         "FORMS_URL",

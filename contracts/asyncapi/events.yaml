@@ -18,6 +18,12 @@ channels:
         $ref: '#/components/messages/HouseholdCreated'
       householdMemberCreated:
         $ref: '#/components/messages/HouseholdMemberCreated'
+      householdMemberUpdated:
+        $ref: '#/components/messages/HouseholdMemberUpdated'
+      familyRelationshipChanged:
+        $ref: '#/components/messages/FamilyRelationshipChanged'
+      familyInvitationChanged:
+        $ref: '#/components/messages/FamilyInvitationChanged'
       cardLinked:
         $ref: '#/components/messages/CardLinked'
       deviceTransactionImported:
@@ -87,6 +93,18 @@ components:
       name: HouseholdMemberCreated
       payload:
         $ref: '../events/customer/household-member-created.v1.schema.json'
+    HouseholdMemberUpdated:
+      name: HouseholdMemberUpdated
+      payload:
+        $ref: '../events/customer/household-member-updated.v1.schema.json'
+    FamilyRelationshipChanged:
+      name: FamilyRelationshipChanged
+      payload:
+        $ref: '../events/customer/family-relationship-changed.v1.schema.json'
+    FamilyInvitationChanged:
+      name: FamilyInvitationChanged
+      payload:
+        $ref: '../events/customer/family-invitation-changed.v1.schema.json'
     CardLinked:
       name: CardLinked
       payload:

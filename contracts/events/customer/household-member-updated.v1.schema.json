@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/customer/household-member-updated.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "customer.household-member-updated.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["householdId", "memberId", "status", "version"],
+          "properties": {
+            "householdId": { "type": "string", "format": "uuid" },
+            "memberId": { "type": "string", "format": "uuid" },
+            "status": { "enum": ["active", "archived"] },
+            "version": { "type": "integer", "minimum": 1 }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

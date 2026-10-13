@@ -110,6 +110,323 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/users/{userId}/family:
+    post:
+      operationId: readCustomerFamilyForUser
+      summary: Read active family memberships, viewer-specific relationships and invitations
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FamilyReadRequest' }
+      responses:
+        '200':
+          description: Only active household memberships for this identity; invitation phone hashes are never returned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyRead' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/households/{householdId}/family-audit:
+    get:
+      operationId: readCustomerFamilyAuditHistory
+      summary: Read a bounded family audit history for a scoped support lookup
+      parameters:
+        - $ref: '#/components/parameters/HouseholdId'
+        - $ref: '#/components/parameters/ActorUserId'
+      responses:
+        '200':
+          description: Only action labels and timestamps are returned; no audit payloads or personal identifiers are exposed.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 25
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [action, createdAt]
+                      properties:
+                        action: { type: string, minLength: 1, maxLength: 120 }
+                        createdAt: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/households/{householdId}/family-members:
+    post:
+      operationId: addCustomerFamilyMember
+      summary: Add a structured family member or create an invitation through an owner or guardian access grant
+      parameters:
+        - $ref: '#/components/parameters/HouseholdId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FamilyMemberCreateRequest' }
+      responses:
+        '201':
+          description: A dependent or uninvited placeholder is activated immediately; an invited adult stays pending until explicit account acceptance.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyMemberCreateResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: The active household role cannot perform this operation. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/households/{householdId}/family-members/{memberId}:
+    patch:
+      operationId: updateCustomerFamilyMember
+      summary: Update a member profile and, with consent rules, one structured relationship
+      parameters:
+        - $ref: '#/components/parameters/HouseholdId'
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FamilyMemberUpdateRequest' }
+      responses:
+        '200':
+          description: Optimistic version is checked; another linked adult's profile or relationship cannot be changed without their consent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyMemberCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Active household role or consent does not permit the change. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/households/{householdId}/family-members/{memberId}/archive:
+    post:
+      operationId: archiveCustomerFamilyMember
+      summary: Soft-archive a dependent or let a non-owner linked member leave a household
+      parameters:
+        - $ref: '#/components/parameters/HouseholdId'
+        - name: memberId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion]
+              properties: { expectedVersion: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: Membership and eligible access are revoked; invitation history and Wallet household references remain unchanged.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyMemberCreated' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Active household role cannot archive this member. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/households/{householdId}/family-relationships/{relationshipId}/remove:
+    post:
+      operationId: removeCustomerFamilyRelationship
+      summary: Remove one audited family relationship without deleting household membership
+      parameters:
+        - $ref: '#/components/parameters/HouseholdId'
+        - name: relationshipId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [memberId, expectedVersion]
+              properties:
+                memberId: { type: string, format: uuid }
+                expectedVersion: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: The relationship is removed atomically with an append-only audit entry and Outbox event.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyRelationshipRemoveResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Role or linked-adult consent does not permit the change. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/family-invitations/preview:
+    post:
+      operationId: previewCustomerFamilyInvitation
+      summary: Validate an invitation token and return minimal context for the holder
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string, minLength: 40, maxLength: 128, writeOnly: true }
+      responses:
+        '200':
+          description: Invalid, consumed, revoked and expired links return the same invalid response.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'private, no-store' } }
+            Referrer-Policy: { schema: { type: string, const: no-referrer } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyInvitationPreview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/family-invitations/accept:
+    post:
+      operationId: acceptCustomerFamilyInvitation
+      summary: Accept an invitation after Gateway verifies the authenticated account and its phone hash
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FamilyInvitationAcceptRequest' }
+      responses:
+        '200':
+          description: Adult acceptance links the account and activates its relationship atomically; a dependent claim awaits guardian approval.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyInvitation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/family-invitations/{invitationId}/link:
+    post:
+      operationId: linkAcceptedCustomerFamilyInvitation
+      summary: Complete an older accepted adult invitation for the same authenticated account
+      parameters:
+        - $ref: '#/components/parameters/InvitationId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Account, household access, member and relationship are linked atomically.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyInvitation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Only the account that accepted this invitation may link it. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/family-invitations/{invitationId}/approve-claim:
+    post:
+      operationId: approveCustomerDependentClaim
+      summary: Approve a dependent account claim as an active owner or guardian
+      parameters:
+        - $ref: '#/components/parameters/InvitationId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Verified account linkage, household access and invitation state are committed atomically.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyInvitation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: The active household role cannot approve this claim. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/family-invitations/{invitationId}/decline:
+    post:
+      operationId: declineCustomerFamilyInvitation
+      summary: Decline an invitation addressed to the authenticated account or verified phone
+      parameters:
+        - $ref: '#/components/parameters/InvitationId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                verifiedPhoneHash: { type: string, pattern: '^[a-fA-F0-9]{64}$', writeOnly: true }
+      responses:
+        '200':
+          description: State transition is audited and emits a minimal outbox event.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyInvitation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/family-invitations/{invitationId}/revoke:
+    post:
+      operationId: revokeCustomerFamilyInvitation
+      summary: Revoke a pending family invitation through an active owner or guardian grant
+      parameters:
+        - $ref: '#/components/parameters/InvitationId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Pending placeholder members are archived; invitation and audit history are retained.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FamilyInvitation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: The active household role cannot revoke this invitation. }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
 components:
   securitySchemes:
     CustomerHouseholdGatewayToken:
@@ -135,6 +452,11 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
     ActorUserId:
       name: x-funtino-actor-user-id
       in: header
@@ -151,6 +473,243 @@ components:
       required: true
       schema: { type: string, format: uuid }
   schemas:
+    FamilyReadRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        targetPhoneHash: { type: string, pattern: '^[a-fA-F0-9]{64}$', writeOnly: true }
+    FamilyMemberCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [displayName, relationship, basis, isDependent]
+      properties:
+        displayName: { type: string, minLength: 2, maxLength: 80 }
+        relativeMemberId:
+          description: Adult account invitations must use viewer so the relationship is anchored to the inviter; relationships with another linked adult require that adult's consent.
+          oneOf:
+            - type: string
+              enum: [viewer]
+            - type: string
+              format: uuid
+        relationship: { type: string, enum: [parent, child, spouse, sibling, guardian, ward] }
+        basis: { type: string, enum: [biological, legal, adoptive, step, partner, unspecified] }
+        displayGender: { type: string, enum: [female, male, unspecified] }
+        birthDate: { type: [string, 'null'], format: date }
+        isDependent: { type: boolean }
+        targetUserId: { type: string, format: uuid }
+        targetPhoneHash: { type: string, pattern: '^[a-fA-F0-9]{64}$', writeOnly: true }
+        createClaimLink: { type: boolean }
+    FamilyMemberCreated:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          householdId,
+          displayName,
+          relationship,
+          birthDate,
+          status,
+          isDependent,
+          version,
+          createdAt,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        displayName: { type: string, minLength: 2, maxLength: 80 }
+        relationship: { type: string, minLength: 2, maxLength: 40 }
+        birthDate: { type: [string, 'null'], format: date }
+        status: { type: string, enum: [active, pending, archived] }
+        isDependent: { type: boolean }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        displayGender: { type: [string, 'null'], enum: [female, male, unspecified, null] }
+        isAccountLinked: { type: boolean }
+        isViewer: { type: boolean }
+        relationshipLabel: { type: string, minLength: 1, maxLength: 80 }
+        relationshipStatus: { type: string, enum: [verified, ambiguous, needs_review] }
+    FamilyRelationship:
+      type: object
+      additionalProperties: false
+      required: [fromMemberId, toMemberId, kind, basis]
+      properties:
+        id: { type: string, format: uuid }
+        fromMemberId: { type: string, format: uuid }
+        toMemberId: { type: string, format: uuid }
+        kind: { type: string, enum: [parent_of, spouse_of, sibling_of, guardian_of] }
+        basis: { type: string, enum: [biological, legal, adoptive, step, partner, unspecified] }
+    FamilyMemberUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        displayName: { type: string, minLength: 2, maxLength: 80 }
+        displayGender: { type: [string, 'null'], enum: [female, male, unspecified, null] }
+        birthDate: { type: [string, 'null'], format: date }
+        relationshipId: { type: string, format: uuid }
+        relativeMemberId: { type: string, format: uuid }
+        relationship: { type: string, enum: [parent, child, spouse, sibling, guardian, ward] }
+        basis: { type: string, enum: [biological, legal, adoptive, step, partner, unspecified] }
+      anyOf:
+        - required: [displayName]
+        - required: [displayGender]
+        - required: [birthDate]
+        - required: [relativeMemberId, relationship, basis]
+    FamilyRelationshipRemoveResult:
+      type: object
+      additionalProperties: false
+      required: [relationshipId, householdId, memberId, version]
+      properties:
+        relationshipId: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        memberId: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+    FamilyInvitation:
+      type: object
+      additionalProperties: false
+      required: [id, householdId, memberId, kind, status, expiresAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        memberId: { type: string, format: uuid }
+        kind: { type: string, enum: [adult_account, dependent_claim] }
+        status:
+          {
+            type: string,
+            enum:
+              [
+                pending,
+                accepted,
+                declined,
+                revoked,
+                expired,
+                claim_pending,
+                linked,
+                conflict_review,
+              ],
+          }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        householdName: { type: string, minLength: 2, maxLength: 80 }
+        memberName: { type: string, minLength: 2, maxLength: 80 }
+    FamilyInvitationPreview:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [valid]
+          properties:
+            valid: { type: boolean, const: false }
+        - type: object
+          additionalProperties: false
+          required: [valid, invitationId, householdName, memberName, kind, expiresAt]
+          properties:
+            valid: { type: boolean, const: true }
+            invitationId: { type: string, format: uuid }
+            householdName: { type: string, minLength: 2, maxLength: 80 }
+            memberName: { type: string, minLength: 2, maxLength: 80 }
+            kind: { type: string, enum: [adult_account, dependent_claim] }
+            expiresAt: { type: [string, 'null'], format: date-time }
+    FamilyInvitationAcceptRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        token: { type: string, minLength: 40, maxLength: 128, writeOnly: true }
+        invitationId: { type: string, format: uuid }
+        verifiedPhoneHash: { type: string, pattern: '^[a-fA-F0-9]{64}$', writeOnly: true }
+      oneOf:
+        - required: [token]
+        - required: [invitationId]
+    FamilyMemberCreateResult:
+      type: object
+      additionalProperties: false
+      required: [member, relationship, invitation]
+      properties:
+        member: { $ref: '#/components/schemas/FamilyMemberCreated' }
+        relationship:
+          oneOf:
+            - { $ref: '#/components/schemas/FamilyRelationship' }
+            - { type: 'null' }
+        invitation:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [id, householdId, memberId, kind, status, expiresAt, createdAt]
+              properties:
+                id: { type: string, format: uuid }
+                householdId: { type: string, format: uuid }
+                memberId: { type: string, format: uuid }
+                kind: { type: string, enum: [adult_account, dependent_claim] }
+                status: { type: string, const: pending }
+                expiresAt: { type: [string, 'null'], format: date-time }
+                createdAt: { type: string, format: date-time }
+                shareToken:
+                  {
+                    type: string,
+                    minLength: 40,
+                    maxLength: 128,
+                    description: Returned only on the first successful create response; idempotent replays omit it. The token is random,
+                    and only its hash is persisted.,
+                  }
+            - { type: 'null' }
+    FamilyReadMember:
+      allOf:
+        - $ref: '#/components/schemas/FamilyMemberCreated'
+        - type: object
+          required:
+            [displayGender, isAccountLinked, isViewer, relationshipLabel, relationshipStatus]
+          properties:
+            displayGender: { type: [string, 'null'], enum: [female, male, unspecified, null] }
+            isAccountLinked: { type: boolean }
+            isViewer: { type: boolean }
+            relationshipLabel: { type: string, minLength: 1, maxLength: 80 }
+            relationshipStatus: { type: string, enum: [verified, ambiguous, needs_review] }
+    FamilyReadHousehold:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          name,
+          status,
+          version,
+          createdAt,
+          accessRole,
+          canManage,
+          viewerMemberId,
+          members,
+          relationships,
+          invitations,
+        ]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 2, maxLength: 80 }
+        status: { $ref: '#/components/schemas/HouseholdStatus' }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        accessRole: { type: string, enum: [owner, guardian, member] }
+        canManage: { type: boolean }
+        viewerMemberId: { type: [string, 'null'], format: uuid }
+        members: { type: array, items: { $ref: '#/components/schemas/FamilyReadMember' } }
+        relationships: { type: array, items: { $ref: '#/components/schemas/FamilyRelationship' } }
+        invitations: { type: array, items: { $ref: '#/components/schemas/FamilyInvitation' } }
+    FamilyRead:
+      type: object
+      additionalProperties: false
+      required: [items, invitations]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/FamilyReadHousehold' } }
+        invitations:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/FamilyInvitation'
+              - type: object
+                required: [householdName, memberName]
+                properties:
+                  householdName: { type: string, minLength: 2, maxLength: 80 }
+                  memberName: { type: string, minLength: 2, maxLength: 80 }
     HouseholdStatus:
       type: string
       enum: [active, suspended, archived]
@@ -164,6 +723,7 @@ components:
         status: { $ref: '#/components/schemas/HouseholdStatus' }
         version: { type: integer, minimum: 1 }
         createdAt: { type: string, format: date-time }
+        members: { type: array, items: { $ref: '#/components/schemas/HouseholdMember' } }
     HouseholdMember:
       type: object
       additionalProperties: false
@@ -175,7 +735,7 @@ components:
         displayName: { type: string, minLength: 2, maxLength: 80 }
         relationship: { type: string, minLength: 2, maxLength: 40 }
         birthDate: { type: [string, 'null'], format: date }
-        status: { type: string, enum: [active, archived] }
+        status: { type: string, enum: [active, pending, archived] }
         isDependent: { type: boolean }
         version: { type: integer, minimum: 1 }
         createdAt: { type: string, format: date-time }

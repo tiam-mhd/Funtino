@@ -1,4 +1,4 @@
-import { FamilyPage } from '../../../components/customer-pages';
+import { CustomerFamily } from '../../../features/family/CustomerFamily';
 import { CustomerShell } from '../../../components/customer-shell';
 import { readLocale } from '../../../lib/locale';
 
@@ -9,7 +9,7 @@ export default async function FamilyRoute({
 
   return (
     <CustomerShell locale={locale}>
-      <FamilyPage />
+      <CustomerFamily />
     </CustomerShell>
   );
 }

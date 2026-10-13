@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/customer/family-invitation-changed.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "customer.family-invitation-changed.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["householdId", "invitationId", "memberId", "status"],
+          "properties": {
+            "householdId": { "type": "string", "format": "uuid" },
+            "invitationId": { "type": "string", "format": "uuid" },
+            "memberId": { "type": "string", "format": "uuid" },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "accepted",
+                "declined",
+                "revoked",
+                "expired",
+                "claim_pending",
+                "linked",
+                "conflict_review"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

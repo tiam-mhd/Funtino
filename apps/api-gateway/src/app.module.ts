@@ -2,10 +2,15 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AuthService } from './application/auth/auth.service.js';
 import { CustomerService } from './application/customer/customer.service.js';
+import { CustomerFamilyService } from './application/customer/customer-family.service.js';
+import { CustomerFamilySupportService } from './application/customer/customer-family-support.service.js';
 import { OutboxRelay } from './application/outbox/outbox-relay.service.js';
 import { WalletEventConsumer } from './application/wallet/wallet-event-consumer.service.js';
 import { AuthController } from './interfaces/http/auth.controller.js';
 import { CustomerController } from './interfaces/http/customer.controller.js';
+import { CustomerFamilyController } from './interfaces/http/customer-family.controller.js';
+import { OperationsCustomerFamilyController } from './interfaces/http/operations-customer-family.controller.js';
+import { SystemCustomerFamilyController } from './interfaces/http/system-customer-family.controller.js';
 import { HealthController } from './interfaces/http/health.controller.js';
 import { OperationsAccessController } from './interfaces/http/operations-access.controller.js';
 import { OperationsDevicesController } from './interfaces/http/operations-devices.controller.js';
@@ -43,6 +48,9 @@ import { SystemFormsController } from './interfaces/http/system-forms.controller
   controllers: [
     AuthController,
     CustomerController,
+    CustomerFamilyController,
+    OperationsCustomerFamilyController,
+    SystemCustomerFamilyController,
     CustomerFormsController,
     HealthController,
     OperationsAccessController,
@@ -73,6 +81,8 @@ import { SystemFormsController } from './interfaces/http/system-forms.controller
     AuthService,
     { provide: OTP_SENDER, useClass: ParsGreenOtpSender },
     CustomerService,
+    CustomerFamilyService,
+    CustomerFamilySupportService,
     IdentityAccessClient,
     CustomerHouseholdClient,
     DeviceIntegrationClient,

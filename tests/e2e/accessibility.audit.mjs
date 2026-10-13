@@ -20,6 +20,10 @@ const apps = [
       { path: '/fa/cards?a11y-state=customer-card-error', state: 'cards-error' },
       { path: '/fa/cards?a11y-state=customer-card-empty', state: 'cards-empty' },
       { path: '/fa/cards?a11y-state=customer-card-stale', state: 'cards-stale' },
+      {
+        path: '/fa/family?a11y-state=customer-family-workspace',
+        state: 'customer-family-workspace',
+      },
       { path: '/fa/family', state: 'signed-out' },
       { path: '/fa/missions', state: 'signed-out' },
       { path: '/fa/branches', state: 'signed-out' },
@@ -78,6 +82,7 @@ const fixtureScript = `(() => {
   const branchId = '10000000-0000-4000-8000-000000000002';
   const householdId = '10000000-0000-4000-8000-000000000003';
   const memberId = '10000000-0000-4000-8000-000000000004';
+  const householdMemberId = '10000000-0000-4000-8000-000000000010';
   const cardId = '10000000-0000-4000-8000-000000000005';
   const deviceId = '10000000-0000-4000-8000-000000000006';
   const now = '2026-09-30T08:00:00.000Z';
@@ -124,7 +129,10 @@ const fixtureScript = `(() => {
     window.__funtinoA11yRequestCounts[path] = (window.__funtinoA11yRequestCounts[path] ?? 0) + 1;
     const count = window.__funtinoA11yRequestCounts[path];
 
-    if (path === '/api/v1/customer/profile' && state?.startsWith('customer-card-')) {
+    if (
+      path === '/api/v1/customer/profile' &&
+      (state?.startsWith('customer-card-') || state === 'customer-family-workspace')
+    ) {
       return success({
         id: '10000000-0000-4000-8000-000000000007', phoneE164: '+989120000000',
         displayName: 'A11y Test Customer', firstName: 'A11y', lastName: 'Customer',
@@ -137,10 +145,11 @@ const fixtureScript = `(() => {
       if (state === 'customer-card-error') return failure();
       if (state === 'customer-card-empty') return success([]);
       return success([{
-        id: cardId, householdId, memberId, branchId,
+        id: cardId, householdId, memberId: null, branchId,
         maskedCardId: '\\u2022\\u2022\\u2022\\u2022 \\u2022\\u2022\\u2022\\u2022 1234',
         status: 'active', lastSyncedAt: '2026-09-28T08:00:00.000Z',
         walletId: '10000000-0000-4000-8000-000000000008', isStale: true,
+        freshness: 'stale',
       }]);
     }
     if (path === '/api/v1/customer/households' && state?.startsWith('customer-card-')) {
@@ -148,6 +157,67 @@ const fixtureScript = `(() => {
     }
     if (path === '/api/v1/customer/branches' && state?.startsWith('customer-card-')) {
       return success([{ id: branchId, name: 'A11y Fixture Branch', status: 'open' }]);
+    }
+    if (path === '/api/v1/customer/family' && state === 'customer-family-workspace') {
+      return success({
+        items: [
+          {
+            id: householdId,
+            name: 'A11y Test Household',
+            status: 'active',
+            version: 1,
+            createdAt: now,
+            accessRole: 'owner',
+            canManage: true,
+            viewerMemberId: memberId,
+            members: [
+              {
+                id: memberId,
+                householdId,
+                displayName: 'A11y Parent',
+                relationship: 'خودم',
+                relationshipLabel: 'من',
+                relationshipStatus: 'verified',
+                displayGender: 'female',
+                isAccountLinked: true,
+                isViewer: true,
+                birthDate: null,
+                status: 'active',
+                isDependent: false,
+                version: 1,
+                createdAt: now,
+              },
+              {
+                id: householdMemberId,
+                householdId,
+                displayName: 'A11y Child',
+                relationship: 'فرزند',
+                relationshipLabel: 'دختر',
+                relationshipStatus: 'verified',
+                displayGender: 'female',
+                isAccountLinked: false,
+                isViewer: false,
+                birthDate: null,
+                status: 'active',
+                isDependent: true,
+                version: 1,
+                createdAt: now,
+              },
+            ],
+            relationships: [
+              {
+                id: '10000000-0000-4000-8000-000000000011',
+                fromMemberId: memberId,
+                toMemberId: householdMemberId,
+                kind: 'parent',
+                basis: 'biological',
+              },
+            ],
+            invitations: [],
+          },
+        ],
+        invitations: [],
+      });
     }
 
     if (path === '/api/v1/auth/me' && state?.startsWith('operations-')) {
@@ -387,6 +457,15 @@ async function setViewport(page, viewport) {
 }
 
 async function exerciseRouteState(page, app, route) {
+  if (app.name === 'customer-web' && route.state === 'customer-family-workspace') {
+    await waitForExpression(
+      page,
+      "document.querySelector('main')?.innerText.includes('A11y Test Household') && document.querySelector('main')?.innerText.includes('A11y Child')",
+      app.name + ' family workspace fixture',
+    );
+    return;
+  }
+
   if (app.name === 'customer-web' && route.state.startsWith('cards-')) {
     const expectedClass = {
       'cards-error': 'customer-cards-feedback--error',
@@ -412,10 +491,20 @@ async function exerciseRouteState(page, app, route) {
     );
     await waitForExpression(
       page,
-      "Boolean(document.querySelector('#operations-devices-tab'))",
+      "Boolean(document.querySelector('#operations-sidebar'))",
       app.name + ' active scope',
     );
-    await page.evaluate("document.querySelector('#operations-devices-tab')?.click()");
+    await page.evaluate(
+      "if (matchMedia('(max-width: 900px)').matches) document.querySelector('button[aria-controls=operations-sidebar]')?.click()",
+    );
+    await waitForExpression(
+      page,
+      "Array.from(document.querySelectorAll('#operations-sidebar:not([inert]) button[data-nav-item]')).some((button) => button.textContent?.includes('دستگاه‌ها و پایش'))",
+      app.name + ' device navigation',
+    );
+    await page.evaluate(
+      "Array.from(document.querySelectorAll('#operations-sidebar:not([inert]) button[data-nav-item]')).find((button) => button.textContent?.includes('دستگاه‌ها و پایش'))?.click()",
+    );
     await waitForExpression(
       page,
       "Array.from(document.querySelectorAll('h3')).some((heading) => heading.textContent?.includes('A11y Fixture Device'))",
@@ -573,6 +662,7 @@ assert.ok(browser, 'Microsoft Edge is required for the accessibility gate.');
 const tempProfile = await fs.mkdtemp(path.join(os.tmpdir(), 'funtino-a11y-edge-'));
 const servers = [];
 const generatedBuildDirs = [];
+const generatedConfigFiles = [];
 const buildWarnings = [];
 let browserProcess;
 let page;
@@ -581,6 +671,16 @@ try {
   for (const app of appsToAudit) {
     app.port = await reservePort();
     const appRoot = path.join(root, 'apps', app.name);
+    for (const fileName of ['next-env.d.ts', 'tsconfig.json']) {
+      const filePath = path.resolve(appRoot, fileName);
+      assert.equal(path.dirname(filePath), path.resolve(appRoot));
+      try {
+        generatedConfigFiles.push({ filePath, contents: await fs.readFile(filePath) });
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+        generatedConfigFiles.push({ filePath, contents: null });
+      }
+    }
     const nextCli = require.resolve('next/dist/bin/next', { paths: [appRoot] });
     app.distDir = '.next-a11y-' + process.pid + '-' + randomUUID();
     const exactBuildDirectory = path.resolve(appRoot, app.distDir);
@@ -693,6 +793,9 @@ try {
           app.name + ' ' + route.path,
         );
         await exerciseRouteState(page, app, route);
+        await page.evaluate(`Promise.all(document.getAnimations()
+          .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+          .map((animation) => animation.finished.catch(() => undefined)))`);
 
         const pageFacts = await page.evaluate(`(() => {
           const root = document.documentElement;
@@ -703,6 +806,22 @@ try {
             viewportWidth: root.clientWidth,
             documentWidth: root.scrollWidth,
             bodyWidth: document.body.scrollWidth,
+            overflowingElements: Array.from(document.querySelectorAll('body *'))
+              .map((element) => {
+                const rect = element.getBoundingClientRect();
+                return {
+                  tag: element.tagName.toLowerCase(),
+                  id: element.id,
+                  className: element.getAttribute('class') ?? '',
+                  left: Math.round(rect.left),
+                  right: Math.round(rect.right),
+                  width: Math.round(rect.width),
+                  scrollWidth: element.scrollWidth,
+                };
+              })
+              .filter((element) => element.right > root.clientWidth + 1)
+              .sort((left, right) => right.right - left.right)
+              .slice(0, 12),
           };
         })()`);
         if (
@@ -805,6 +924,10 @@ try {
   page?.close();
   if (browserProcess) await stopTree(browserProcess);
   for (const server of servers.reverse()) await stopTree(server);
+  for (const file of generatedConfigFiles.reverse()) {
+    if (file.contents === null) await fs.rm(file.filePath, { force: true });
+    else await fs.writeFile(file.filePath, file.contents);
+  }
   for (const build of generatedBuildDirs) {
     const exactBuildDirectory = path.resolve(build.appRoot, build.distDir);
     if (

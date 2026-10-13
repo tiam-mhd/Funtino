@@ -22,6 +22,16 @@ OTP registration never creates a branch membership and never selects a default b
 
 Customer visibility is derived from active household access at the Customer & Household owner plus the active Wallet assignment. It is never inferred from OTP signup, a branch picker, or a Gateway-owned card row.
 
+## Family graph and account linking
+
+`services/customer-household` owns family people, household memberships, relationship edges, invitations and household access. The customer family page reads this owner through the authenticated Gateway and derives relationship labels from the signed-in member's graph; names, phone numbers and guessed gender are never used to infer kinship. Old free-text relationship values stay marked for review.
+
+Adding an adult by phone performs exact lookup only in Gateway. Registered users receive an in-app invitation and the proposed relationship is activated only after their explicit acceptance. Unregistered phone invitations and dependent claims use a random, one-time link; the owner stores only its SHA-256 hash. A dependent claim needs OTP-backed account identity and owner/guardian approval. A repeated pending invite returns its existing state; there is no automatic account merge.
+
+Members can update their own displayed information. Owners and guardians can manage dependent records. A relationship change involving another linked adult is rejected until that adult's consent is available. Archiving a dependent or leaving as a non-owner member revokes the related household access and open invitations while keeping audit rows and the household's Wallet assignment. The household owner must transfer ownership before leaving.
+
+Operations and System family support requires `customer.family.read`, fresh step-up, exact-phone lookup and the selected organization/branch. The Gateway checks current Wallet assignments before asking the owner for a maximum of 25 audit action names and timestamps. These views do not expose phone, birth date, actor IDs or audit payloads and cannot mutate family data. Configuration is documented in `DOCS/RunflareRepositoryAndDeployment.md`.
+
 ## API surface
 
 - `GET/PATCH /api/v1/customer/profile`
