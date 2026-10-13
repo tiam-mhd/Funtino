@@ -461,12 +461,13 @@ export function CardInventoryManagement({
                 disabled={registrationBusy}
                 maxLength={160}
                 value={registrationDraft.externalCardId}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const externalCardId = event.currentTarget.value;
                   setRegistrationDraft((current) => ({
                     ...current,
-                    externalCardId: event.currentTarget.value,
-                  }))
-                }
+                    externalCardId,
+                  }));
+                }}
               />
             </label>
             <label className={styles.field} htmlFor="card-inventory-registration-reason">
@@ -478,12 +479,13 @@ export function CardInventoryManagement({
                 minLength={8}
                 maxLength={500}
                 value={registrationDraft.reason}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const reason = event.currentTarget.value;
                   setRegistrationDraft((current) => ({
                     ...current,
-                    reason: event.currentTarget.value,
-                  }))
-                }
+                    reason,
+                  }));
+                }}
               />
             </label>
             <div className={styles.formActions}>
@@ -627,13 +629,14 @@ export function CardInventoryManagement({
                             required
                             disabled={statusBusy}
                             value={statusDraft.status}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              const status = event.currentTarget.value as StatusDraft['status'];
                               setStatusDraft((current) => ({
                                 ...current,
-                                status: event.currentTarget.value as StatusDraft['status'],
+                                status,
                                 confirmRetirement: false,
-                              }))
-                            }
+                              }));
+                            }}
                           >
                             <option value="">انتخاب وضعیت</option>
                             {allowedTransitions.map((status) => (
@@ -652,12 +655,13 @@ export function CardInventoryManagement({
                             minLength={8}
                             maxLength={500}
                             value={statusDraft.reason}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              const reason = event.currentTarget.value;
                               setStatusDraft((current) => ({
                                 ...current,
-                                reason: event.currentTarget.value,
-                              }))
-                            }
+                                reason,
+                              }));
+                            }}
                           />
                         </label>
                         {statusDraft.status === 'retired' && (
@@ -667,12 +671,13 @@ export function CardInventoryManagement({
                               required
                               disabled={statusBusy}
                               checked={statusDraft.confirmRetirement}
-                              onChange={(event) =>
+                              onChange={(event) => {
+                                const confirmRetirement = event.currentTarget.checked;
                                 setStatusDraft((current) => ({
                                   ...current,
-                                  confirmRetirement: event.currentTarget.checked,
-                                }))
-                              }
+                                  confirmRetirement,
+                                }));
+                              }}
                             />
                             بازنشستگی دائمی و غیرقابل‌بازگشت است؛ تأیید می‌کنم
                           </label>
