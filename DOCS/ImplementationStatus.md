@@ -11,6 +11,7 @@
 - migration افزایشی `0002_family_graph_and_invitations` در source وجود دارد؛ migration روی دیتابیس production اجرا نشده و backfill خودکار اطلاعات قدیمی انجام نشده است.
 - کنترل lint/typecheck/test/build برای هفت بسته‌ی اثرپذیرفته با ۳۹ task موفق تمام شد. تست‌های event-contracts، سرویس خانواده، Gateway و سه وب‌اپ موفق بودند؛ ممیزی end-to-end دسترس‌پذیری هر سه بستر در desktop و mobile نیز بدون blocker و بدون سرریز افقی بود.
 - lint/build چند warning در فایل‌های قدیمی و خارج از تغییر خانواده گزارش کردند؛ خطای lint، typecheck، تست یا build وجود نداشت. تحلیل نهایی GitNexus به ۶۴ جریان اجرا رسید و سطح اثر را critical گزارش کرد؛ این دامنه در تست‌های بسته و ممیزی مرورگر پوشش داده شد.
+- پس از گزارش production با `DEPENDENCY_UNAVAILABLE` در `CustomerFamilyService.phoneHash`، شرط secret در یک helper مشترک شد. `/health/ready` اکنون وضعیت `degraded` و `customerFamilyConfigured: false` را برای secret غایب یا خارج از بازه‌ی ۳۲ تا ۵۱۲ کاراکتر گزارش می‌کند، بدون اینکه کل backend bundle را از startup بازدارد. مسیر خانواده تا تنظیم Secret معتبر در process `api-gateway` روی Runflare fail-closed می‌ماند؛ fallback کلید اضافه نشده است.
 
 ## وضعیت GitHub bootstrap و دو runtime — 2026-10-03
 

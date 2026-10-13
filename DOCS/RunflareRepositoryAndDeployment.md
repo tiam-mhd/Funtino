@@ -55,7 +55,7 @@ Environment هر child از system environment محدود و allow-list همان
 
 ### Environment خانواده و دعوت
 
-- در process `api-gateway`، `CUSTOMER_FAMILY_PHONE_HASH_SECRET` را به‌صورت Secret مستقل و تصادفی با حداقل ۳۲ کاراکتر تنظیم کن. این کلید فقط HMAC شماره‌ی normalize‌شده‌ی دعوت‌های خانواده و match کردن inbox همان حساب را می‌سازد؛ به process Worker خانواده داده نمی‌شود.
+- در process `api-gateway`، `CUSTOMER_FAMILY_PHONE_HASH_SECRET` را به‌صورت Secret مستقل و تصادفی با ۳۲ تا ۵۱۲ کاراکتر تنظیم کن و همان مقدار ثابت را به همه‌ی replicaهای Gateway بده. نبودن یا نامعتبر بودن آن، وضعیت `degraded` و `customerFamilyConfigured: false` را در `/health/ready` گزارش می‌کند؛ مسیرهای خانواده fail-closed می‌مانند تا processهای دیگر Gateway در دسترس بمانند. این کلید فقط HMAC شماره‌ی normalize‌شده‌ی دعوت‌های خانواده و match کردن inbox همان حساب را می‌سازد؛ به process Worker خانواده داده نمی‌شود. چرخاندن کلید، match دعوت‌های شماره‌ای ایجادشده با کلید قبلی را می‌شکند.
 - در process `customer-household`، `CUSTOMER_FAMILY_UNREGISTERED_INVITATION_TTL_DAYS` عدد ۱ تا ۳۰ و پیش‌فرض ۷ است. این مقدار فقط لینک شماره‌ی ثبت‌نشده را کنترل می‌کند؛ invitation حساب ثبت‌شده expiry ندارد.
 - توکن اشتراک دعوت با ۳۲ بایت CSPRNG ساخته می‌شود؛ `CUSTOMER_FAMILY_INVITATION_TOKEN_SECRET` وجود ندارد و لازم نیست. فقط SHA-256 توکن در دیتابیس ذخیره می‌شود.
 - کلیدهای محیطی در `.env.example` و allow-list manifest هر process منعکس شده‌اند. مقدار secret را در Git، Docker build arg، image یا log قرار نده.

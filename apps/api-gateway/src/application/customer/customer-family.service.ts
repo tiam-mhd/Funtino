@@ -2,6 +2,7 @@ import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
 import { DomainError } from '@funtino/backend-core';
 import { normalizePhone } from '../auth/auth.service.js';
+import { getCustomerFamilyPhoneHashSecret } from './customer-family.config.js';
 import {
   CustomerHouseholdClient,
   type CustomerFamilyMemberInput,
@@ -170,8 +171,8 @@ export class CustomerFamilyService {
   }
 
   private phoneHash(rawPhone: string): string {
-    const secret = process.env.CUSTOMER_FAMILY_PHONE_HASH_SECRET;
-    if (!secret || secret.length < 32 || secret.length > 512) {
+    const secret = getCustomerFamilyPhoneHashSecret();
+    if (!secret) {
       throw new DomainError(
         'DEPENDENCY_UNAVAILABLE',
         'تنظیم امن پیوند شماره تلفن خانواده در دسترس نیست.',

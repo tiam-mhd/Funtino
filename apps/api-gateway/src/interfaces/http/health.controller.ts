@@ -1,6 +1,7 @@
 import { Controller, Get, Req } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { success } from './current-user.decorator.js';
+import { getCustomerFamilyPhoneHashSecret } from '../../application/customer/customer-family.config.js';
 
 @Controller('health')
 export class HealthController {
@@ -15,9 +16,10 @@ export class HealthController {
   @Get('ready')
   ready(@Req() request: FastifyRequest & { requestId?: string; correlationId?: string }) {
     const storageMode = process.env.STORAGE_MODE ?? 'memory';
+    const customerFamilyConfigured = getCustomerFamilyPhoneHashSecret() !== null;
     return success(
       {
-        status: 'ready',
+        status: customerFamilyConfigured ? 'ready' : 'degraded',
         service: 'api-gateway',
         storageMode,
         rabbitConfigured: Boolean(process.env.RABBITMQ_URL),
@@ -29,10 +31,7 @@ export class HealthController {
         walletConfigured: Boolean(
           process.env.WALLET_URL && (process.env.WALLET_GATEWAY_TOKEN?.length ?? 0) >= 32,
         ),
-        customerFamilyConfigured: Boolean(
-          (process.env.CUSTOMER_FAMILY_PHONE_HASH_SECRET?.length ?? 0) >= 32 &&
-            (process.env.CUSTOMER_FAMILY_PHONE_HASH_SECRET?.length ?? 0) <= 512,
-        ),
+        customerFamilyConfigured,
       },
       request,
     );

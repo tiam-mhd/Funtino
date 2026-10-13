@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { HttpException } from '@nestjs/common';
 import { createHmac, randomBytes } from 'node:crypto';
+import { DomainError } from '@funtino/backend-core';
 import {
   CustomerFamilyService,
   normalizeFamilyPhone,
@@ -21,6 +22,33 @@ test('family phone normalization accepts Persian and Arabic digits without chang
   assert.equal(normalizeFamilyPhone('٠٩١٢٣٤٥٦٧٨٩'), '+989123456789');
   assert.equal(normalizeFamilyPhone('+۹۸ ۹۱۲ ۳۴۵ ۶۷۸۹'), '+989123456789');
   assert.throws(() => normalizeFamilyPhone('۱۲۳۴۵'));
+});
+
+test('family list fails closed without the phone hash secret and does not call the owner', async () => {
+  const previousSecret = process.env.CUSTOMER_FAMILY_PHONE_HASH_SECRET;
+  delete process.env.CUSTOMER_FAMILY_PHONE_HASH_SECRET;
+  try {
+    let ownerCalls = 0;
+    const store = {
+      getUser: async () => ({ phoneE164: '+989123456789' }),
+    } as unknown as FuntinoStorePort;
+    const households = {
+      listFamilyForUser: async () => {
+        ownerCalls += 1;
+        return {};
+      },
+    } as unknown as CustomerHouseholdClient;
+    const service = new CustomerFamilyService(store, households);
+
+    await assert.rejects(
+      service.listForUser(actorUserId),
+      (error: unknown) => error instanceof DomainError && error.code === 'DEPENDENCY_UNAVAILABLE',
+    );
+    assert.equal(ownerCalls, 0);
+  } finally {
+    if (previousSecret === undefined) delete process.env.CUSTOMER_FAMILY_PHONE_HASH_SECRET;
+    else process.env.CUSTOMER_FAMILY_PHONE_HASH_SECRET = previousSecret;
+  }
 });
 
 test('registered and unregistered phone invitations send only an opaque identity or HMAC to the owner', async () => {
