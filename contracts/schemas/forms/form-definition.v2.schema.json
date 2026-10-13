@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/schemas/forms/form-definition.v2.schema.json",
+  "title": "Funtino form definition v2",
+  "type": "object",
+  "required": ["schemaVersion", "title", "pages"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "description": { "type": "string", "maxLength": 1500, "default": "" },
+    "welcomeTitle": { "type": "string", "maxLength": 160, "default": "" },
+    "welcomeMessage": { "type": "string", "maxLength": 1000, "default": "" },
+    "successMessage": { "type": "string", "maxLength": 1000 },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": { "$ref": "#/$defs/Page" }
+    },
+    "theme": { "$ref": "#/$defs/Theme" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "Page": {
+      "type": "object",
+      "required": ["id", "kind", "title", "fields"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "kind": { "enum": ["start", "questions", "end"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "condition": { "$ref": "./form-definition.v1.schema.json#/$defs/Condition" },
+        "backgroundColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "cardStyle": { "$ref": "#/$defs/PageCardStyle" },
+        "fields": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/Field" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "enum": ["start", "end"] } }, "required": ["kind"] },
+          "then": {
+            "properties": { "fields": { "maxItems": 0 } },
+            "not": { "required": ["condition"] }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "Field": {
+      "type": "object",
+      "required": ["id", "type", "label"],
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "type": {
+          "enum": [
+            "short_text",
+            "long_text",
+            "full_name",
+            "phone",
+            "email",
+            "number",
+            "money",
+            "date",
+            "time",
+            "single_choice",
+            "multiple_choice",
+            "dropdown",
+            "yes_no",
+            "rating",
+            "nps",
+            "slider",
+            "ranking",
+            "matrix",
+            "consent",
+            "heading",
+            "paragraph",
+            "hidden"
+          ]
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "helpText": { "type": "string", "maxLength": 500 },
+        "placeholder": { "type": "string", "maxLength": 160 },
+        "required": { "type": "boolean" },
+        "sensitive": { "type": "boolean" },
+        "searchable": { "type": "boolean" },
+        "defaultValue": {},
+        "options": {
+          "type": "array",
+          "maxItems": 50,
+          "items": { "$ref": "./form-definition.v1.schema.json#/$defs/Option" }
+        },
+        "rows": {
+          "type": "array",
+          "maxItems": 30,
+          "items": { "$ref": "./form-definition.v1.schema.json#/$defs/Option" }
+        },
+        "validation": { "$ref": "./form-definition.v1.schema.json#/$defs/Validation" },
+        "condition": { "$ref": "./form-definition.v1.schema.json#/$defs/Condition" },
+        "prefillKey": { "enum": ["source", "campaign", "ref"] },
+        "presentation": { "$ref": "#/$defs/FieldPresentation" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": { "enum": ["single_choice", "multiple_choice", "dropdown", "ranking"] }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "properties": { "options": { "type": "array", "minItems": 2 } },
+            "required": ["options"]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "matrix" } }, "required": ["type"] },
+          "then": {
+            "properties": {
+              "options": { "type": "array", "minItems": 2 },
+              "rows": { "type": "array", "minItems": 1 }
+            },
+            "required": ["options", "rows"]
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "hidden" } }, "required": ["type"] },
+          "then": { "required": ["prefillKey"] },
+          "else": { "not": { "required": ["prefillKey"] } }
+        },
+        {
+          "if": {
+            "properties": { "type": { "enum": ["full_name", "phone", "email"] } },
+            "required": ["type"]
+          },
+          "then": { "properties": { "sensitive": { "const": true } }, "required": ["sensitive"] }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "FieldPresentation": {
+      "type": "object",
+      "properties": {
+        "width": { "enum": ["full", "half"] },
+        "alignment": { "enum": ["start", "center", "end"] }
+      },
+      "additionalProperties": false
+    },
+    "CardStyle": {
+      "type": "object",
+      "properties": {
+        "maxWidth": { "enum": ["narrow", "medium", "wide", "full"] },
+        "padding": { "type": "integer", "minimum": 8, "maximum": 40 },
+        "gap": { "type": "integer", "minimum": 6, "maximum": 32 },
+        "backgroundColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "borderColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "borderWidth": { "type": "integer", "minimum": 0, "maximum": 4 },
+        "radius": { "type": "integer", "minimum": 0, "maximum": 36 },
+        "shadow": { "enum": ["none", "soft", "raised"] }
+      },
+      "additionalProperties": false
+    },
+    "PageCardStyle": { "$ref": "#/$defs/CardStyle" },
+    "Theme": {
+      "type": "object",
+      "properties": {
+        "primaryColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "accentColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "backgroundColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "surfaceColor": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+        "font": { "enum": ["vazirmatn", "estedad"] },
+        "cornerStyle": { "enum": ["soft", "rounded", "pill"] },
+        "layout": { "enum": ["paged", "single"] },
+        "showProgress": { "type": "boolean" },
+        "cardStyle": { "$ref": "#/$defs/CardStyle" },
+        "density": { "enum": ["comfortable", "compact"] },
+        "buttonStyle": { "enum": ["solid", "outlined"] }
+      },
+      "additionalProperties": false
+    }
+  }
+}

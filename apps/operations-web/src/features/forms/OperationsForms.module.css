@@ -900,7 +900,10 @@
   background: #fff;
   text-align: right;
   cursor: pointer;
-  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
 .formCard:hover {
@@ -964,12 +967,20 @@
   background: rgb(32 35 65 / 7%);
 }
 
-.formSkeleton span:first-child { width: 35%; }
-.formSkeleton span:nth-child(2) { width: 78%; }
-.formSkeleton span:nth-child(3) { width: 55%; }
+.formSkeleton span:first-child {
+  width: 35%;
+}
+.formSkeleton span:nth-child(2) {
+  width: 78%;
+}
+.formSkeleton span:nth-child(3) {
+  width: 55%;
+}
 
 @keyframes forms-loading {
-  to { background-position-x: -200%; }
+  to {
+    background-position-x: -200%;
+  }
 }
 
 .emptyState,
@@ -1606,6 +1617,11 @@
   justify-self: center;
 }
 
+.previewTablet {
+  width: min(100%, 768px);
+  justify-self: center;
+}
+
 .validationSummary {
   border: 1px solid #f0d69e;
   border-radius: 14px;
@@ -1617,6 +1633,18 @@
 .validationSummary h4 {
   margin: 0 0 6px;
   font-size: 12px;
+}
+
+.validationSummary button {
+  border: 0;
+  padding: 0;
+  color: #735611;
+  background: transparent;
+  font: inherit;
+  text-align: right;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 
 .validationSummary ul {

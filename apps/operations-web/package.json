@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fontsource/vazirmatn": "5.3.0",
+    "@fontsource/estedad": "5.3.0",
     "@funtino/design-system": "workspace:*",
     "@funtino/forms-renderer": "workspace:*",
     "@funtino/forms-schema": "workspace:*",

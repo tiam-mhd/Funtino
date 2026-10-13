@@ -72,7 +72,7 @@ paths:
                 branchId: { type: string, format: uuid }
                 name: { type: string, minLength: 1, maxLength: 120 }
                 description: { type: string, maxLength: 500 }
-                definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                definition: { $ref: '#/components/schemas/FormDefinition' }
                 actorUserId: { type: string, format: uuid }
                 correlationId: { type: string, format: uuid }
               additionalProperties: false
@@ -96,7 +96,7 @@ paths:
                 branchId: { type: string, format: uuid }
                 name: { type: string, minLength: 1, maxLength: 120 }
                 description: { type: string, maxLength: 500 }
-                definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                definition: { $ref: '#/components/schemas/FormDefinition' }
                 enabled: { type: boolean }
                 actorUserId: { type: string, format: uuid }
                 correlationId: { type: string, format: uuid }
@@ -146,7 +146,7 @@ paths:
                 - type: object
                   required: [definition]
                   properties:
-                    definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                    definition: { $ref: '#/components/schemas/FormDefinition' }
                 - { $ref: '#/components/schemas/ActorMeta' }
               unevaluatedProperties: false
       responses:
@@ -388,7 +388,12 @@ paths:
                 - type: object
                   required: [tags]
                   properties:
-                    tags: { type: array, maxItems: 12, items: { type: string, minLength: 1, maxLength: 40 } }
+                    tags:
+                      {
+                        type: array,
+                        maxItems: 12,
+                        items: { type: string, minLength: 1, maxLength: 40 },
+                      }
                 - { $ref: '#/components/schemas/ActorMeta' }
               unevaluatedProperties: false
       responses:
@@ -467,7 +472,7 @@ paths:
                 scopeType: { const: global }
                 name: { type: string, minLength: 1, maxLength: 120 }
                 description: { type: string, maxLength: 500 }
-                definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                definition: { $ref: '#/components/schemas/FormDefinition' }
                 actorUserId: { type: string, format: uuid }
                 correlationId: { type: string, format: uuid }
               additionalProperties: false
@@ -488,7 +493,7 @@ paths:
               properties:
                 name: { type: string, minLength: 1, maxLength: 120 }
                 description: { type: string, maxLength: 500 }
-                definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                definition: { $ref: '#/components/schemas/FormDefinition' }
                 enabled: { type: boolean }
                 actorUserId: { type: string, format: uuid }
                 correlationId: { type: string, format: uuid }
@@ -511,7 +516,8 @@ paths:
               type: object
               required: [defaultTheme, actorUserId, correlationId]
               properties:
-                defaultTheme: { $ref: '../schemas/forms/form-definition.v1.schema.json#/$defs/Theme' }
+                defaultTheme:
+                  { $ref: '../schemas/forms/form-definition.v2.schema.json#/$defs/Theme' }
                 actorUserId: { type: string, format: uuid }
                 correlationId: { type: string, format: uuid }
               additionalProperties: false
@@ -611,6 +617,10 @@ components:
         application/json:
           schema: { type: object, additionalProperties: true }
   schemas:
+    FormDefinition:
+      oneOf:
+        - { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+        - { $ref: '../schemas/forms/form-definition.v2.schema.json' }
     TenantScope:
       type: object
       required: [organizationId]

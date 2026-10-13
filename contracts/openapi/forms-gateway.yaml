@@ -185,7 +185,7 @@ paths:
                 - type: object
                   required: [definition]
                   properties:
-                    definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+                    definition: { $ref: '#/components/schemas/FormDefinition' }
               unevaluatedProperties: false
       responses:
         '200': { $ref: '#/components/responses/Success' }
@@ -421,7 +421,12 @@ paths:
                 - type: object
                   required: [tags]
                   properties:
-                    tags: { type: array, maxItems: 12, items: { type: string, minLength: 1, maxLength: 40 } }
+                    tags:
+                      {
+                        type: array,
+                        maxItems: 12,
+                        items: { type: string, minLength: 1, maxLength: 40 },
+                      }
               unevaluatedProperties: false
       responses:
         '200': { $ref: '#/components/responses/Success' }
@@ -506,7 +511,8 @@ components:
       in: path
       name: slug
       required: true
-      schema: { type: string, minLength: 1, maxLength: 80, pattern: '^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$' }
+      schema:
+        { type: string, minLength: 1, maxLength: 80, pattern: '^[\p{L}\p{N}]+(?:-[\p{L}\p{N}]+)*$' }
     FormId:
       in: path
       name: formId
@@ -658,18 +664,12 @@ components:
     ResponseStatus:
       type: string
       enum: [new, in_review, followed_up, closed, spam]
+    FormDefinition:
+      oneOf:
+        - { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+        - { $ref: '../schemas/forms/form-definition.v2.schema.json' }
     FormTheme:
-      type: object
-      properties:
-        primaryColor: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
-        accentColor: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
-        backgroundColor: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
-        surfaceColor: { type: string, pattern: '^#[0-9a-fA-F]{6}$' }
-        font: { type: string, enum: [vazirmatn, estedad] }
-        cornerStyle: { type: string, enum: [soft, rounded, pill] }
-        layout: { type: string, enum: [paged, single] }
-        showProgress: { type: boolean }
-      additionalProperties: false
+      $ref: '../schemas/forms/form-definition.v2.schema.json#/$defs/Theme'
     OperationsTemplateCreate:
       type: object
       required: [scopeType, organizationId, name, definition]
@@ -679,7 +679,7 @@ components:
         branchId: { type: string, format: uuid }
         name: { type: string, minLength: 1, maxLength: 120 }
         description: { type: string, maxLength: 500 }
-        definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+        definition: { $ref: '#/components/schemas/FormDefinition' }
       additionalProperties: false
     OperationsTemplateUpdate:
       type: object
@@ -689,7 +689,7 @@ components:
         branchId: { type: string, format: uuid }
         name: { type: string, minLength: 1, maxLength: 120 }
         description: { type: string, maxLength: 500 }
-        definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+        definition: { $ref: '#/components/schemas/FormDefinition' }
         enabled: { type: boolean }
       additionalProperties: false
     SystemTemplateCreate:
@@ -698,7 +698,7 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
         description: { type: string, maxLength: 500 }
-        definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+        definition: { $ref: '#/components/schemas/FormDefinition' }
       additionalProperties: false
     SystemTemplateUpdate:
       type: object
@@ -706,6 +706,6 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
         description: { type: string, maxLength: 500 }
-        definition: { $ref: '../schemas/forms/form-definition.v1.schema.json' }
+        definition: { $ref: '#/components/schemas/FormDefinition' }
         enabled: { type: boolean }
       additionalProperties: false
