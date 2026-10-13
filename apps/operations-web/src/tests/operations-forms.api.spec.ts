@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formDefinitionSchema, FORM_SCHEMA_VERSION } from '@funtino/forms-schema';
+import { createEmptyFormDefinition, formDefinitionSchema } from '@funtino/forms-schema';
 import {
   changeOperationsFormState,
   createOperationsForm,
@@ -33,16 +33,7 @@ function successResponse(data: unknown) {
 }
 
 const scope = { type: 'branch' as const, organizationId, branchId };
-const definition = formDefinitionSchema.parse({
-  schemaVersion: FORM_SCHEMA_VERSION,
-  title: 'ثبت‌نام کارگاه نقاشی',
-  description: '',
-  welcomeTitle: '',
-  welcomeMessage: '',
-  successMessage: 'ثبت شد.',
-  pages: [{ id: '44444444-4444-4444-8444-444444444444', title: 'اطلاعات اولیه', description: '', fields: [] }],
-  theme: {},
-});
+const definition = createEmptyFormDefinition('ثبت‌نام کارگاه نقاشی');
 test('form library sends the selected scope, query, status, and cursor to the existing list API', async () => {
   await withFetchStub(
     (input, init) => {
@@ -79,7 +70,11 @@ test('creating a form, saving its draft, and publishing use the existing scoped 
       const url = new URL(String(input));
       paths.push(url.pathname);
       if (url.pathname === '/api/v1/operations/forms' && init?.method === 'POST') {
-        assert.deepEqual(JSON.parse(String(init.body)), { organizationId, branchId, title: definition.title });
+        assert.deepEqual(JSON.parse(String(init.body)), {
+          organizationId,
+          branchId,
+          title: definition.title,
+        });
         return successResponse({ id: formId });
       }
       if (url.pathname === `/api/v1/operations/forms/${formId}/draft`) {
@@ -89,7 +84,11 @@ test('creating a form, saving its draft, and publishing use the existing scoped 
       }
       if (url.pathname === `/api/v1/operations/forms/${formId}/publish`) {
         assert.equal(init?.method, 'POST');
-        assert.deepEqual(JSON.parse(String(init.body)), { organizationId, branchId, reason: 'آماده‌ی انتشار است' });
+        assert.deepEqual(JSON.parse(String(init.body)), {
+          organizationId,
+          branchId,
+          reason: 'آماده‌ی انتشار است',
+        });
         return successResponse({ id: formId, status: 'published', currentVersion: 1 });
       }
       assert.fail(`Unexpected request: ${init?.method ?? 'GET'} ${url.pathname}`);
@@ -110,22 +109,28 @@ test('creating a form, saving its draft, and publishing use the existing scoped 
 test('definition validation rejects a choice question that is incomplete before publish', () => {
   const invalidDefinition = {
     ...definition,
-    pages: [{
-      ...definition.pages[0]!,
-      fields: [{
-        id: '55555555-5555-4555-8555-555555555555',
-        type: 'single_choice',
-        label: 'کدام زمان مناسب است؟',
-        description: '',
-        helpText: '',
-        placeholder: '',
-        required: true,
-        sensitive: false,
-        searchable: false,
-        options: [{ id: '66666666-6666-4666-8666-666666666666', label: 'صبح' }],
-        validation: {},
-      }],
-    }],
+    pages: definition.pages.map((page) =>
+      page.kind === 'questions'
+        ? {
+            ...page,
+            fields: [
+              {
+                id: '55555555-5555-4555-8555-555555555555',
+                type: 'single_choice',
+                label: 'کدام زمان مناسب است؟',
+                description: '',
+                helpText: '',
+                placeholder: '',
+                required: true,
+                sensitive: false,
+                searchable: false,
+                options: [{ id: '66666666-6666-4666-8666-666666666666', label: 'صبح' }],
+                validation: {},
+              },
+            ],
+          }
+        : page,
+    ),
   };
   const result = formDefinitionSchema.safeParse(invalidDefinition);
   assert.equal(result.success, false);
