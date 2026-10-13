@@ -34,18 +34,10 @@ const SAFE_GIT_DIRECTORY_ENV = createSafeGitEnvironment();
 const BUNDLES = Object.freeze({
   frontend: {
     repository: 'funtino-frontend-runtime',
-    scopes: [
-      '@funtino/customer-web',
-      '@funtino/operations-web',
-      '@funtino/system-web',
-    ],
+    scopes: ['@funtino/customer-web', '@funtino/operations-web', '@funtino/system-web'],
     templateDirectory: 'infra/runflare-bundles/frontend',
     manifestFile: 'frontend.processes.json',
-    runtimeFiles: [
-      'supervisor.mjs',
-      'healthcheck.mjs',
-      'frontend.processes.json',
-    ],
+    runtimeFiles: ['supervisor.mjs', 'healthcheck.mjs', 'frontend.processes.json'],
     extraFiles: [],
   },
   backend: {
@@ -64,19 +56,16 @@ const BUNDLES = Object.freeze({
     ],
     templateDirectory: 'infra/runflare-bundles/backend',
     manifestFile: 'backend.processes.json',
-    runtimeFiles: [
-      'supervisor.mjs',
-      'healthcheck.mjs',
-      'backend.processes.json',
-    ],
-    extraFiles: ['scripts/worker-startup.mjs'],
+    runtimeFiles: ['supervisor.mjs', 'healthcheck.mjs', 'backend.processes.json'],
+    extraFiles: ['scripts/worker-startup.mjs', 'scripts/worker-startup.spec.mjs'],
   },
 });
 
 function createSafeGitEnvironment() {
   const environment = { ...process.env };
   const configuredCount = Number(environment.GIT_CONFIG_COUNT ?? 0);
-  const nextIndex = Number.isSafeInteger(configuredCount) && configuredCount >= 0 ? configuredCount : 0;
+  const nextIndex =
+    Number.isSafeInteger(configuredCount) && configuredCount >= 0 ? configuredCount : 0;
   environment.GIT_CONFIG_COUNT = String(nextIndex + 1);
   environment[`GIT_CONFIG_KEY_${nextIndex}`] = 'safe.directory';
   environment[`GIT_CONFIG_VALUE_${nextIndex}`] = SOURCE_ROOT;
@@ -86,7 +75,8 @@ function createSafeGitEnvironment() {
 function createSafeGitEnvironmentFor(directory) {
   const environment = { ...SAFE_GIT_DIRECTORY_ENV };
   const configuredCount = Number(environment.GIT_CONFIG_COUNT ?? 0);
-  const nextIndex = Number.isSafeInteger(configuredCount) && configuredCount >= 0 ? configuredCount : 0;
+  const nextIndex =
+    Number.isSafeInteger(configuredCount) && configuredCount >= 0 ? configuredCount : 0;
   environment.GIT_CONFIG_COUNT = String(nextIndex + 1);
   environment[`GIT_CONFIG_KEY_${nextIndex}`] = 'safe.directory';
   environment[`GIT_CONFIG_VALUE_${nextIndex}`] = directory;
@@ -97,7 +87,9 @@ function isWithin(parent, candidate) {
   const pathFromParent = relative(parent, candidate);
   return (
     pathFromParent === '' ||
-    (!pathFromParent.startsWith(`..${sep}`) && pathFromParent !== '..' && !isAbsolute(pathFromParent))
+    (!pathFromParent.startsWith(`..${sep}`) &&
+      pathFromParent !== '..' &&
+      !isAbsolute(pathFromParent))
   );
 }
 
@@ -169,7 +161,9 @@ async function copyTree(sourceDirectory, destinationDirectory, relativeDirectory
     }
 
     if (!entry.isFile()) {
-      throw new Error(`Snapshot source contains an unsupported filesystem entry: ${toPosixPath(relativePath)}.`);
+      throw new Error(
+        `Snapshot source contains an unsupported filesystem entry: ${toPosixPath(relativePath)}.`,
+      );
     }
 
     await mkdir(dirname(destinationPath), { recursive: true });
@@ -216,7 +210,9 @@ async function collectFileHashes(
           sha256: createHash('sha256').update(contents).digest('hex'),
         });
       } else {
-        throw new Error(`Snapshot contains an unsupported filesystem entry: ${toPosixPath(relativePath)}.`);
+        throw new Error(
+          `Snapshot contains an unsupported filesystem entry: ${toPosixPath(relativePath)}.`,
+        );
       }
     }
   }
@@ -285,12 +281,14 @@ async function ensurePrunedWorkspace(prunedDirectory, snapshotDirectory) {
     'pnpm-workspace.yaml',
     'turbo.json',
     'tsconfig.base.json',
+    'eslint.config.mjs',
   ];
   const fallbackFiles = {
     'pnpm-lock.yaml': join(prunedDirectory, 'pnpm-lock.yaml'),
     'pnpm-workspace.yaml': join(prunedDirectory, 'pnpm-workspace.yaml'),
     'turbo.json': join(SOURCE_ROOT, 'turbo.json'),
     'tsconfig.base.json': join(SOURCE_ROOT, 'tsconfig.base.json'),
+    'eslint.config.mjs': join(SOURCE_ROOT, 'eslint.config.mjs'),
   };
 
   for (const file of requiredFiles) {
@@ -421,7 +419,11 @@ async function inspectExistingDestination(bundleName, destinationDirectory, rele
 
   const receiptPath = join(destinationDirectory, SNAPSHOT_RECEIPT);
   const receipt = JSON.parse(await readFile(receiptPath, 'utf8'));
-  if (receipt.formatVersion !== 1 || receipt.bundle !== bundleName || !Array.isArray(receipt.files)) {
+  if (
+    receipt.formatVersion !== 1 ||
+    receipt.bundle !== bundleName ||
+    !Array.isArray(receipt.files)
+  ) {
     throw new Error(`Snapshot receipt is invalid in ${destinationDirectory}.`);
   }
 
@@ -439,7 +441,9 @@ async function inspectExistingDestination(bundleName, destinationDirectory, rele
       encoding: 'utf8',
     });
     if (status.status !== 0 || status.stdout.trim()) {
-      throw new Error(`Refusing to compare snapshot files in a non-clean clone: ${destinationDirectory}.`);
+      throw new Error(
+        `Refusing to compare snapshot files in a non-clean clone: ${destinationDirectory}.`,
+      );
     }
 
     const samePaths =
@@ -455,7 +459,10 @@ async function inspectExistingDestination(bundleName, destinationDirectory, rele
 
         assertSafeSnapshotPath(expectedFile.path);
         const committedPath = resolve(destinationDirectory, expectedFile.path);
-        if (!isWithin(destinationDirectory, committedPath) || committedPath === destinationDirectory) {
+        if (
+          !isWithin(destinationDirectory, committedPath) ||
+          committedPath === destinationDirectory
+        ) {
           throw new Error('Snapshot receipt contains an unsafe file path.');
         }
 
@@ -535,11 +542,15 @@ async function inspectExistingDestination(bundleName, destinationDirectory, rele
         throw new Error(`git fetch origin main failed in ${destinationDirectory}.`);
       }
 
-      const divergence = spawnSync('git', ['rev-list', '--left-right', '--count', 'HEAD...origin/main'], {
-        cwd: destinationDirectory,
-        env: gitEnvironment,
-        encoding: 'utf8',
-      });
+      const divergence = spawnSync(
+        'git',
+        ['rev-list', '--left-right', '--count', 'HEAD...origin/main'],
+        {
+          cwd: destinationDirectory,
+          env: gitEnvironment,
+          encoding: 'utf8',
+        },
+      );
       if (divergence.status !== 0 || divergence.stdout.trim().split(/\s+/u).join(' ') !== '0 0') {
         throw new Error(`Release preflight requires 0 0 divergence in ${destinationDirectory}.`);
       }
@@ -559,16 +570,12 @@ async function initializeGitRepository(destinationDirectory) {
     return;
   }
 
-  const result = spawnSync(
-    'git',
-    ['init', '--initial-branch=main', destinationDirectory],
-    {
-      cwd: DEPLOYMENT_PARENT,
-      env: SAFE_GIT_DIRECTORY_ENV,
-      encoding: 'utf8',
-      stdio: 'inherit',
-    },
-  );
+  const result = spawnSync('git', ['init', '--initial-branch=main', destinationDirectory], {
+    cwd: DEPLOYMENT_PARENT,
+    env: SAFE_GIT_DIRECTORY_ENV,
+    encoding: 'utf8',
+    stdio: 'inherit',
+  });
   if (result.error) {
     throw result.error;
   }
@@ -593,11 +600,17 @@ async function syncSnapshot(bundleName, bundle, snapshot, releaseRequested) {
   } else {
     const targetInfo = await lstat(destinationDirectory);
     if (!targetInfo.isDirectory() || targetInfo.isSymbolicLink()) {
-      throw new Error(`Deployment destination is not a regular directory: ${destinationDirectory}.`);
+      throw new Error(
+        `Deployment destination is not a regular directory: ${destinationDirectory}.`,
+      );
     }
   }
 
-  const oldFiles = await inspectExistingDestination(bundleName, destinationDirectory, releaseRequested);
+  const oldFiles = await inspectExistingDestination(
+    bundleName,
+    destinationDirectory,
+    releaseRequested,
+  );
   for (const file of oldFiles) {
     const oldPath = resolve(destinationDirectory, file.path);
     if (!isWithin(destinationDirectory, oldPath)) {
@@ -681,14 +694,18 @@ async function main() {
   const releaseRequested = argumentsList.includes('--release');
   const requestedArguments = argumentsList.filter((argument) => argument !== '--release');
   if (requestedArguments.length !== 1) {
-    throw new Error('Usage: node scripts/deployment/export-runflare-bundles.mjs <frontend|backend|all> [--release]');
+    throw new Error(
+      'Usage: node scripts/deployment/export-runflare-bundles.mjs <frontend|backend|all> [--release]',
+    );
   }
 
   const requested = requestedArguments[0];
   const bundleNames = requested === 'all' ? Object.keys(BUNDLES) : [requested];
 
   if (!requested || bundleNames.some((bundleName) => !BUNDLES[bundleName])) {
-    throw new Error('Usage: node scripts/deployment/export-runflare-bundles.mjs <frontend|backend|all>');
+    throw new Error(
+      'Usage: node scripts/deployment/export-runflare-bundles.mjs <frontend|backend|all>',
+    );
   }
 
   for (const bundleName of bundleNames) {
