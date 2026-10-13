@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Badge, Button, Surface } from '@funtino/design-system';
+import { Badge, Button } from '@funtino/design-system';
 import { FormRenderer } from '@funtino/forms-renderer';
 import {
   formDefinitionSchema,
@@ -58,6 +58,12 @@ const responseStatusLabels: Record<ResponseStatus, string> = {
 const formStatusLabels: Record<FormStatus, string> = {
   draft: 'پیش‌نویس', published: 'منتشرشده', paused: 'متوقف', archived: 'بایگانی',
 };
+const fieldGroups: Array<{ label: string; types: FormFieldType[] }> = [
+  { label: 'متن و اطلاعات پایه', types: ['short_text', 'long_text', 'full_name', 'phone', 'email', 'number', 'money', 'date', 'time'] },
+  { label: 'انتخاب و رضایت', types: ['single_choice', 'multiple_choice', 'dropdown', 'yes_no', 'consent'] },
+  { label: 'امتیاز و اولویت', types: ['rating', 'nps', 'slider', 'ranking', 'matrix'] },
+  { label: 'چیدمان و داده‌ی تکمیلی', types: ['heading', 'paragraph', 'hidden'] },
+];
 
 type Props = {
   scope: OperationsScope;
@@ -88,6 +94,7 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
   const definitionRef = useRef<FormDefinition | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const formsRequestId = useRef(0);
   const [undoStack, setUndoStack] = useState<FormDefinition[]>([]);
   const [redoStack, setRedoStack] = useState<FormDefinition[]>([]);
   const [settingsDraft, setSettingsDraft] = useState<FormSettingsDraft>(emptySettings);
@@ -97,10 +104,19 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
   const [templateName, setTemplateName] = useState('');
   const [templateDescription, setTemplateDescription] = useState('');
   const [reason, setReason] = useState('');
-  const [activeTab, setActiveTab] = useState<'builder' | 'responses'>('builder');
+  const [activeTab, setActiveTab] = useState<'builder' | 'settings' | 'preview' | 'responses'>('builder');
   const [previewAnswers, setPreviewAnswers] = useState<FormAnswers>({});
   const [previewPage, setPreviewPage] = useState(0);
   const [previewViewport, setPreviewViewport] = useState<'desktop' | 'mobile'>('desktop');
+  const [activePageId, setActivePageId] = useState<string | null>(null);
+  const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
+  const [reorderAnnouncement, setReorderAnnouncement] = useState('');
+  const [validationIssues, setValidationIssues] = useState<string[]>([]);
+  const [formQueryDraft, setFormQueryDraft] = useState('');
+  const [formQuery, setFormQuery] = useState('');
+  const [formStatusFilter, setFormStatusFilter] = useState<FormStatus | ''>('');
+  const [formsNextCursor, setFormsNextCursor] = useState<string | null>(null);
+  const [formsLoadingMore, setFormsLoadingMore] = useState(false);
   const [responses, setResponses] = useState<OperationsFormResponse[]>([]);
   const [responseNextCursor, setResponseNextCursor] = useState<string | null>(null);
   const [responseStats, setResponseStats] = useState<{ total: number; byStatus: Partial<Record<ResponseStatus, number>> } | null>(null);
@@ -133,35 +149,53 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
   const formScope = useMemo<OperationsScope | null>(() => selectedForm
     ? { type: 'branch', organizationId: selectedForm.organizationId, branchId: selectedForm.branchId }
     : null, [selectedForm]);
+  const activePage = definition?.pages.find((page) => page.id === activePageId) ?? definition?.pages[0] ?? null;
+  const activePageIndex = activePage && definition ? definition.pages.findIndex((page) => page.id === activePage.id) : -1;
+  const selectedField = activePage?.fields.find((field) => field.id === selectedFieldId) ?? null;
+  const selectedFieldIndex = activePage?.fields.findIndex((field) => field.id === selectedField?.id) ?? -1;
+  const totalFieldCount = definition?.pages.reduce((total, page) => total + page.fields.length, 0) ?? 0;
+  const settingsDirty = selectedForm ? JSON.stringify(settingsDraft) !== JSON.stringify(settingsFromForm(selectedForm)) : false;
+  const formListKey = JSON.stringify({ scope, query: formQuery, status: formStatusFilter });
+  const formListKeyRef = useRef(formListKey);
+  formListKeyRef.current = formListKey;
   const searchableFields = useMemo(() => definition?.pages.flatMap((page) => page.fields).filter((field) => field.searchable && !field.sensitive) ?? [], [definition]);
 
   const refreshForms = useCallback(async () => {
+    const requestId = ++formsRequestId.current;
+    setFormsLoadingMore(false);
     const [permissionSet] = await Promise.all([getOperationsFormsCapabilities(scope)]);
+    if (requestId !== formsRequestId.current) return;
     setCapabilities(permissionSet);
     setAggregateStats(null);
     if (scope.type === 'organization' && permissionSet.canReadResponses) {
-      setAggregateStats(await getOperationsFormAggregateStats(scope));
+      const stats = await getOperationsFormAggregateStats(scope);
+      if (requestId !== formsRequestId.current) return;
+      setAggregateStats(stats);
     }
     if (permissionSet.canRead) {
-      const page = await getOperationsForms(scope, { pageSize: 100 });
+      const page = await getOperationsForms(scope, {
+        pageSize: 50,
+        query: formQuery.trim() || undefined,
+        status: formStatusFilter || undefined,
+      });
+      if (requestId !== formsRequestId.current) return;
       setForms(page.items);
-      if (selectedForm && !page.items.some((form) => form.id === selectedForm.id)) {
-        setSelectedForm(null);
-        setDefinition(null);
-        definitionRef.current = null;
-      }
+      setFormsNextCursor(page.nextCursor);
     } else {
       setForms([]);
+      setFormsNextCursor(null);
     }
-    if (permissionSet.canManageTemplates) {
+    if (permissionSet.canRead) {
       const templateScope = scope.type === 'branch' ? scope : branchId
         ? { type: 'branch' as const, organizationId: scope.organizationId, branchId }
         : scope;
-      setTemplates(await getOperationsFormTemplates(templateScope));
+      const availableTemplates = await getOperationsFormTemplates(templateScope);
+      if (requestId !== formsRequestId.current) return;
+      setTemplates(availableTemplates);
     } else {
       setTemplates([]);
     }
-  }, [branchId, scope, selectedForm]);
+  }, [branchId, formQuery, formStatusFilter, scope]);
 
   useEffect(() => {
     let active = true;
@@ -175,6 +209,44 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [refreshForms, onSessionExpired]);
+
+  async function loadMoreForms() {
+    if (!formsNextCursor || formsLoadingMore || !capabilities?.canRead) return;
+    const requestId = formsRequestId.current;
+    const filterKey = formListKey;
+    setFormsLoadingMore(true);
+    try {
+      const page = await getOperationsForms(scope, {
+        pageSize: 50,
+        cursor: formsNextCursor,
+        query: formQuery.trim() || undefined,
+        status: formStatusFilter || undefined,
+      });
+      if (requestId !== formsRequestId.current || filterKey !== formListKeyRef.current) return;
+      setForms((current) => [...current, ...page.items]);
+      setFormsNextCursor(page.nextCursor);
+    } catch (failure) {
+      if (requestId === formsRequestId.current && filterKey === formListKeyRef.current) {
+        setError(errorMessage(failure, onSessionExpired));
+        if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
+      }
+    } finally {
+      if (requestId === formsRequestId.current) setFormsLoadingMore(false);
+    }
+  }
+
+  async function retryRefreshForms() {
+    setLoading(true);
+    setError('');
+    try {
+      await refreshForms();
+    } catch (failure) {
+      setError(errorMessage(failure, onSessionExpired));
+      if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (scope.type === 'branch') {
@@ -197,6 +269,7 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
       saveQueue.current = saveQueue.current.catch(() => undefined).then(async () => {
         const parsed = formDefinitionSchema.safeParse(snapshot);
         if (!parsed.success) {
+          setValidationIssues(parsed.error.issues.slice(0, 5).map((issue) => formatDefinitionIssue(issue.path, snapshot)));
           setError('پیش‌نویس هنوز کامل و معتبر نیست؛ برچسب‌ها، گزینه‌ها و شرط‌ها را بررسی کنید.');
           return;
         }
@@ -228,14 +301,22 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
     setNotice('');
     try {
       const targetScope: OperationsScope = { type: 'branch', organizationId: row.organizationId, branchId: row.branchId };
-      const form = await getOperationsForm(row.id, targetScope);
+      const [form, permissionSet] = await Promise.all([
+        getOperationsForm(row.id, targetScope),
+        getOperationsFormsCapabilities(targetScope),
+      ]);
       const nextDefinition = formDefinitionSchema.parse(form.draftSchema);
+      setCapabilities(permissionSet);
       setSelectedForm(form);
       setDefinition(nextDefinition);
       definitionRef.current = nextDefinition;
+      setActivePageId(nextDefinition.pages[0]?.id ?? null);
+      setSelectedFieldId(nextDefinition.pages[0]?.fields[0]?.id ?? null);
       setUndoStack([]);
       setRedoStack([]);
       setDraftDirty(false);
+      setValidationIssues([]);
+      setReorderAnnouncement('');
       setSettingsDraft(settingsFromForm(form));
       setPreviewAnswers({});
       setPreviewPage(0);
@@ -265,6 +346,7 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
     definitionRef.current = next;
     setDefinition(next);
     setDraftDirty(true);
+    setValidationIssues([]);
     setError('');
   }
 
@@ -290,9 +372,37 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
     setDraftDirty(true);
   }
 
+  function moveActivePage(from: number, to: number) {
+    const page = definition?.pages[from];
+    if (!page) return;
+    commitDefinition((current) => movePage(current, from, to));
+    setReorderAnnouncement(`صفحه‌ی «${page.title}» به جایگاه ${to + 1} منتقل شد.`);
+  }
+
+  function moveActiveField(from: number, to: number) {
+    const field = activePage?.fields[from];
+    if (!field || activePageIndex < 0) return;
+    commitDefinition((current) => moveField(current, activePageIndex, from, to));
+    setReorderAnnouncement(`پرسش «${field.label}» به جایگاه ${to + 1} منتقل شد.`);
+  }
+
+  async function returnToLibrary() {
+    if (saving) return;
+    if (draftDirty && !(await saveDraftNow())) return;
+    setSelectedForm(null);
+    setDefinition(null);
+    definitionRef.current = null;
+    setSelectedFieldId(null);
+    setActivePageId(null);
+    setActiveTab('builder');
+  }
+
   async function createForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!branchId || !newTitle.trim() || !capabilities?.canManage) return;
+    const branchAllowed = scope.type === 'branch'
+      ? branchId === scope.branchId
+      : branches.some((item) => item.scope.type === 'branch' && item.scope.branchId === branchId);
+    if (!branchAllowed || !newTitle.trim() || !capabilities?.canManage) return;
     setSaving(true);
     setError('');
     try {
@@ -305,15 +415,19 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
       const saved = await saveOperationsFormDraft(created.id, targetScope, definition);
       setNewTitle('');
       setNotice(template ? 'فرم از روی قالب ساخته شد.' : 'فرم تازه ساخته شد.');
-      const page = await getOperationsForms(scope, { pageSize: 100 });
+      const page = await getOperationsForms(scope, { pageSize: 50 });
       setForms(page.items);
+      setFormsNextCursor(page.nextCursor);
       setSelectedForm(saved);
       setDefinition(formDefinitionSchema.parse(saved.draftSchema));
       definitionRef.current = formDefinitionSchema.parse(saved.draftSchema);
+      setActivePageId(saved.draftSchema?.pages[0]?.id ?? null);
+      setSelectedFieldId(saved.draftSchema?.pages[0]?.fields[0]?.id ?? null);
       setSettingsDraft(settingsFromForm(saved));
       setUndoStack([]);
       setRedoStack([]);
       setDraftDirty(false);
+      setValidationIssues([]);
       setActiveTab('builder');
     } catch (failure) {
       setError(errorMessage(failure, onSessionExpired));
@@ -327,6 +441,7 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
     if (!selectedForm || !definition || !formScope) return false;
     const parsed = formDefinitionSchema.safeParse(definition);
     if (!parsed.success) {
+      setValidationIssues(parsed.error.issues.slice(0, 5).map((issue) => formatDefinitionIssue(issue.path, definition)));
       setError('پیش‌نویس معتبر نیست؛ موارد ناقص را اصلاح کنید.');
       return false;
     }
@@ -336,6 +451,7 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
       const updated = await saveOperationsFormDraft(selectedForm.id, formScope, parsed.data);
       setSelectedForm(updated);
       setDraftDirty(false);
+      setValidationIssues([]);
       setNotice('پیش‌نویس ذخیره شد.');
       return true;
     } catch (failure) {
@@ -348,15 +464,30 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
 
   async function saveSettings() {
     if (!selectedForm || !formScope) return;
+    const startsAt = settingsDraft.startsAt ? new Date(settingsDraft.startsAt) : null;
+    const endsAt = settingsDraft.endsAt ? new Date(settingsDraft.endsAt) : null;
+    const responseLimit = settingsDraft.responseLimit ? Number(settingsDraft.responseLimit) : null;
+    if ((startsAt && !Number.isFinite(startsAt.getTime())) || (endsAt && !Number.isFinite(endsAt.getTime()))) {
+      setError('تاریخ دسترسی معتبر نیست.');
+      return;
+    }
+    if (startsAt && endsAt && endsAt <= startsAt) {
+      setError('زمان پایان باید بعد از زمان شروع باشد.');
+      return;
+    }
+    if (responseLimit !== null && (!Number.isInteger(responseLimit) || responseLimit < 1)) {
+      setError('سقف پاسخ باید یک عدد صحیح مثبت باشد.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       const updated = await saveOperationsFormSettings(selectedForm.id, formScope, {
         accessMode: settingsDraft.accessMode,
         linkEnabled: settingsDraft.linkEnabled,
-        startsAt: settingsDraft.startsAt ? new Date(settingsDraft.startsAt).toISOString() : null,
-        endsAt: settingsDraft.endsAt ? new Date(settingsDraft.endsAt).toISOString() : null,
-        responseLimit: settingsDraft.responseLimit ? Number(settingsDraft.responseLimit) : null,
+        startsAt: startsAt?.toISOString() ?? null,
+        endsAt: endsAt?.toISOString() ?? null,
+        responseLimit,
       });
       setSelectedForm((current) => current?.id === updated.id ? { ...current, ...updated } : current);
       setNotice('تنظیمات فرم ذخیره شد.');
@@ -369,6 +500,30 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
 
   async function changeFormState(action: 'publish' | 'pause' | 'archive') {
     if (!selectedForm || !formScope || !capabilities?.canPublish || reason.trim().length < 8) return;
+    if (action === 'publish' && settingsDirty) {
+      setActiveTab('settings');
+      setError('پیش از انتشار، تنظیم‌های دسترسی را ذخیره کنید.');
+      return;
+    }
+    if (action === 'publish' && definition) {
+      const parsed = formDefinitionSchema.safeParse(definition);
+      if (!parsed.success) {
+        const issues = parsed.error.issues;
+        setValidationIssues(issues.slice(0, 5).map((issue) => formatDefinitionIssue(issue.path, definition)));
+        const firstIssue = issues[0];
+        const pageIndex = firstIssue?.path[0] === 'pages' && typeof firstIssue.path[1] === 'number' ? firstIssue.path[1] : -1;
+        const fieldIndex = firstIssue?.path[2] === 'fields' && typeof firstIssue.path[3] === 'number' ? firstIssue.path[3] : -1;
+        const page = definition.pages[pageIndex];
+        if (page) {
+          setActivePageId(page.id);
+          setSelectedFieldId(page.fields[fieldIndex]?.id ?? null);
+        }
+        setActiveTab('builder');
+        setError('فرم پیش از انتشار به اصلاح نیاز دارد.');
+        return;
+      }
+      setValidationIssues([]);
+    }
     if (action === 'archive' && !window.confirm('فرم بایگانی می‌شود و پیوند عمومی آن غیرفعال خواهد شد. ادامه می‌دهید؟')) return;
     setSaving(true);
     setError('');
@@ -387,7 +542,8 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
   }
 
   async function duplicateForm() {
-    if (!selectedForm || !formScope || !capabilities?.canManage) return;
+    if (!selectedForm || !formScope || !capabilities?.canManage || saving) return;
+    if (draftDirty && !(await saveDraftNow())) return;
     setSaving(true);
     try {
       const copied = await duplicateOperationsForm(selectedForm.id, formScope);
@@ -591,13 +747,13 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
   return (
     <section className={styles.page} aria-labelledby="operations-forms-heading" aria-busy={loading}>
       <header className={styles.header}>
-        <div><p className={styles.eyebrow}>مدیریت مشتریان · فرم‌ساز</p><h2 id="operations-forms-heading">فرم‌ها</h2><p>پیش‌نویس‌ها جدا از نسخه‌های منتشرشده ذخیره می‌شوند. هر انتشار یک نسخه‌ی تغییرناپذیر می‌سازد.</p></div>
-        <div className={styles.actions}><Badge tone={draftDirty ? 'warning' : saving ? 'neutral' : 'success'}>{draftDirty ? 'تغییر ذخیره‌نشده' : saving ? 'در حال ذخیره' : 'همگام'}</Badge></div>
+        <div><p className={styles.eyebrow}>مدیریت مشتریان · فرم‌ساز</p><h2 id="operations-forms-heading">{selectedForm && definition ? definition.title || 'فرم بدون عنوان' : 'فرم‌ها'}</h2><p>{selectedForm ? `نسخه‌ی منتشرشده: ${selectedForm.currentVersion ?? 'هنوز منتشر نشده'}` : 'پیش‌نویس‌ها جدا از نسخه‌های منتشرشده ذخیره می‌شوند؛ هر انتشار نسخه‌ی تازه‌ای می‌سازد.'}</p></div>
+        <div className={styles.actions}>{selectedForm ? <Badge tone={selectedForm.status === 'published' ? 'success' : selectedForm.status === 'paused' ? 'warning' : 'neutral'}>{formStatusLabels[selectedForm.status]}</Badge> : <Badge tone="neutral">{forms.length.toLocaleString('fa-IR')} فرم</Badge>}</div>
       </header>
-      {error && <p className={styles.error} role="alert">{error}</p>}
+      {error && <div className={styles.error} role="alert">{error}{selectedForm && draftDirty && <Button type="button" tone="ghost" disabled={saving} onClick={() => void saveDraftNow()}>تلاش دوباره برای ذخیره</Button>}</div>}
       {notice && <p className={styles.notice} role="status">{notice}</p>}
 
-      {scope.type === 'organization' && capabilities?.canReadResponses && aggregateStats && <section className={styles.aggregateReport} aria-labelledby="forms-branch-comparison-heading">
+      {!selectedForm && scope.type === 'organization' && capabilities?.canReadResponses && aggregateStats && <section className={styles.aggregateReport} aria-labelledby="forms-branch-comparison-heading">
         <div className={styles.sectionHeading}><div><h3 id="forms-branch-comparison-heading">مقایسه‌ی پاسخ شعب</h3><p>تجمیع فرم‌های همین مجموعه؛ متن پاسخ‌ها در این گزارش نمایش داده نمی‌شود.</p></div><Badge tone="neutral">{aggregateStats.total.toLocaleString('fa-IR')} پاسخ</Badge></div>
         <ul className={styles.aggregateBranches}>{aggregateStats.byBranch.map((item) => {
           const branch = branches.find((option) => option.scope.type === 'branch' && option.scope.branchId === item.branchId)?.branch;
@@ -606,193 +762,419 @@ export function OperationsForms({ scope, scopeOptions, onSessionExpired, mfaStep
         <div className={styles.statusSummary}>{Object.entries(responseStatusLabels).map(([status, label]) => <span key={status}>{label}: {aggregateStats.byStatus[status as ResponseStatus] ?? 0}</span>)}</div>
       </section>}
 
-      <div className={styles.workspace}>
-        <aside className={styles.sidebar} aria-label="فهرست فرم‌ها">
-          <div className={styles.sideHeading}><h3>فرم‌های این محدوده</h3><span>{forms.length.toLocaleString('fa-IR')}</span></div>
-          {loading ? <p role="status">در حال دریافت…</p> : capabilities?.canRead ? forms.length === 0 ? <p>فرمی وجود ندارد.</p> : (
-            <ul className={styles.formList}>{forms.map((form) => <li key={form.id}>
-              <button type="button" className={selectedForm?.id === form.id ? styles.formItemActive : styles.formItem} onClick={() => void openForm(form.id)}>
-                <strong>{form.title}</strong><span><Badge tone={form.status === 'published' ? 'success' : form.status === 'paused' ? 'warning' : 'neutral'}>{formStatusLabels[form.status]}</Badge><small>{form.responseCount.toLocaleString('fa-IR')} پاسخ</small></span>
-              </button>
-            </li>)}</ul>
-          ) : <p>برای دیدن فرم‌ها مجوز forms.read لازم است.</p>}
-          {capabilities?.canManage && <form className={styles.createForm} onSubmit={(event) => void createForm(event)}>
-            <h4>ساخت فرم</h4>
-            {scope.type === 'organization' ? (
-              <label>شعبه<select required value={branchId} onChange={(event) => setBranchId(event.target.value)}><option value="">انتخاب شعبه</option>{branches.map((item) => item.scope.type === 'branch' ? <option key={item.scope.branchId} value={item.scope.branchId}>{item.branch?.name ?? item.scope.branchId}</option> : null)}</select></label>
-            ) : <p className={styles.helper}>شعبه: {branches[0]?.branch?.name ?? 'محدوده‌ی فعلی'}</p>}
-            <label>عنوان<input required value={newTitle} onChange={(event) => setNewTitle(event.target.value)} maxLength={160} /></label>
-            <label>قالب شروع<select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}><option value="">فرم خالی</option>{templates.filter((item) => item.enabled).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-            <Button type="submit" disabled={saving || !branchId || !newTitle.trim()}>{saving ? 'در حال ساخت…' : 'ایجاد پیش‌نویس'}</Button>
-          </form>}
-        </aside>
+      <div className={selectedForm && definition ? styles.editorWorkspace : styles.libraryWorkspace}>
+        {!selectedForm || !definition ? (
+          <>
+            <section className={styles.libraryMain} aria-labelledby="forms-library-heading">
+              <div className={styles.libraryHeading}>
+                <div>
+                  <p className={styles.eyebrow}>کتابخانه‌ی فرم‌ها</p>
+                  <h3 id="forms-library-heading">فرم‌های این محدوده</h3>
+                  <p>پیش‌نویس‌ها ذخیره می‌شوند و هر انتشار یک نسخه‌ی جداگانه می‌سازد.</p>
+                </div>
+                <Badge tone="neutral">{forms.length.toLocaleString('fa-IR')} {formsNextCursor ? 'فرم در این صفحه' : 'فرم'}</Badge>
+              </div>
+              <form className={styles.libraryFilters} onSubmit={(event) => { event.preventDefault(); setFormQuery(formQueryDraft.trim()); }}>
+                <label>جست‌وجو در فرم‌ها
+                  <input type="search" value={formQueryDraft} onChange={(event) => setFormQueryDraft(event.target.value)} maxLength={120} placeholder="عنوان فرم را بنویسید" />
+                </label>
+                <label>وضعیت
+                  <select value={formStatusFilter} onChange={(event) => setFormStatusFilter(event.target.value as FormStatus | '')}>
+                    <option value="">همه‌ی وضعیت‌ها</option>
+                    {Object.entries(formStatusLabels).map(([status, label]) => <option key={status} value={status}>{label}</option>)}
+                  </select>
+                </label>
+                <div className={styles.libraryFilterActions}>
+                  <Button type="submit" tone="secondary" disabled={loading}>جست‌وجو</Button>
+                  {(formQuery || formStatusFilter) && <Button type="button" tone="ghost" disabled={loading} onClick={() => { setFormQueryDraft(''); setFormQuery(''); setFormStatusFilter(''); }}>پاک‌کردن فیلترها</Button>}
+                </div>
+              </form>
 
-        <div className={styles.editor}>
-          {!selectedForm || !definition ? <div className={styles.empty}><h3>یک فرم را انتخاب کنید</h3><p>از فهرست کنار صفحه فرم را باز کنید یا یک پیش‌نویس تازه بسازید.</p><p>فیلدهای بارگذاری تصویر/فایل، امضا و محاسباتی تا آماده‌شدن قرارداد ذخیره‌سازی در دسترس نیستند.</p></div> : <>
-            <div className={styles.formHeading}>
-              <div><h3>{selectedForm.title}</h3><p>شناسه‌ی نسخه‌ی منتشرشده: {selectedForm.currentVersion ?? 'هنوز منتشر نشده'}</p></div>
-              <div className={styles.tabs} role="group" aria-label="بخش‌های فرم">
-                <Button type="button" tone={activeTab === 'builder' ? 'primary' : 'ghost'} aria-pressed={activeTab === 'builder'} onClick={() => setActiveTab('builder')}>سازنده</Button>
-                <Button type="button" tone={activeTab === 'responses' ? 'primary' : 'ghost'} aria-pressed={activeTab === 'responses'} disabled={!capabilities?.canReadResponses} onClick={() => void openResponses()}>پاسخ‌ها</Button>
+              {!capabilities?.canRead && !loading ? (
+                <div className={styles.emptyState} role="status">
+                  <span className={styles.emptyIcon} aria-hidden="true">◎</span>
+                  <h4>دسترسی نمایش فرم‌ها فعال نیست</h4>
+                  <p>برای مشاهده‌ی فرم‌های این محدوده، مجوز forms.read لازم است.</p>
+                </div>
+              ) : loading ? (
+                <div className={styles.formCardGrid} aria-label="در حال دریافت فرم‌ها" aria-busy="true">
+                  {Array.from({ length: 4 }, (_, index) => <div className={styles.formSkeleton} key={index}><span /><span /><span /></div>)}
+                  <p className={styles.srOnly} role="status">در حال دریافت فرم‌ها…</p>
+                </div>
+              ) : forms.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <span className={styles.emptyIcon} aria-hidden="true">▤</span>
+                  <h4>{formQuery || formStatusFilter ? 'فرمی با این فیلترها پیدا نشد' : 'هنوز فرمی ساخته نشده'}</h4>
+                  <p>{formQuery || formStatusFilter ? 'عبارت جست‌وجو یا وضعیت انتخاب‌شده را تغییر دهید.' : 'برای شروع، یک پیش‌نویس خالی بسازید یا از یکی از قالب‌های در دسترس استفاده کنید.'}</p>
+                  {(formQuery || formStatusFilter) && <Button type="button" tone="ghost" onClick={() => { setFormQueryDraft(''); setFormQuery(''); setFormStatusFilter(''); }}>نمایش همه‌ی فرم‌ها</Button>}
+                  {!formQuery && !formStatusFilter && capabilities?.canManage && <a className={styles.inlineLink} href="#forms-create-card">رفتن به ساخت فرم</a>}
+                </div>
+              ) : (
+                <ul className={styles.formCardGrid} aria-label="فرم‌های ذخیره‌شده">
+                  {forms.map((form) => {
+                    const branch = branches.find((item) => item.scope.type === 'branch' && item.scope.branchId === form.branchId)?.branch;
+                    return <li key={form.id}>
+                      <button type="button" className={styles.formCard} onClick={() => void openForm(form.id)}>
+                        <span className={styles.formCardTop}>
+                          <Badge tone={form.status === 'published' ? 'success' : form.status === 'paused' ? 'warning' : 'neutral'}>{formStatusLabels[form.status]}</Badge>
+                          <span className={styles.formCardArrow} aria-hidden="true">←</span>
+                        </span>
+                        <strong className={styles.formCardTitle}>{form.title}</strong>
+                        <span className={styles.formCardDescription}>{form.description || 'بدون توضیح'}</span>
+                        <span className={styles.formCardMeta}>
+                          <span>{branch?.name ?? 'محدوده‌ی فعلی'}</span>
+                          <span>{form.responseCount.toLocaleString('fa-IR')} پاسخ</span>
+                        </span>
+                        <span className={styles.formCardMeta}>
+                          <span>{form.currentVersion ? 'نسخه‌ی ' + form.currentVersion.toLocaleString('fa-IR') : 'هنوز منتشر نشده'}</span>
+                          <time dateTime={form.createdAt}>{new Date(form.createdAt).toLocaleDateString('fa-IR')}</time>
+                        </span>
+                      </button>
+                    </li>;
+                  })}
+                </ul>
+              )}
+              {error && !loading && <Button type="button" tone="secondary" onClick={() => void retryRefreshForms()}>تلاش دوباره</Button>}
+              {formsNextCursor && !loading && <div className={styles.loadMoreRow}><Button type="button" tone="ghost" disabled={formsLoadingMore} onClick={() => void loadMoreForms()}>{formsLoadingMore ? 'در حال دریافت…' : 'فرم‌های بیشتر'}</Button></div>}
+            </section>
+
+            <aside className={styles.createCard} id="forms-create-card" aria-labelledby="forms-create-heading">
+              {loading ? <div className={styles.emptyState} role="status"><span className={styles.createIcon} aria-hidden="true">＋</span><p>در حال آماده‌سازی ساخت فرم…</p></div> : capabilities?.canManage ? (
+                <form className={styles.createForm} onSubmit={(event) => void createForm(event)}>
+                  <div className={styles.createCardHeading}>
+                    <span className={styles.createIcon} aria-hidden="true">＋</span>
+                    <div><p className={styles.eyebrow}>شروع تازه</p><h3 id="forms-create-heading">ساخت فرم</h3></div>
+                  </div>
+                  <p className={styles.helper}>یک عنوان و محدوده انتخاب کنید؛ پیش‌نویس پس از ساخت در ویرایشگر باز می‌شود.</p>
+                  {scope.type === 'organization' ? (
+                    <label>شعبه
+                      <select required value={branchId} onChange={(event) => setBranchId(event.target.value)}>
+                        <option value="">انتخاب شعبه</option>
+                        {branches.map((item) => item.scope.type === 'branch' ? <option key={item.scope.branchId} value={item.scope.branchId}>{item.branch?.name ?? item.scope.branchId}</option> : null)}
+                      </select>
+                    </label>
+                  ) : <p className={styles.scopeChip}>شعبه: {branches[0]?.branch?.name ?? 'محدوده‌ی فعلی'}</p>}
+                  <label>عنوان فرم
+                    <input required value={newTitle} onChange={(event) => setNewTitle(event.target.value)} maxLength={160} placeholder="مثلاً ثبت‌نام کارگاه نقاشی" />
+                  </label>
+                  <fieldset className={styles.templatePicker}>
+                    <legend>از کجا شروع کنیم؟</legend>
+                    <label className={styles.templateChoice}>
+                      <input type="radio" name="forms-template" value="" checked={!selectedTemplateId} onChange={() => setSelectedTemplateId('')} />
+                      <span><strong>فرم خالی</strong><small>ساختار و پرسش‌ها را خودتان اضافه کنید.</small></span>
+                    </label>
+                    {templates.filter((item) => item.enabled).map((template) => <label className={styles.templateChoice} key={template.id}>
+                      <input type="radio" name="forms-template" value={template.id} checked={selectedTemplateId === template.id} onChange={() => setSelectedTemplateId(template.id)} />
+                      <span><strong>{template.name}</strong><small>{template.description || template.definition.pages.length.toLocaleString('fa-IR') + ' صفحه'}</small></span>
+                    </label>)}
+                    {templates.filter((item) => item.enabled).length === 0 && <p className={styles.helper}>قالب فعالی در این محدوده ثبت نشده است.</p>}
+                  </fieldset>
+                  <Button type="submit" disabled={saving || !branchId || !newTitle.trim()}>{saving ? 'در حال ساخت…' : 'ساخت پیش‌نویس'}</Button>
+                </form>
+              ) : (
+                <div className={styles.emptyState}>
+                  <span className={styles.createIcon} aria-hidden="true">＋</span>
+                  <h3 id="forms-create-heading">ساخت فرم</h3>
+                  <p>برای ایجاد یا ویرایش فرم، مجوز forms.manage لازم است.</p>
+                </div>
+              )}
+            </aside>
+          </>
+        ) : (
+          <>
+            <div className={styles.editorToolbar}>
+              <div className={styles.editorIdentity}>
+                <Button type="button" tone="ghost" disabled={saving} onClick={() => void returnToLibrary()}>بازگشت به فرم‌ها</Button>
+                <div>
+                  <p className={styles.eyebrow}>{branches.find((item) => item.scope.type === 'branch' && item.scope.branchId === selectedForm.branchId)?.branch?.name ?? 'فرم محدوده‌ی فعلی'}</p>
+                  <h3>{definition.title || selectedForm.title}</h3>
+                </div>
+              </div>
+              <div className={styles.editorToolbarActions}>
+                <Badge tone={draftDirty ? 'warning' : saving ? 'neutral' : 'success'}>{draftDirty ? 'تغییر ذخیره‌نشده' : saving ? 'در حال ذخیره' : 'ذخیره شد'}</Badge>
+                <Button type="button" tone="ghost" disabled={saving || !undoStack.length || !capabilities?.canManage} onClick={undo}>واگرد</Button>
+                <Button type="button" tone="ghost" disabled={saving || !redoStack.length || !capabilities?.canManage} onClick={redo}>ازنو</Button>
+                <Button type="button" tone="secondary" disabled={saving || !draftDirty || !capabilities?.canManage} onClick={() => void saveDraftNow()}>ذخیره‌ی پیش‌نویس</Button>
+                <Button type="button" tone="ghost" disabled={saving || !capabilities?.canManage} onClick={() => void duplicateForm()}>ساخت نسخه</Button>
               </div>
             </div>
-            {activeTab === 'builder' ? <>
-              <div className={styles.historyActions}>
-                <Button type="button" tone="ghost" disabled={!undoStack.length} onClick={undo}>واگرد</Button>
-                <Button type="button" tone="ghost" disabled={!redoStack.length} onClick={redo}>ازنو</Button>
-                <Button type="button" tone="secondary" disabled={saving || !draftDirty} onClick={() => void saveDraftNow()}>ذخیره‌ی پیش‌نویس</Button>
-                <Button type="button" tone="ghost" disabled={saving} onClick={() => void duplicateForm()}>ساخت نسخه</Button>
-                <Button type="button" tone="ghost" disabled={saving} onClick={() => void copyPublicLink()}>کپی پیوند فرم</Button>
-              </div>
+
+            <nav className={styles.editorNav} aria-label="بخش‌های ویرایش فرم">
+              <Button type="button" tone={activeTab === 'builder' ? 'primary' : 'ghost'} aria-current={activeTab === 'builder' ? 'page' : undefined} onClick={() => setActiveTab('builder')}>ساختار فرم</Button>
+              <Button type="button" tone={activeTab === 'settings' ? 'primary' : 'ghost'} aria-current={activeTab === 'settings' ? 'page' : undefined} onClick={() => setActiveTab('settings')}>تنظیمات و انتشار</Button>
+              <Button type="button" tone={activeTab === 'preview' ? 'primary' : 'ghost'} aria-current={activeTab === 'preview' ? 'page' : undefined} onClick={() => setActiveTab('preview')}>پیش‌نمایش</Button>
+              <Button type="button" tone={activeTab === 'responses' ? 'primary' : 'ghost'} aria-current={activeTab === 'responses' ? 'page' : undefined} disabled={!capabilities?.canReadResponses} onClick={() => void openResponses()}>پاسخ‌ها</Button>
+            </nav>
+
+            {validationIssues.length > 0 && <section className={styles.validationSummary} aria-labelledby="form-validation-heading">
+              <h4 id="form-validation-heading">موارد لازم برای تکمیل فرم</h4>
+              <ul>{validationIssues.map((item, index) => <li key={index + '-' + item}>{item}</li>)}</ul>
+            </section>}
+
+            {activeTab === 'builder' ? (
               <div className={styles.builderGrid}>
-                <div className={styles.builder}>
-                  <label>عنوان فرم<input value={definition.title} onChange={(event) => commitDefinition((current) => ({ ...current, title: event.target.value }))} maxLength={160} /></label>
-                  <label>توضیح فرم<textarea rows={3} value={definition.description} onChange={(event) => commitDefinition((current) => ({ ...current, description: event.target.value }))} maxLength={1500} /></label>
-                  <div className={styles.twoColumns}>
-                    <label>عنوان خوش‌آمدگویی<input value={definition.welcomeTitle} onChange={(event) => commitDefinition((current) => ({ ...current, welcomeTitle: event.target.value }))} maxLength={160} /></label>
-                    <label>پیام خوش‌آمدگویی<input value={definition.welcomeMessage} onChange={(event) => commitDefinition((current) => ({ ...current, welcomeMessage: event.target.value }))} maxLength={1000} /></label>
-                  </div>
-                  <label>پیام پس از ثبت<textarea rows={2} value={definition.successMessage} onChange={(event) => commitDefinition((current) => ({ ...current, successMessage: event.target.value }))} maxLength={1000} /></label>
-                  <div className={styles.pageList}>
-                    <div className={styles.sectionHeading}><h4>صفحه‌ها</h4><Button type="button" tone="ghost" onClick={() => commitDefinition(addPage)}>افزودن صفحه</Button></div>
-                    {definition.pages.map((page, pageIndex) => <div className={styles.formPage} key={page.id} onDragOver={(event) => { if (event.dataTransfer.types.includes('application/x-funtino-page-index')) event.preventDefault(); }} onDrop={(event) => {
-                      if (!event.dataTransfer.types.includes('application/x-funtino-page-index')) return;
-                      event.preventDefault();
-                      const from = Number(event.dataTransfer.getData('application/x-funtino-page-index'));
-                      if (Number.isInteger(from)) commitDefinition((current) => movePage(current, from, pageIndex));
-                    }}>
-                      <div className={styles.pageHeader} draggable onDragStart={(event) => {
-                        event.dataTransfer.setData('application/x-funtino-page-index', String(pageIndex));
-                        event.dataTransfer.effectAllowed = 'move';
+                <main className={styles.builderCanvas} aria-label="ساختار فرم">
+                  <section className={styles.formMetaCard} aria-labelledby="form-meta-heading">
+                    <div className={styles.sectionHeading}><div><h4 id="form-meta-heading">معرفی فرم</h4><p>عنوان فرم و متنی که پاسخ‌دهنده پیش از شروع می‌بیند.</p></div><Badge tone="neutral">{totalFieldCount.toLocaleString('fa-IR')} از ۱۰۰ پرسش</Badge></div>
+                    <fieldset disabled={!capabilities?.canManage || selectedForm.status === 'archived'} className={styles.formMetaFields}>
+                      <label>عنوان فرم<input value={definition.title} onChange={(event) => commitDefinition((current) => ({ ...current, title: event.target.value }))} maxLength={160} /></label>
+                      <label>توضیح فرم<textarea rows={2} value={definition.description} onChange={(event) => commitDefinition((current) => ({ ...current, description: event.target.value }))} maxLength={1500} /></label>
+                      <details className={styles.formCopyDetails}>
+                        <summary>متن خوش‌آمدگویی و پیام پس از ثبت</summary>
+                        <div className={styles.twoColumns}>
+                          <label>عنوان خوش‌آمدگویی<input value={definition.welcomeTitle} onChange={(event) => commitDefinition((current) => ({ ...current, welcomeTitle: event.target.value }))} maxLength={160} /></label>
+                          <label>پیام خوش‌آمدگویی<textarea rows={2} value={definition.welcomeMessage} onChange={(event) => commitDefinition((current) => ({ ...current, welcomeMessage: event.target.value }))} maxLength={1000} /></label>
+                          <label>پیام پس از ثبت<textarea rows={2} value={definition.successMessage} onChange={(event) => commitDefinition((current) => ({ ...current, successMessage: event.target.value }))} maxLength={1000} /></label>
+                        </div>
+                      </details>
+                    </fieldset>
+                  </section>
+
+                  <section className={styles.pageBuilder} aria-labelledby="form-pages-heading">
+                    <div className={styles.sectionHeading}><div><h4 id="form-pages-heading">صفحه‌ها و پرسش‌ها</h4><p>صفحه‌ی فعال را انتخاب کنید و ترتیب را با دسته‌گیره یا دکمه‌های جابه‌جایی تغییر دهید.</p></div><Button type="button" tone="secondary" disabled={!capabilities?.canManage || selectedForm.status === 'archived' || definition.pages.length >= 20} onClick={() => {
+                      const next = addPage(definition);
+                      const page = next.pages.at(-1);
+                      commitDefinition(() => next);
+                      setActivePageId(page?.id ?? null);
+                      setSelectedFieldId(null);
+                    }}>افزودن صفحه</Button></div>
+                    <div className={styles.pageTabList} role="group" aria-label="انتخاب صفحه">
+                      {definition.pages.map((page, pageIndex) => <div className={styles.pageTabItem} key={page.id} onDragOver={(event) => { if (event.dataTransfer.types.includes('application/x-funtino-page-index')) event.preventDefault(); }} onDrop={(event) => {
+                        if (!event.dataTransfer.types.includes('application/x-funtino-page-index')) return;
+                        event.preventDefault();
+                        const from = Number(event.dataTransfer.getData('application/x-funtino-page-index'));
+                        if (Number.isInteger(from)) moveActivePage(from, pageIndex);
                       }}>
-                        <label>عنوان صفحه<input value={page.title} onChange={(event) => commitDefinition((current) => updatePage(current, pageIndex, { title: event.target.value }))} maxLength={160} /></label>
+                        <span className={styles.pageDragHandle} draggable aria-label={'جابجایی صفحه‌ی ' + page.title} title="برای جابه‌جایی بکشید" onDragStart={(event) => {
+                          event.dataTransfer.setData('application/x-funtino-page-index', String(pageIndex));
+                          event.dataTransfer.effectAllowed = 'move';
+                        }}>⠿</span>
+                        <button type="button" className={activePage?.id === page.id ? styles.pageTabActive : styles.pageTab} aria-pressed={activePage?.id === page.id} onClick={() => { setActivePageId(page.id); setSelectedFieldId(page.fields[0]?.id ?? null); }}>
+                          <span>{(pageIndex + 1).toLocaleString('fa-IR')}</span><strong>{page.title || 'بدون عنوان'}</strong><small>{page.fields.length.toLocaleString('fa-IR')} پرسش</small>
+                        </button>
+                      </div>)}
+                    </div>
+                    {activePage && activePageIndex >= 0 && <section className={styles.activePagePanel} aria-labelledby="active-page-heading">
+                      <div className={styles.activePageHeading}>
+                        <div><p className={styles.eyebrow}>صفحه‌ی {(activePageIndex + 1).toLocaleString('fa-IR')}</p><h5 id="active-page-heading">{activePage.title || 'صفحه‌ی بدون عنوان'}</h5></div>
                         <div className={styles.inlineActions}>
-                          <Button type="button" tone="ghost" disabled={pageIndex === 0} aria-label="انتقال صفحه به بالا" onClick={() => commitDefinition((current) => movePage(current, pageIndex, pageIndex - 1))}>↑</Button>
-                          <Button type="button" tone="ghost" disabled={pageIndex === definition.pages.length - 1} aria-label="انتقال صفحه به پایین" onClick={() => commitDefinition((current) => movePage(current, pageIndex, pageIndex + 1))}>↓</Button>
-                          <Button type="button" tone="ghost" disabled={definition.pages.length === 1} onClick={() => commitDefinition((current) => removePage(current, pageIndex))}>حذف صفحه</Button>
+                          <Button type="button" tone="ghost" disabled={!capabilities?.canManage || activePageIndex === 0} aria-label="انتقال صفحه به بالا" onClick={() => moveActivePage(activePageIndex, activePageIndex - 1)}>↑</Button>
+                          <Button type="button" tone="ghost" disabled={!capabilities?.canManage || activePageIndex === definition.pages.length - 1} aria-label="انتقال صفحه به پایین" onClick={() => moveActivePage(activePageIndex, activePageIndex + 1)}>↓</Button>
+                          <Button type="button" tone="ghost" disabled={!capabilities?.canManage || definition.pages.length === 1 || selectedForm.status === 'archived'} onClick={() => {
+                            const next = removePage(definition, activePageIndex);
+                            commitDefinition(() => next);
+                            const nextPage = next.pages[Math.min(activePageIndex, next.pages.length - 1)];
+                            setActivePageId(nextPage?.id ?? null);
+                            setSelectedFieldId(nextPage?.fields[0]?.id ?? null);
+                          }}>حذف صفحه</Button>
                         </div>
                       </div>
-                      <label>توضیح صفحه<textarea rows={2} value={page.description} onChange={(event) => commitDefinition((current) => updatePage(current, pageIndex, { description: event.target.value }))} maxLength={1000} /></label>
-                      <PageConditionEditor
-                        definition={definition}
-                        pageIndex={pageIndex}
-                        condition={page.condition}
-                        onChange={(condition) => commitDefinition((current) => updatePage(current, pageIndex, { condition }))}
-                      />
-                      <div className={styles.fieldList}>
-                        {page.fields.map((field, fieldIndex) => <FieldEditor
-                          key={field.id}
-                          field={field}
-                          pageIndex={pageIndex}
-                          fieldIndex={fieldIndex}
-                          definition={definition}
-                          onUpdate={(patch) => commitDefinition((current) => updateField(current, pageIndex, fieldIndex, patch))}
-                          onMove={(to) => commitDefinition((current) => moveField(current, pageIndex, fieldIndex, to))}
-                          onDuplicate={() => commitDefinition((current) => duplicateField(current, pageIndex, fieldIndex))}
-                          onDelete={() => commitDefinition((current) => removeField(current, field.id))}
-                        />)}
+                      <fieldset disabled={!capabilities?.canManage || selectedForm.status === 'archived'} className={styles.pageMetaFields}>
+                        <label>عنوان صفحه<input value={activePage.title} onChange={(event) => commitDefinition((current) => updatePage(current, activePageIndex, { title: event.target.value }))} maxLength={160} /></label>
+                        <details className={styles.formCopyDetails}>
+                          <summary>توضیح و شرط نمایش صفحه</summary>
+                          <label>توضیح صفحه<textarea rows={2} value={activePage.description} onChange={(event) => commitDefinition((current) => updatePage(current, activePageIndex, { description: event.target.value }))} maxLength={1000} /></label>
+                          <PageConditionEditor definition={definition} pageIndex={activePageIndex} condition={activePage.condition} onChange={(condition) => commitDefinition((current) => updatePage(current, activePageIndex, { condition }))} />
+                        </details>
+                      </fieldset>
+
+                      <div className={styles.fieldBuilder}>
+                        <section className={styles.fieldListPanel} aria-label="پرسش‌های صفحه">
+                          <div className={styles.sectionHeading}><div><h6>پرسش‌های این صفحه</h6><p>یک پرسش را انتخاب کنید تا تنظیماتش در پنل کناری باز شود.</p></div><Badge tone="neutral">{activePage.fields.length.toLocaleString('fa-IR')}</Badge></div>
+                          {activePage.fields.length === 0 ? <p className={styles.emptyFieldList}>هنوز پرسشی در این صفحه نیست؛ از فهرست نوع پرسش‌ها یک مورد اضافه کنید.</p> : (
+                            <ul className={styles.fieldList}>
+                              {activePage.fields.map((field, fieldIndex) => <li className={styles.fieldListItem} key={field.id} onDragOver={(event) => { if (event.dataTransfer.types.includes('application/x-funtino-field-index')) event.preventDefault(); }} onDrop={(event) => {
+                                if (!event.dataTransfer.types.includes('application/x-funtino-field-index')) return;
+                                event.preventDefault();
+                                const from = Number(event.dataTransfer.getData('application/x-funtino-field-index'));
+                                if (Number.isInteger(from)) moveActiveField(from, fieldIndex);
+                              }}>
+                                <span className={styles.dragHandle} draggable aria-hidden="true" title="برای جابه‌جایی بکشید" onDragStart={(event) => {
+                                  event.dataTransfer.setData('application/x-funtino-field-index', String(fieldIndex));
+                                  event.dataTransfer.effectAllowed = 'move';
+                                }}>⠿</span>
+                                <button type="button" className={selectedField?.id === field.id ? styles.fieldSelectActive : styles.fieldSelect} aria-pressed={selectedField?.id === field.id} onClick={() => setSelectedFieldId(field.id)}>
+                                  <span className={styles.fieldSelectTop}><Badge tone="neutral">{fieldLabels[field.type]}</Badge>{field.required && <small>الزامی</small>}{field.sensitive && <small>حساس</small>}</span>
+                                  <strong>{field.label || 'پرسش بدون برچسب'}</strong>
+                                  {field.description && <span>{field.description}</span>}
+                                </button>
+                              </li>)}
+                            </ul>
+                          )}
+                          <div className={styles.liveAnnouncement} aria-live="polite" aria-atomic="true">{reorderAnnouncement}</div>
+                        </section>
+                        <aside className={styles.fieldInspector} aria-label="تنظیمات پرسش انتخاب‌شده">
+                          {selectedField && selectedFieldIndex >= 0 ? <FieldEditor
+                            field={selectedField}
+                            pageIndex={activePageIndex}
+                            fieldIndex={selectedFieldIndex}
+                            definition={definition}
+                            disabled={!capabilities?.canManage || selectedForm.status === 'archived'}
+                            onUpdate={(patch) => commitDefinition((current) => updateField(current, activePageIndex, selectedFieldIndex, patch))}
+                            onMove={(to) => moveActiveField(selectedFieldIndex, to)}
+                            onDuplicate={() => commitDefinition((current) => duplicateField(current, activePageIndex, selectedFieldIndex))}
+                            onDelete={() => {
+                              const next = removeField(definition, selectedField.id);
+                              commitDefinition(() => next);
+                              setSelectedFieldId(activePage.fields[Math.max(0, selectedFieldIndex - 1)]?.id ?? null);
+                            }}
+                          /> : <div className={styles.inspectorEmpty}><span aria-hidden="true">⚙</span><h6>پرسشی انتخاب نشده</h6><p>برای ویرایش برچسب، گزینه‌ها، شرط‌ها و اعتبارسنجی، یک پرسش را انتخاب کنید.</p></div>}
+                        </aside>
                       </div>
-                      <div className={styles.addFieldRow}>
-                        <label>نوع پرسش<select id={`field-type-${page.id}`} defaultValue="short_text">{formFieldTypes.map((type) => <option key={type} value={type}>{fieldLabels[type]}</option>)}</select></label>
-                        <Button type="button" tone="secondary" onClick={() => {
-                          const select = document.getElementById(`field-type-${page.id}`) as HTMLSelectElement | null;
-                          if (select) commitDefinition((current) => addField(current, pageIndex, select.value as FormFieldType));
-                        }}>افزودن پرسش</Button>
-                      </div>
-                    </div>)}
+
+                      <section className={styles.fieldPalette} aria-labelledby="field-palette-heading">
+                        <div className={styles.sectionHeading}><div><h6 id="field-palette-heading">افزودن پرسش</h6><p>{totalFieldCount >= 100 ? 'حداکثر ۱۰۰ پرسش برای هر فرم مجاز است.' : 'نوع داده را از دسته‌ی مناسب انتخاب کنید.'}</p></div><Badge tone="neutral">{totalFieldCount.toLocaleString('fa-IR')} / ۱۰۰</Badge></div>
+                        <fieldset disabled={!capabilities?.canManage || selectedForm.status === 'archived' || totalFieldCount >= 100} className={styles.fieldGroups}>
+                          {fieldGroups.map((group) => <div className={styles.fieldGroup} key={group.label}>
+                            <h6>{group.label}</h6>
+                            <div className={styles.fieldTypeGrid}>{group.types.map((type) => <Button key={type} type="button" tone="ghost" onClick={() => {
+                              const next = addField(definition, activePageIndex, type);
+                              const field = next.pages[activePageIndex]?.fields.at(-1);
+                              commitDefinition(() => next);
+                              setSelectedFieldId(field?.id ?? null);
+                            }}>{fieldLabels[type]}</Button>)}</div>
+                          </div>)}
+                        </fieldset>
+                        <p className={styles.helper}>بارگذاری فایل یا تصویر، امضا و محاسبه‌ی خودکار تا آماده‌شدن قرارداد ذخیره‌سازی و دانلود در دسترس نیست.</p>
+                      </section>
+                    </section>}
+                  </section>
+                </main>
+                <aside className={styles.builderAside}>
+                  <div className={styles.builderAsideCard}>
+                    <Badge tone={selectedForm.status === 'published' ? 'success' : selectedForm.status === 'paused' ? 'warning' : 'neutral'}>{formStatusLabels[selectedForm.status]}</Badge>
+                    <h4>نسخه‌ی منتشرشده</h4>
+                    <strong>{selectedForm.currentVersion ? selectedForm.currentVersion.toLocaleString('fa-IR') : 'هنوز نسخه‌ای منتشر نشده'}</strong>
+                    {selectedForm.publishedAt && <time dateTime={selectedForm.publishedAt}>آخرین انتشار: {new Date(selectedForm.publishedAt).toLocaleDateString('fa-IR')}</time>}
+                    <p>تغییرهای پیش‌نویس با انتشار بعدی به نسخه‌ی تازه تبدیل می‌شوند.</p>
+                    <Button type="button" tone="secondary" onClick={() => setActiveTab('preview')}>دیدن پیش‌نمایش</Button>
                   </div>
-                  <section className={styles.themeSettings} aria-labelledby="form-theme-heading">
-                    <h4 id="form-theme-heading">ظاهر فرم</h4>
+                  <div className={styles.builderAsideCard}>
+                    <h4>راهنمای وضعیت</h4>
+                    <p>تغییرها پس از مکث کوتاه خودکار ذخیره می‌شوند. انتشار به دلیل ثبت‌شده نیاز دارد.</p>
+                    {!capabilities?.canManage && <p className={styles.helper}>برای ویرایش مجوز forms.manage لازم است.</p>}
+                    {!capabilities?.canPublish && <p className={styles.helper}>برای انتشار مجوز forms.publish لازم است.</p>}
+                  </div>
+                </aside>
+              </div>
+            ) : activeTab === 'settings' ? (
+              <div className={styles.settingsWorkspace}>
+                <section className={styles.themeSettings} aria-labelledby="form-theme-heading">
+                  <div className={styles.sectionHeading}><div><h4 id="form-theme-heading">ظاهر و تجربه‌ی فرم</h4><p>این تنظیم‌ها روی پیش‌نمایش و نسخه‌ی بعدی فرم اعمال می‌شوند.</p></div></div>
+                  <fieldset disabled={!capabilities?.canManage || selectedForm.status === 'archived'} className={styles.settingsFields}>
                     <div className={styles.twoColumns}>
                       <label>رنگ اصلی<input type="color" value={definition.theme.primaryColor} onChange={(event) => commitDefinition((current) => ({ ...current, theme: { ...current.theme, primaryColor: event.target.value } }))} /></label>
                       <label>رنگ تأکیدی<input type="color" value={definition.theme.accentColor} onChange={(event) => commitDefinition((current) => ({ ...current, theme: { ...current.theme, accentColor: event.target.value } }))} /></label>
                       <label>پس‌زمینه<input type="color" value={definition.theme.backgroundColor} onChange={(event) => commitDefinition((current) => ({ ...current, theme: { ...current.theme, backgroundColor: event.target.value } }))} /></label>
                       <label>سطح کارت<input type="color" value={definition.theme.surfaceColor} onChange={(event) => commitDefinition((current) => ({ ...current, theme: { ...current.theme, surfaceColor: event.target.value } }))} /></label>
-                      <label>فونت امن<select value={definition.theme.font} onChange={(event) => commitDefinition((current) => ({ ...current, theme: { ...current.theme, font: event.target.value as FormDefinition['theme']['font'] } }))}><option value="estedad">استعداد</option><option value="vazirmatn">وزیرمتن</option></select></label>
+                      <label>فونت فرم<select value={definition.theme.font} onChange={(event) => commitDefinition((current) => ({ ...current, theme: { ...current.theme, font: event.target.value as FormDefinition['theme']['font'] } }))}><option value="estedad">استعداد</option><option value="vazirmatn">وزیرمتن</option></select></label>
                       <label>گردی گوشه‌ها<select value={definition.theme.cornerStyle} onChange={(event) => commitDefinition((current) => ({ ...current, theme: { ...current.theme, cornerStyle: event.target.value as FormDefinition['theme']['cornerStyle'] } }))}><option value="soft">ملایم</option><option value="rounded">گرد</option><option value="pill">کپسولی</option></select></label>
                       <label>چیدمان<select value={definition.theme.layout} onChange={(event) => commitDefinition((current) => ({ ...current, theme: { ...current.theme, layout: event.target.value as FormDefinition['theme']['layout'] } }))}><option value="paged">مرحله‌ای</option><option value="single">یک‌صفحه‌ای</option></select></label>
                       <label className={styles.checkbox}><input type="checkbox" checked={definition.theme.showProgress} onChange={(event) => commitDefinition((current) => ({ ...current, theme: { ...current.theme, showProgress: event.target.checked } }))} />نمایش نوار پیشرفت</label>
                     </div>
-                  </section>
-                  <section className={styles.settings} aria-labelledby="form-settings-heading">
-                    <h4 id="form-settings-heading">دسترسی و انتشار</h4>
+                  </fieldset>
+                </section>
+                <section className={styles.settingsCard} aria-labelledby="form-settings-heading">
+                  <div className={styles.sectionHeading}><div><h4 id="form-settings-heading">دسترسی و زمان‌بندی</h4><p>تنظیم‌های دسترسی پیش از انتشار یا توقف قابل تغییرند.</p></div></div>
+                  <fieldset disabled={!capabilities?.canManage || selectedForm.status === 'archived'} className={styles.settingsFields}>
                     <div className={styles.twoColumns}>
-                      <label>دسترسی پاسخ‌گویی<select value={settingsDraft.accessMode} onChange={(event) => setSettingsDraft({ ...settingsDraft, accessMode: event.target.value as FormSettingsDraft['accessMode'] })}><option value="guest">مهمان</option><option value="optional_auth">ورود اختیاری</option><option value="auth_required">ورود الزامی</option></select></label>
-                      <label className={styles.checkbox}><input type="checkbox" checked={settingsDraft.linkEnabled} onChange={(event) => setSettingsDraft({ ...settingsDraft, linkEnabled: event.target.checked })} />پیوند عمومی فعال باشد</label>
+                      <label>دسترسی پاسخ‌گویی<select value={settingsDraft.accessMode} onChange={(event) => setSettingsDraft({ ...settingsDraft, accessMode: event.target.value as FormSettingsDraft['accessMode'] })}><option value="guest">بدون ورود</option><option value="optional_auth">ورود اختیاری</option><option value="auth_required">ورود الزامی</option></select></label>
+                      <label className={styles.checkbox}><input type="checkbox" checked={settingsDraft.linkEnabled} onChange={(event) => setSettingsDraft({ ...settingsDraft, linkEnabled: event.target.checked })} />فعال‌بودن پیوند عمومی</label>
                       <label>شروع دسترسی<input type="datetime-local" value={settingsDraft.startsAt} onChange={(event) => setSettingsDraft({ ...settingsDraft, startsAt: event.target.value })} /></label>
                       <label>پایان دسترسی<input type="datetime-local" value={settingsDraft.endsAt} onChange={(event) => setSettingsDraft({ ...settingsDraft, endsAt: event.target.value })} /></label>
-                      <label>سقف پاسخ‌ها<input type="number" min="1" value={settingsDraft.responseLimit} onChange={(event) => setSettingsDraft({ ...settingsDraft, responseLimit: event.target.value })} placeholder="بدون سقف" /></label>
+                      <label>سقف پاسخ‌ها<input type="number" min="1" step="1" value={settingsDraft.responseLimit} onChange={(event) => setSettingsDraft({ ...settingsDraft, responseLimit: event.target.value })} placeholder="بدون سقف" /></label>
                     </div>
-                    <Button type="button" tone="secondary" disabled={saving || !capabilities?.canManage} onClick={() => void saveSettings()}>ذخیره‌ی تنظیمات</Button>
-                    <label className={styles.reason}>دلیل تغییر وضعیت<input value={reason} onChange={(event) => setReason(event.target.value)} minLength={8} maxLength={500} /></label>
+                  </fieldset>
+                  {settingsDirty && <p className={styles.helper} role="status">تنظیم‌های دسترسی ذخیره نشده‌اند؛ پیش از انتشار آن‌ها را ذخیره کنید.</p>}
+                  <Button type="button" tone="secondary" disabled={saving || !settingsDirty || !capabilities?.canManage || selectedForm.status === 'archived'} onClick={() => void saveSettings()}>ذخیره‌ی تنظیمات دسترسی</Button>
+                  <div className={styles.sharePanel}>
+                    <div><h5>پیوند فرم</h5><p>{selectedForm.status === 'published' && selectedForm.linkEnabled ? 'فرم منتشر شده و پیوند عمومی فعال است.' : 'برای فعال‌شدن پیوند، فرم را منتشر کنید و دسترسی عمومی را روشن بگذارید.'}</p></div>
+                    <Button type="button" tone="ghost" disabled={selectedForm.status !== 'published' || !selectedForm.linkEnabled} onClick={() => void copyPublicLink()}>کپی پیوند عمومی</Button>
+                  </div>
+                  <label className={styles.reason}>دلیل تغییر وضعیت، حداقل ۸ نویسه<input value={reason} onChange={(event) => setReason(event.target.value)} minLength={8} maxLength={500} /></label>
+                  <div className={styles.publishPanel}>
+                    <div><h5>انتشار و وضعیت فرم</h5><p>هر انتشار نسخه‌ی تغییرناپذیر می‌سازد؛ دلیل در سابقه‌ی مدیریتی ثبت می‌شود.</p></div>
                     <div className={styles.inlineActions}>
-                      <Button type="button" disabled={saving || !capabilities?.canPublish || reason.trim().length < 8 || draftDirty} onClick={() => void changeFormState('publish')}>انتشار نسخه‌ی تازه</Button>
+                      <Button type="button" disabled={saving || settingsDirty || !capabilities?.canPublish || reason.trim().length < 8} onClick={() => void changeFormState('publish')}>{selectedForm.currentVersion ? 'انتشار نسخه‌ی تازه' : 'انتشار فرم'}</Button>
                       {selectedForm.status === 'published' && <Button type="button" tone="secondary" disabled={saving || !capabilities?.canPublish || reason.trim().length < 8} onClick={() => void changeFormState('pause')}>توقف فرم</Button>}
                       {selectedForm.status !== 'archived' && <Button type="button" tone="ghost" disabled={saving || !capabilities?.canPublish || reason.trim().length < 8} onClick={() => void changeFormState('archive')}>بایگانی</Button>}
                     </div>
-                    {!capabilities?.canManage && <p className={styles.helper}>برای ویرایش فرم مجوز forms.manage لازم است.</p>}
-                    {!capabilities?.canPublish && <p className={styles.helper}>برای انتشار یا تغییر وضعیت مجوز forms.publish لازم است.</p>}
-                  </section>
-                  {capabilities?.canManageTemplates && <form className={styles.templateSave} onSubmit={(event) => void createTemplate(event)}>
-                    <h4>ذخیره‌ی قالب در محدوده‌ی فعلی</h4>
-                    <label>نام قالب<input required value={templateName} onChange={(event) => setTemplateName(event.target.value)} maxLength={120} /></label>
-                    <label>توضیح<textarea rows={2} value={templateDescription} onChange={(event) => setTemplateDescription(event.target.value)} maxLength={500} /></label>
-                    <Button type="submit" tone="ghost" disabled={saving || !templateName.trim()}>ذخیره به‌عنوان قالب</Button>
-                  </form>}
-                </div>
-                <div className={`${styles.previewColumn} ${previewViewport === 'mobile' ? styles.previewMobile : ''}`}>
-                  <div className={styles.sectionHeading}><h4>پیش‌نمایش زنده</h4><div className={styles.inlineActions}><Button type="button" tone={previewViewport === 'desktop' ? 'primary' : 'ghost'} aria-pressed={previewViewport === 'desktop'} onClick={() => setPreviewViewport('desktop')}>دسکتاپ</Button><Button type="button" tone={previewViewport === 'mobile' ? 'primary' : 'ghost'} aria-pressed={previewViewport === 'mobile'} onClick={() => setPreviewViewport('mobile')}>موبایل</Button><Button type="button" tone="ghost" onClick={() => { setPreviewAnswers({}); setPreviewPage(0); }}>بازنشانی</Button></div></div>
-                  <FormRenderer definition={definition} answers={previewAnswers} onAnswerChange={(id, value) => setPreviewAnswers((current) => ({ ...current, [id]: value }))} pageIndex={previewPage} onPageChange={setPreviewPage} mode="preview" />
-                  <p className={styles.helper}>بارگذاری فایل/تصویر، امضا و فیلد محاسباتی تا تصمیم ذخیره‌سازی و قرارداد دانلود ارائه نمی‌شوند.</p>
-                </div>
+                  </div>
+                  {selectedForm.status === 'archived' && <p className={styles.helper}>فرم بایگانی‌شده قابل ویرایش نیست.</p>}
+                  {!capabilities?.canManage && <p className={styles.helper}>برای ویرایش فرم مجوز forms.manage لازم است.</p>}
+                  {!capabilities?.canPublish && <p className={styles.helper}>برای انتشار یا تغییر وضعیت مجوز forms.publish لازم است.</p>}
+                </section>
+                {capabilities?.canManageTemplates && <form className={styles.templateSave} onSubmit={(event) => void createTemplate(event)}>
+                  <div><h4>ذخیره به‌عنوان قالب</h4><p>از ساختار فعلی، یک قالب برای محدوده‌ی همین شعبه بسازید.</p></div>
+                  <label>نام قالب<input required value={templateName} onChange={(event) => setTemplateName(event.target.value)} maxLength={120} /></label>
+                  <label>توضیح<textarea rows={2} value={templateDescription} onChange={(event) => setTemplateDescription(event.target.value)} maxLength={500} /></label>
+                  <Button type="submit" tone="ghost" disabled={saving || !templateName.trim() || selectedForm.status === 'archived'}>ذخیره‌ی قالب</Button>
+                </form>}
               </div>
-            </> : <ResponseManagement
-              form={selectedForm}
-              scope={formScope!}
-              capabilities={capabilities}
-              responses={responses}
-              stats={responseStats}
-              loading={responsesLoading}
-              nextCursor={responseNextCursor}
-              selectedResponse={selectedResponse}
-              responseStatusFilter={responseStatusFilter}
-              responseFrom={responseFrom}
-              responseTo={responseTo}
-              searchFieldId={searchFieldId}
-              searchableFields={searchableFields}
-              responseSearch={responseSearch}
-              responseStatusDraft={responseStatusDraft}
-              responseReason={responseReason}
-              noteDraft={noteDraft}
-              tagsDraft={tagsDraft}
-              includeSensitive={includeSensitive}
-              showSensitiveDetail={showSensitiveDetail}
-              showStepUp={showStepUp}
-              mfaStepUpUntil={mfaStepUpUntil}
-              onMfaStepUp={(validUntil) => { onMfaStepUp(validUntil); void refreshForms(); }}
-              onSessionExpired={onSessionExpired}
-              onLoadResponses={(cursor) => void loadResponses(Boolean(cursor), cursor ?? undefined)}
-              onOpenResponse={(id, sensitive) => void openResponse(id, sensitive)}
-              onStatusFilter={setResponseStatusFilter}
-              onDateFilter={(from, to) => { setResponseFrom(from); setResponseTo(to); }}
-              onSearchField={setSearchFieldId}
-              onSearch={setResponseSearch}
-              onResponseStatus={setResponseStatusDraft}
-              onResponseReason={setResponseReason}
-              onNote={setNoteDraft}
-              onTags={setTagsDraft}
-              onIncludeSensitive={setIncludeSensitive}
-              onShowStepUp={setShowStepUp}
-              onApplyFilters={() => void loadResponses(false)}
-              onExport={() => void exportCsv()}
-              onUpdateStatus={(event) => void updateResponseStatus(event)}
-              onCorrectResponse={(version, changes, reason) => correctResponse(version, changes, reason)}
-              onAddNote={(event) => void addNote(event)}
-              onSaveTags={() => void saveTags()}
-              saving={saving}
-            />}
-          </>}
-        </div>
+            ) : activeTab === 'preview' ? (
+              <div className={styles.previewWorkspace}>
+                <div className={styles.previewHeading}>
+                  <div><p className={styles.eyebrow}>پیش‌نمایش تعاملی</p><h4>نمای پاسخ‌دهنده</h4><p>پاسخ‌ها فقط در همین پیش‌نمایش نگه داشته می‌شوند و ارسال نمی‌شوند.</p></div>
+                  <div className={styles.inlineActions}>
+                    <Button type="button" tone={previewViewport === 'desktop' ? 'primary' : 'ghost'} aria-pressed={previewViewport === 'desktop'} onClick={() => setPreviewViewport('desktop')}>نمای دسکتاپ</Button>
+                    <Button type="button" tone={previewViewport === 'mobile' ? 'primary' : 'ghost'} aria-pressed={previewViewport === 'mobile'} onClick={() => setPreviewViewport('mobile')}>نمای موبایل</Button>
+                    <Button type="button" tone="ghost" onClick={() => { setPreviewAnswers({}); setPreviewPage(0); }}>بازنشانی پاسخ‌ها</Button>
+                  </div>
+                </div>
+                <div className={styles.previewFrame + ' ' + (previewViewport === 'mobile' ? styles.previewMobile : '')}>
+                  <FormRenderer definition={definition} answers={previewAnswers} onAnswerChange={(id, value) => setPreviewAnswers((current) => ({ ...current, [id]: value }))} pageIndex={Math.min(previewPage, Math.max(0, definition.pages.length - 1))} onPageChange={setPreviewPage} mode="preview" />
+                </div>
+                <p className={styles.helper}>فیلدهای بارگذاری فایل/تصویر، امضا و محاسباتی در قرارداد فعلی تعریف نشده‌اند.</p>
+              </div>
+            ) : (
+              <ResponseManagement
+                form={selectedForm}
+                scope={formScope!}
+                capabilities={capabilities}
+                responses={responses}
+                stats={responseStats}
+                loading={responsesLoading}
+                nextCursor={responseNextCursor}
+                selectedResponse={selectedResponse}
+                responseStatusFilter={responseStatusFilter}
+                responseFrom={responseFrom}
+                responseTo={responseTo}
+                searchFieldId={searchFieldId}
+                searchableFields={searchableFields}
+                responseSearch={responseSearch}
+                responseStatusDraft={responseStatusDraft}
+                responseReason={responseReason}
+                noteDraft={noteDraft}
+                tagsDraft={tagsDraft}
+                includeSensitive={includeSensitive}
+                showSensitiveDetail={showSensitiveDetail}
+                showStepUp={showStepUp}
+                mfaStepUpUntil={mfaStepUpUntil}
+                onMfaStepUp={(validUntil) => { onMfaStepUp(validUntil); void refreshForms(); }}
+                onSessionExpired={onSessionExpired}
+                onLoadResponses={(cursor) => void loadResponses(Boolean(cursor), cursor ?? undefined)}
+                onOpenResponse={(id, sensitive) => void openResponse(id, sensitive)}
+                onStatusFilter={setResponseStatusFilter}
+                onDateFilter={(from, to) => { setResponseFrom(from); setResponseTo(to); }}
+                onSearchField={setSearchFieldId}
+                onSearch={setResponseSearch}
+                onResponseStatus={setResponseStatusDraft}
+                onResponseReason={setResponseReason}
+                onNote={setNoteDraft}
+                onTags={setTagsDraft}
+                onIncludeSensitive={setIncludeSensitive}
+                onShowStepUp={setShowStepUp}
+                onApplyFilters={() => void loadResponses(false)}
+                onExport={() => void exportCsv()}
+                onUpdateStatus={(event) => void updateResponseStatus(event)}
+                onCorrectResponse={(version, changes, reason) => correctResponse(version, changes, reason)}
+                onAddNote={(event) => void addNote(event)}
+                onSaveTags={() => void saveTags()}
+                saving={saving}
+              />
+            )}
+          </>
+        )}
       </div>
     </section>
   );
@@ -864,7 +1246,7 @@ function ResponseManagement(props: ResponseManagementProps) {
     setAnswerDraft(selectedResponse?.answers ?? {});
     setCorrectionReason('');
     setCorrectionError('');
-  }, [selectedResponse?.id, selectedResponse?.correctionVersion]);
+  }, [selectedResponse?.answers, selectedResponse?.id, selectedResponse?.correctionVersion]);
 
   async function saveCorrection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -973,6 +1355,7 @@ function FieldEditor({
   pageIndex,
   fieldIndex,
   definition,
+  disabled,
   onUpdate,
   onMove,
   onDuplicate,
@@ -982,6 +1365,7 @@ function FieldEditor({
   pageIndex: number;
   fieldIndex: number;
   definition: FormDefinition;
+  disabled: boolean;
   onUpdate: (patch: Partial<FormField>) => void;
   onMove: (to: number) => void;
   onDuplicate: () => void;
@@ -1007,7 +1391,7 @@ function FieldEditor({
     else onUpdate({ options: choices.filter((_, current) => current !== index) });
   };
   return (
-    <fieldset className={styles.fieldEditor} draggable onDragStart={(event) => event.dataTransfer.setData('text/plain', String(fieldIndex))} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const from = Number(event.dataTransfer.getData('text/plain')); if (Number.isInteger(from)) onMove(from); }}>
+    <fieldset className={styles.fieldEditor} disabled={disabled}>
       <legend>{fieldLabels[field.type]} · {field.label}</legend>
       <div className={styles.fieldTopline}>
         <span className={styles.dragHandle} aria-hidden="true">⠿</span>
@@ -1308,8 +1692,34 @@ function normalizeDefinition(definition: FormDefinition): FormDefinition {
   return parsed.success ? parsed.data : { ...definition, pages };
 }
 
+function formatDefinitionIssue(path: Array<string | number>, definition: FormDefinition): string {
+  const pageIndex = path[0] === 'pages' && typeof path[1] === 'number' ? path[1] : -1;
+  const fieldIndex = path[2] === 'fields' && typeof path[3] === 'number' ? path[3] : -1;
+  const page = definition.pages[pageIndex];
+  const field = page?.fields[fieldIndex];
+  const property = String(path.at(-1) ?? '');
+  const propertyLabels: Record<string, string> = {
+    title: 'عنوان', label: 'برچسب پرسش', description: 'توضیح', options: 'گزینه‌ها', rows: 'ردیف‌های ماتریس',
+    condition: 'شرط نمایش', sensitive: 'تنظیم داده‌ی حساس', prefillKey: 'پارامتر مجاز', max: 'مقیاس امتیاز',
+    minLength: 'کمترین طول', maxLength: 'بیشترین طول', pages: 'صفحه‌ها', theme: 'ظاهر فرم',
+  };
+  const subject = field ? `پرسش «${field.label || 'بدون برچسب'}»` : page ? `صفحه‌ی «${page.title}»` : 'فرم';
+  const detail = property === 'options' ? 'حداقل دو گزینه وارد کنید.'
+    : property === 'rows' ? 'ردیف‌های ماتریس و ستون‌های آن را تکمیل کنید.'
+      : property === 'condition' ? 'شرط نمایش باید به پرسشی قبلی اشاره کند.'
+        : `${propertyLabels[property] ?? 'اطلاعات این بخش'} را بررسی کنید.`;
+  return `${subject}: ${detail}`;
+}
+
 function settingsFromForm(form: OperationsForm): FormSettingsDraft {
-  const local = (value: string | null) => value ? new Date(value).toISOString().slice(0, 16) : '';
+  const local = (value: string | null) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+    const pad = (part: number) => String(part).padStart(2, '0');
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+      + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+  };
   return {
     accessMode: form.accessMode,
     linkEnabled: form.linkEnabled,

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint .",
-    "test": "tsx --test src/tests/operations-staff.api.spec.ts src/tests/operations-devices.api.spec.ts src/tests/operations-cards.api.spec.ts src/tests/operations-reports.api.spec.ts",
+    "test": "tsx --test src/tests/operations-staff.api.spec.ts src/tests/operations-devices.api.spec.ts src/tests/operations-cards.api.spec.ts src/tests/operations-reports.api.spec.ts src/tests/operations-forms.api.spec.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
