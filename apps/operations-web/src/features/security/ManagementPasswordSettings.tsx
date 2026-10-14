@@ -22,6 +22,7 @@ export function ManagementPasswordSettings() {
   const [confirmation, setConfirmation] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -30,11 +31,14 @@ export function ManagementPasswordSettings() {
   }, []);
 
   async function refresh() {
+    setLoadingStatus(true);
     setError('');
     try {
       setStatus(await apiRequest<PasswordStatus>('/api/v1/auth/management/password'));
     } catch (failure) {
       setError(messageFor(failure));
+    } finally {
+      setLoadingStatus(false);
     }
   }
 
@@ -135,7 +139,12 @@ export function ManagementPasswordSettings() {
           فقط برای فرمان‌های پرریسک درخواست می‌شود.
         </p>
 
-        {!isReady && !error && <p role="status">در حال دریافت وضعیت رمز…</p>}
+        {!isReady && !error && (
+          <p className={styles.loading} role="status" aria-live="polite">
+            <span aria-hidden="true" className={styles.spinner} />
+            در حال دریافت وضعیت رمز…
+          </p>
+        )}
         {isReady && (
           <p className={status.enabled ? styles.enabled : styles.disabled} role="status">
             رمز مدیریت{' '}
@@ -143,9 +152,16 @@ export function ManagementPasswordSettings() {
           </p>
         )}
         {error && (
-          <p className={styles.error} role="alert">
-            {error}
-          </p>
+          <div className={styles.errorBlock}>
+            <p className={styles.error} role="alert">
+              {error}
+            </p>
+            {!isReady && (
+              <button disabled={loadingStatus} onClick={() => void refresh()} type="button">
+                {loadingStatus ? 'در حال بررسی…' : 'تلاش دوباره'}
+              </button>
+            )}
+          </div>
         )}
         {notice && (
           <p className={styles.notice} role="status" aria-live="polite">

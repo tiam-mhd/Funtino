@@ -472,3 +472,43 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.manager {
+  gap: 16px;
+  margin-top: 0;
+}
+
+.panel,
+.filters,
+.metric,
+.deviceCard,
+.state {
+  border-color: var(--ft-line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.filters {
+  background: #fff;
+}
+
+.deviceCard {
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.field input,
+.field select,
+.field textarea {
+  border-color: #cfd9e1;
+  border-radius: 9px;
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+  box-shadow: var(--ft-focus);
+}
+
+.manageDetails > summary {
+  min-height: 44px;
+}

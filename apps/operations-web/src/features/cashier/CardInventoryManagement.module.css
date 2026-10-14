@@ -319,3 +319,39 @@
     flex: 1 1 auto;
   }
 }
+
+.manager {
+  gap: 16px;
+  margin-top: 0;
+}
+
+.filters,
+.panel,
+.scopeBanner,
+.state,
+.card {
+  border-color: var(--ft-line);
+  border-radius: 14px;
+  background-color: #fff;
+}
+
+.card {
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.filters {
+  background: #fff;
+}
+
+.field input,
+.field select,
+.field textarea {
+  border-color: #cfd9e1;
+  border-radius: 9px;
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+  box-shadow: var(--ft-focus);
+}

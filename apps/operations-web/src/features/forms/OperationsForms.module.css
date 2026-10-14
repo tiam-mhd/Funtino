@@ -1768,3 +1768,45 @@
     animation: none;
   }
 }
+
+.page {
+  gap: 20px;
+  margin-top: 0;
+}
+
+.sidebar,
+.editor,
+.previewColumn,
+.responses,
+.settings,
+.responseDetail {
+  border-color: var(--ft-line);
+  border-radius: 14px;
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.aggregateReport {
+  border-color: var(--ft-line);
+  border-radius: 14px;
+}
+
+.formItem {
+  border-radius: 11px;
+}
+
+.formItemActive {
+  border-color: #9ecbc6;
+  background: #f1f8f7;
+  box-shadow: inset -3px 0 #0a7775;
+}
+
+.formCard,
+.responseItem {
+  border-color: var(--ft-line);
+  border-radius: 11px;
+}
+
+.formCard:hover,
+.responseItem:hover {
+  border-color: #bdced5;
+}

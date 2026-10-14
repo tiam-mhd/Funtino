@@ -866,3 +866,61 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.hero {
+  min-height: 148px;
+  border-color: var(--ft-line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.hero::after {
+  display: none;
+}
+
+.metricCard {
+  border-top: 1px solid var(--ft-line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.metric_teal,
+.metric_purple,
+.metric_orange,
+.metric_green,
+.metric_blue {
+  border-top-color: var(--ft-line);
+}
+
+.metric_purple .metricIcon,
+.metric_blue .metricIcon {
+  color: #356781;
+  background: #edf5f7;
+}
+
+.metric_orange .metricIcon {
+  color: #8c671d;
+  background: #fbf5e9;
+}
+
+.metric_green .metricIcon,
+.metric_teal .metricIcon {
+  color: #176c68;
+  background: #eaf5f3;
+}
+
+.refreshButton,
+.panelHeading button,
+.emptyNotice button,
+.fullButton,
+.branchAction {
+  min-height: 42px !important;
+  border-radius: 10px !important;
+}
+
+@media (max-width: 700px) {
+  .hero {
+    min-height: 0;
+  }
+}

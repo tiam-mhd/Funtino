@@ -380,6 +380,53 @@
   scrollbar-color: #c9d2dc transparent;
   scrollbar-width: thin;
 }
+.mobileDirectory {
+  display: none;
+}
+.mobileBranchCard {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  border: 1px solid var(--ft-line);
+  border-radius: 13px;
+  padding: 13px;
+  background: #fff;
+}
+.mobileBranchHeading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mobileBranchMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.mobileBranchMetrics > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  border-radius: 9px;
+  padding: 9px;
+  background: #f5f8fa;
+}
+.mobileBranchMetrics dt {
+  color: var(--ft-muted);
+  font-size: 9px;
+}
+.mobileBranchMetrics dd {
+  margin: 0;
+  color: var(--ft-ink);
+  font-size: 11px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.mobileBranchCard > button {
+  min-height: 44px !important;
+}
 .table {
   width: 100%;
   min-width: 740px;
@@ -606,6 +653,13 @@
   .searchBox {
     width: 100%;
   }
+  .tableWrap {
+    display: none;
+  }
+  .mobileDirectory {
+    display: grid;
+    gap: 9px;
+  }
 }
 
 @media (max-width: 520px) {
@@ -617,7 +671,7 @@
     align-self: flex-start;
   }
   .summaryGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .summaryCard {
     grid-template-columns: 1fr auto;
@@ -655,6 +709,12 @@
   .loadMoreRow button {
     width: 100%;
   }
+  .mobileBranchMetrics {
+    gap: 5px;
+  }
+  .mobileBranchMetrics > div {
+    padding: 7px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -663,5 +723,58 @@
   .page *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+.intro {
+  border-color: var(--ft-line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.summaryCard {
+  border-color: var(--ft-line);
+  border-radius: 13px;
+  background: #fff;
+}
+
+.summary_teal,
+.summary_purple,
+.summary_orange,
+.summary_blue {
+  border-inline-start: 3px solid #9bbdc0;
+}
+
+.summary_purple,
+.summary_blue {
+  border-inline-start-color: #a8bfca;
+}
+
+.summary_orange {
+  border-inline-start-color: #cbb58a;
+}
+
+.filterActive {
+  color: #075e60;
+  background: #eaf5f3;
+}
+
+.tableWrap {
+  border-color: var(--ft-line);
+  border-radius: 12px;
+}
+
+.table thead {
+  background: #f4f7f9;
+}
+
+.table tbody tr:hover {
+  background: #f8fbfb;
+}
+
+@media (max-width: 760px) {
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

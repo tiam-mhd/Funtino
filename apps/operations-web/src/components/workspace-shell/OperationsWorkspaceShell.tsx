@@ -56,12 +56,14 @@ const sectionDescriptions: Record<WorkspaceSection, string> = {
   forms: 'فرم‌های مجموعه و پاسخ‌های ثبت‌شده',
 };
 
-const navigationGroups: Array<{ label: string; sections: WorkspaceSection[] }> = [
-  { label: 'پیشخوان', sections: ['overview', 'branches'] },
-  { label: 'مدیریت', sections: ['staff', 'family', 'forms'] },
-  { label: 'عملیات', sections: ['devices', 'cards'] },
-  { label: 'پایش', sections: ['reports'] },
+const navigationGroups: Array<{ id: string; label: string; sections: WorkspaceSection[] }> = [
+  { id: 'overview', label: 'پیشخوان', sections: ['overview', 'branches'] },
+  { id: 'management', label: 'مدیریت', sections: ['staff', 'family', 'forms'] },
+  { id: 'operations', label: 'عملیات', sections: ['devices', 'cards'] },
+  { id: 'monitoring', label: 'پایش', sections: ['reports'] },
 ];
+
+const expandedGroupsStorageKey = 'funtino-operations-sidebar-groups';
 
 function scopeLabel(option: OperationsScopeOption) {
   return option.scope.type === 'organization' ? 'همهٔ شعب' : (option.branch?.name ?? 'شعبه');
@@ -91,6 +93,8 @@ export function OperationsWorkspaceShell({
   const [isMobile, setIsMobile] = useState(false);
   const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
   const [preferencesReady, setPreferencesReady] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
+  const initialActiveSection = useRef(activeSection);
   const sidebarRef = useRef<HTMLElement>(null);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const scopeMenuRef = useRef<HTMLDivElement>(null);
@@ -108,8 +112,31 @@ export function OperationsWorkspaceShell({
   useEffect(() => {
     try {
       setCollapsed(window.localStorage.getItem('funtino-operations-sidebar-collapsed') === 'true');
+      const savedGroups = window.localStorage.getItem(expandedGroupsStorageKey);
+      const activeGroup = navigationGroups.find((group) =>
+        group.sections.includes(initialActiveSection.current),
+      );
+      const parsedGroups: unknown = savedGroups ? JSON.parse(savedGroups) : [];
+      setExpandedGroups(
+        Array.isArray(parsedGroups)
+          ? [
+              ...new Set(
+                [
+                  ...parsedGroups.filter((value): value is string => typeof value === 'string'),
+                  activeGroup?.id,
+                ].filter((value): value is string => Boolean(value)),
+              ),
+            ]
+          : activeGroup
+            ? [activeGroup.id]
+            : [],
+      );
     } catch {
       setCollapsed(false);
+      const activeGroup = navigationGroups.find((group) =>
+        group.sections.includes(initialActiveSection.current),
+      );
+      setExpandedGroups(activeGroup ? [activeGroup.id] : []);
     }
     setPreferencesReady(true);
   }, []);
@@ -122,6 +149,24 @@ export function OperationsWorkspaceShell({
       // The menu still works when browser storage is unavailable.
     }
   }, [collapsed, preferencesReady]);
+
+  useEffect(() => {
+    if (!preferencesReady) return;
+    try {
+      window.localStorage.setItem(expandedGroupsStorageKey, JSON.stringify(expandedGroups));
+    } catch {
+      // Group controls remain usable when browser storage is unavailable.
+    }
+  }, [expandedGroups, preferencesReady]);
+
+  useEffect(() => {
+    const activeGroup = navigationGroups.find((group) => group.sections.includes(activeSection));
+    if (activeGroup) {
+      setExpandedGroups((current) =>
+        current.includes(activeGroup.id) ? current : [...current, activeGroup.id],
+      );
+    }
+  }, [activeSection]);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 900px)');
@@ -210,6 +255,10 @@ export function OperationsWorkspaceShell({
     void onSelectScope(scope);
   }
 
+  const currentGroupId = navigationGroups.find((group) =>
+    group.sections.includes(activeSection),
+  )?.id;
+
   return (
     <div className={`${styles.shell} ${collapsed ? styles.collapsed : ''}`}>
       {isMobile && mobileOpen && (
@@ -281,25 +330,52 @@ export function OperationsWorkspaceShell({
               (section) => section !== 'branches' || activeScope.scope.type === 'organization',
             );
             if (sections.length === 0) return null;
+            const expanded = expandedGroups.includes(group.id);
+            const visibleSections = expanded
+              ? sections
+              : sections.filter((section) => section === activeSection);
             return (
               <div className={styles.navGroup} key={group.label}>
-                <h2 className={styles.groupLabel}>{group.label}</h2>
-                {sections.map((section) => (
+                <h2
+                  className={`${styles.groupLabel} ${currentGroupId === group.id ? styles.groupLabelActive : ''}`}
+                >
                   <button
-                    aria-current={activeSection === section ? 'page' : undefined}
-                    className={`${styles.navItem} ${activeSection === section ? styles.navItemActive : ''}`}
-                    data-nav-item
-                    key={section}
-                    onClick={() => chooseSection(section)}
-                    title={collapsed ? sectionLabels[section] : undefined}
+                    aria-controls={`operations-nav-${group.id}`}
+                    aria-expanded={expanded}
+                    aria-label={`${expanded ? 'بستن' : 'بازکردن'} گروه ${group.label}${currentGroupId === group.id ? `؛ بخش جاری ${sectionLabels[activeSection]}` : ''}`}
+                    className={styles.groupToggle}
+                    onClick={() =>
+                      setExpandedGroups((current) =>
+                        current.includes(group.id)
+                          ? current.filter((id) => id !== group.id)
+                          : [...current, group.id],
+                      )
+                    }
+                    title={collapsed ? group.label : undefined}
                     type="button"
                   >
-                    <span aria-hidden="true" className={styles.navIcon}>
-                      <Icon name={section} />
-                    </span>
-                    <span className={styles.navLabel}>{sectionLabels[section]}</span>
+                    <span>{group.label}</span>
+                    <Icon name="chevronDown" />
                   </button>
-                ))}
+                </h2>
+                <div className={styles.navItems} id={`operations-nav-${group.id}`}>
+                  {visibleSections.map((section) => (
+                    <button
+                      aria-current={activeSection === section ? 'page' : undefined}
+                      className={`${styles.navItem} ${activeSection === section ? styles.navItemActive : ''}`}
+                      data-nav-item
+                      key={section}
+                      onClick={() => chooseSection(section)}
+                      title={collapsed ? sectionLabels[section] : undefined}
+                      type="button"
+                    >
+                      <span aria-hidden="true" className={styles.navIcon}>
+                        <Icon name={section} />
+                      </span>
+                      <span className={styles.navLabel}>{sectionLabels[section]}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             );
           })}

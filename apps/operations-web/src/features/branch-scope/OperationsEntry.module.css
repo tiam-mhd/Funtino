@@ -530,3 +530,69 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.page {
+  background: #f3f6f8;
+}
+
+.pageActive {
+  background: #f3f6f8;
+}
+
+.ambient {
+  background: #f3f6f8;
+}
+
+.topbar {
+  min-height: 76px;
+  border-bottom-color: #dfe6ec;
+}
+
+.authCard,
+.stateCard,
+.scopeSection,
+.workspace {
+  border-color: #dfe6ec;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 5%);
+}
+
+.authCard {
+  padding: clamp(22px, 4vw, 34px);
+}
+
+.authCard h1,
+.scopeSection h1,
+.stateCard h1,
+.workspace h1 {
+  letter-spacing: -0.025em;
+}
+
+.form input {
+  min-height: 48px;
+  border-color: #cfd9e1;
+  border-radius: 9px;
+}
+
+.accountAvatar,
+.scopeMarker {
+  border-radius: 11px;
+}
+
+@media (max-width: 620px) {
+  .topbar {
+    min-height: 68px;
+  }
+
+  .brand img {
+    width: 106px;
+  }
+
+  .authCard,
+  .stateCard,
+  .scopeSection,
+  .workspace {
+    padding: 20px;
+  }
+}

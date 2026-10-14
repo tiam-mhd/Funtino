@@ -519,3 +519,48 @@
     animation-iteration-count: 1;
   }
 }
+
+.manager {
+  gap: 16px;
+  margin-top: 0;
+}
+
+.rosterSection,
+.scopedInvitations,
+.inviteFormPanel,
+.mfaPanel {
+  border-color: var(--ft-line);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.rosterSection,
+.scopedInvitations {
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.tabs {
+  border-bottom-color: var(--ft-line);
+}
+
+.memberCard,
+.invitationCard,
+.overrideCard {
+  border-color: var(--ft-line);
+  border-radius: 11px;
+  background: #fff;
+}
+
+.field input,
+.field select,
+.field textarea {
+  border-color: #cfd9e1;
+  border-radius: 9px;
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible,
+.checkField input:focus-visible {
+  box-shadow: var(--ft-focus);
+}

@@ -35,6 +35,7 @@ export function CustomerFamilySupport({
     event.preventDefault();
     setLoading(true);
     setError('');
+    setItems(null);
     try {
       const response = await lookupOperationsCustomerFamily({
         scope,
@@ -56,7 +57,7 @@ export function CustomerFamilySupport({
   }
 
   return (
-    <section className={styles.page} aria-labelledby="customer-family-title">
+    <section className={styles.page} aria-labelledby="customer-family-title" aria-busy={loading}>
       <div className={styles.intro}>
         <span>مشاهده‌ی محدود و فقط‌خواندنی</span>
         <h2 id="customer-family-title">اطلاعات خانواده‌ی مشتری</h2>
@@ -124,6 +125,12 @@ export function CustomerFamilySupport({
         <p className={styles.error} role="alert">
           {error}
         </p>
+      )}
+      {loading && (
+        <div className={styles.loadingState} role="status" aria-live="polite">
+          <strong>در حال بررسی دسترسی مجاز خانواده…</strong>
+          <span className={styles.loadingSkeleton} aria-hidden="true" />
+        </div>
       )}
       {items !== null && !error && (
         <div className={styles.results} aria-live="polite">

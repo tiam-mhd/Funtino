@@ -45,6 +45,10 @@ const apps = [
         state: 'stale-device',
         action: 'open-device-workspace',
       },
+      {
+        path: '/account/security/management-password?a11y-state=operations-management-password',
+        state: 'management-password',
+      },
     ],
   },
   {
@@ -114,8 +118,13 @@ const fixtureScript = `(() => {
     status: 'active',
   };
   const scopeOption = {
+    scope: { type: 'organization', organizationId },
+    organization,
+  };
+  const branchScopeOption = {
     scope: { type: 'branch', organizationId, branchId },
-    organization, branch,
+    organization,
+    branch,
   };
 
   window.__funtinoA11yRequestCounts = Object.create(null);
@@ -247,10 +256,84 @@ const fixtureScript = `(() => {
       });
     }
     if (path === '/api/v1/operations/scopes' && state?.startsWith('operations-')) {
-      return success({ items: state === 'operations-empty-scope' ? [] : [{ ...scopeOption }], policyVersion: 1 });
+      return success({
+        items: state === 'operations-empty-scope' ? [] : [scopeOption, branchScopeOption],
+        policyVersion: 1,
+      });
     }
     if (path === '/api/v1/operations/scope-selection' && state === 'operations-device-stale') {
       return success({ ...scopeOption, policyVersion: 1 });
+    }
+    if (
+      path === '/api/v1/operations/organizations/' + organizationId + '/branches' &&
+      state === 'operations-device-stale'
+    ) {
+      return success({ items: [branch] }, null);
+    }
+    if (path === '/api/v1/operations/reports' && state === 'operations-device-stale') {
+      const from = requestUrl.searchParams.get('from') ?? '2026-09-01';
+      const to = requestUrl.searchParams.get('to') ?? '2026-09-30';
+      const days = Math.max(
+        1,
+        Math.floor(
+          (Date.parse(to + 'T00:00:00.000Z') - Date.parse(from + 'T00:00:00.000Z')) / 86_400_000,
+        ) + 1,
+      );
+      return success({
+        scope: { scopeType: 'organization', organizationId, branchId: null },
+        period: { from, to, timezone: 'UTC', days },
+        snapshot: {
+          organizations: { active: 1, suspended: 0, archived: 0, unknown: 0 },
+          branches: { active: 1, suspended: 0, archived: 0, unknown: 0 },
+          devices: {
+            total: 1,
+            active: 1,
+            suspended: 0,
+            retired: 0,
+            unknownLifecycle: 0,
+            health: { online: 0, degraded: 0, offline: 0, stale: 1, unknown: 0 },
+          },
+          branchBreakdown: [{
+            branchId,
+            branchName: branch.name,
+            status: 'active',
+            devicesTotal: 1,
+            online: 0,
+            degraded: 0,
+            offline: 0,
+            stale: 1,
+            unknown: 0,
+          }],
+          branchBreakdownTruncated: false,
+        },
+        daily: [{
+          date: from,
+          branchesCreated: 0,
+          branchStatusChanges: 0,
+          devicesRegistered: 0,
+          deviceUpdates: 0,
+          healthOnline: 0,
+          healthDegraded: 0,
+          healthOffline: 0,
+        }],
+        totals: {
+          branchesCreated: 0,
+          branchStatusChanges: 0,
+          devicesRegistered: 0,
+          deviceUpdates: 0,
+          healthOnline: 0,
+          healthDegraded: 0,
+          healthOffline: 0,
+        },
+        projection: {
+          generationId: 'a11y-generation-1',
+          coverageStartedAt: '2026-09-01T00:00:00.000Z',
+          lastEventAt: now,
+          lastProcessedAt: now,
+          asOf: now,
+        },
+        capabilities: { canExport: false },
+      });
     }
     if (path === '/api/v1/operations/staff/invitations/pending' && state?.startsWith('operations-')) {
       return success({ data: [] });
@@ -322,7 +405,10 @@ const fixtureScript = `(() => {
     if (path === '/api/v1/system/security/session-policy' && state === 'system-session-policy') {
       return success({ managementSessionTtlHours: 12, policyVersion: 1 });
     }
-    if (path === '/api/v1/auth/management/password' && state === 'system-management-password') {
+    if (
+      path === '/api/v1/auth/management/password' &&
+      (state === 'system-management-password' || state === 'operations-management-password')
+    ) {
       return success({ enabled: false });
     }
     if (path === '/api/v1/operations/mfa/status' && state === 'system-mfa') {
@@ -559,6 +645,9 @@ async function exerciseRouteState(page, app, route) {
     await page.evaluate(
       "if (matchMedia('(max-width: 900px)').matches) document.querySelector('button[aria-controls=operations-sidebar]')?.click()",
     );
+    await page.evaluate(
+      "Array.from(document.querySelectorAll('#operations-sidebar h2 button')).find((button) => button.getAttribute('aria-label')?.includes('گروه عملیات') && button.getAttribute('aria-expanded') === 'false')?.click()",
+    );
     await waitForExpression(
       page,
       "Array.from(document.querySelectorAll('#operations-sidebar:not([inert]) button[data-nav-item]')).some((button) => button.textContent?.includes('دستگاه‌ها و پایش'))",
@@ -572,6 +661,84 @@ async function exerciseRouteState(page, app, route) {
       "Array.from(document.querySelectorAll('h3')).some((heading) => heading.textContent?.includes('A11y Fixture Device'))",
       app.name + ' stale device row',
     );
+
+    const operationsSections = [
+      { label: 'نمای کلی', group: 'پیشخوان' },
+      { label: 'شعب', group: 'پیشخوان' },
+      { label: 'کارکنان و دسترسی‌ها', group: 'مدیریت' },
+      { label: 'دستگاه‌ها و پایش', group: 'عملیات' },
+      { label: 'موجودی کارت‌ها', group: 'عملیات' },
+      { label: 'خانواده‌ی مشتری', group: 'مدیریت' },
+      { label: 'گزارش‌ها', group: 'پایش' },
+      { label: 'فرم‌ها و پاسخ‌ها', group: 'مدیریت' },
+    ];
+    const isMobile = await page.evaluate("matchMedia('(max-width: 900px)').matches");
+    for (const section of operationsSections) {
+      await page.evaluate(
+        "if (matchMedia('(max-width: 900px)').matches && document.querySelector('#operations-sidebar')?.hasAttribute('inert')) document.querySelector('button[aria-controls=operations-sidebar]')?.click()",
+      );
+      await page.evaluate(`(() => {
+        const sidebar = document.querySelector('#operations-sidebar');
+        const label = ${JSON.stringify(section.label)};
+        const target = Array.from(sidebar?.querySelectorAll('button[data-nav-item]') ?? [])
+          .find((button) => button.textContent?.includes(label));
+        if (target) return;
+        const groupLabel = ${JSON.stringify(`گروه ${section.group}`)};
+        const toggle = Array.from(sidebar?.querySelectorAll('h2 button') ?? [])
+          .find((button) => button.getAttribute('aria-label')?.includes(groupLabel));
+        if (toggle?.getAttribute('aria-expanded') === 'false') toggle.click();
+      })()`);
+      await waitForExpression(
+        page,
+        `Array.from(document.querySelectorAll('#operations-sidebar:not([inert]) button[data-nav-item]')).some((button) => button.textContent?.includes(${JSON.stringify(section.label)}))`,
+        app.name + ' navigation item ' + section.label,
+      );
+      await page.evaluate(
+        `Array.from(document.querySelectorAll('#operations-sidebar:not([inert]) button[data-nav-item]')).find((button) => button.textContent?.includes(${JSON.stringify(section.label)}))?.click()`,
+      );
+      await waitForExpression(
+        page,
+        `document.querySelector('header h1')?.textContent?.trim() === ${JSON.stringify(section.label)} && document.querySelector('#operations-sidebar button[aria-current="page"]')?.textContent?.includes(${JSON.stringify(section.label)})`,
+        app.name + ' active section ' + section.label,
+      );
+      if (isMobile && section.label === 'شعب') {
+        await waitForExpression(
+          page,
+          "Boolean(document.querySelector('[class*=mobileDirectory] [role=listitem]'))",
+          app.name + ' mobile branch cards',
+        );
+      }
+    }
+
+    if (isMobile) {
+      await page.evaluate(
+        "document.querySelector('button[aria-controls=operations-sidebar]')?.click()",
+      );
+      await page.call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape' });
+      await page.call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape' });
+      await waitForExpression(
+        page,
+        "Boolean(document.querySelector('#operations-sidebar')?.hasAttribute('inert'))",
+        app.name + ' mobile drawer Escape close',
+      );
+    } else {
+      await page.evaluate(
+        'document.querySelector(\'#operations-sidebar button[aria-label="بستن منوی کناری"]\')?.click()',
+      );
+      await waitForExpression(
+        page,
+        "localStorage.getItem('funtino-operations-sidebar-collapsed') === 'true'",
+        app.name + ' collapsed sidebar persistence',
+      );
+      await page.evaluate(
+        'document.querySelector(\'#operations-sidebar button[aria-label="بازکردن منوی کناری"]\')?.click()',
+      );
+    }
+    await waitForExpression(
+      page,
+      "document.querySelector('#workspace-content')?.scrollWidth <= document.querySelector('#workspace-content')?.clientWidth + 1",
+      app.name + ' responsive content width',
+    );
     return;
   }
 
@@ -580,6 +747,15 @@ async function exerciseRouteState(page, app, route) {
       page,
       `Boolean(document.querySelector('main [class*="stateCard"] h1')) && !document.querySelector('#scope-title')`,
       app.name + ' empty scope state',
+    );
+    return;
+  }
+
+  if (app.name === 'operations-web' && route.state === 'management-password') {
+    await waitForExpression(
+      page,
+      "Boolean(document.querySelector('#management-password-title') && document.querySelector('form'))",
+      app.name + ' management password settings',
     );
     return;
   }

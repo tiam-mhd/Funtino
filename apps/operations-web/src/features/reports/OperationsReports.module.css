@@ -360,3 +360,45 @@
     align-items: flex-start;
   }
 }
+
+.page {
+  gap: 18px;
+  margin-top: 0;
+}
+
+.filters,
+.coverage,
+.periodSummary,
+.branchPanel,
+.mfaPanel {
+  border-radius: 14px;
+  background-color: #fff;
+}
+
+.coverage {
+  border-color: #d9e7e5;
+  background: #f7fbfa;
+}
+
+.tableScroller {
+  border-color: var(--ft-line);
+  border-radius: 11px;
+  overscroll-behavior-inline: contain;
+}
+
+.tableScroller thead th {
+  background: #f4f7f9;
+}
+
+.totalGrid > div,
+.healthItem {
+  border-color: var(--ft-line);
+  border-radius: 11px;
+}
+
+.notice {
+  border-color: #cfe4dc;
+  border-radius: 10px;
+  color: #23694c;
+  background: #f3faf6;
+}

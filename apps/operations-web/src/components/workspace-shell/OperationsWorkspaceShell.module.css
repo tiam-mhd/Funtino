@@ -677,7 +677,6 @@
 .collapsed .brandLabel,
 .collapsed .scopeCopy,
 .collapsed .scopeVerified,
-.collapsed .groupLabel,
 .collapsed .navLabel,
 .collapsed .footerText {
   display: none;
@@ -1008,5 +1007,105 @@
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+.navGroup {
+  gap: 3px;
+}
+
+.groupLabel {
+  margin: 0 5px 3px;
+  color: #aeb9c5;
+}
+
+.groupLabelActive .groupToggle {
+  color: #f7ffff;
+}
+
+.groupToggle {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 6px;
+  color: #b9c4cf;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: right;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease;
+}
+
+.groupToggle:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 6%);
+}
+
+.groupToggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(14 207 193 / 35%);
+}
+
+.groupToggle svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  transition: transform 140ms ease;
+}
+
+.groupToggle[aria-expanded='false'] svg {
+  transform: rotate(90deg);
+}
+
+.navItems {
+  display: grid;
+  gap: 4px;
+}
+
+.collapsed .groupLabel {
+  display: block;
+  margin-inline: 0;
+}
+
+.collapsed .groupToggle {
+  min-height: 30px;
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.collapsed .groupToggle span:first-child {
+  display: none;
+}
+
+.collapsed .groupToggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (max-width: 900px) {
+  .groupLabel {
+    display: block;
+  }
+
+  .groupToggle {
+    min-height: 38px;
+  }
+
+  .collapsed .groupToggle span:first-child {
+    display: block;
+  }
+
+  .collapsed .groupToggle {
+    justify-content: space-between;
+    padding-inline: 6px;
   }
 }

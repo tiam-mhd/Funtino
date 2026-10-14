@@ -179,3 +179,24 @@
     align-self: flex-start;
   }
 }
+
+.panel,
+.formPanel,
+.item {
+  border-color: var(--ft-line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.field input,
+.field select,
+.field textarea {
+  border-color: #cfd9e1;
+  border-radius: 9px;
+}
+
+.field :focus-visible,
+.confirm input:focus-visible {
+  box-shadow: var(--ft-focus);
+}

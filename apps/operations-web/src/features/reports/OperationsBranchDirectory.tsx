@@ -298,82 +298,150 @@ export function OperationsBranchDirectory({
             در حال دریافت فهرست مجاز شعب…
           </div>
         ) : visibleRows.length > 0 ? (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th scope="col">شعبه</th>
-                  <th scope="col">وضعیت</th>
-                  <th scope="col">دستگاه</th>
-                  <th scope="col">آنلاین</th>
-                  <th scope="col">نیازمند رسیدگی</th>
-                  <th scope="col">
-                    <span className={styles.srOnly}>عملیات</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleRows.map((branch) => (
-                  <tr key={branch.id}>
-                    <td>
-                      <div className={styles.branchCell}>
-                        <span className={styles.branchIcon} aria-hidden="true">
-                          <BranchIcon />
-                        </span>
-                        <span>
-                          <strong>{branch.name}</strong>
-                          <small>{branch.city || 'شهر ثبت نشده'}</small>
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <StatusBadge status={branch.status} />
-                    </td>
-                    <td>
-                      {branch.devicesTotal === null ? (
-                        <span className={styles.unavailable}>—</span>
-                      ) : (
-                        formatNumber(branch.devicesTotal)
-                      )}
-                    </td>
-                    <td>
-                      {branch.online === null ? (
-                        <span className={styles.unavailable}>—</span>
-                      ) : (
-                        formatNumber(branch.online)
-                      )}
-                    </td>
-                    <td>
-                      {branch.attention === null ? (
-                        <span className={styles.unavailable}>—</span>
-                      ) : (
-                        <Badge tone={branch.attention ? 'warning' : 'success'}>
-                          {formatNumber(branch.attention)}
-                        </Badge>
-                      )}
-                    </td>
-                    <td>
-                      <Button
-                        className={styles.branchAction}
-                        disabled={branch.status !== 'active' || selectingBranchId !== null}
-                        onClick={() => void openBranch(branch.id)}
-                        title={
-                          branch.status !== 'active'
-                            ? 'ورود به محدوده فقط برای شعبهٔ فعال امکان‌پذیر است'
-                            : undefined
-                        }
-                        tone="ghost"
-                        type="button"
-                      >
-                        {selectingBranchId === branch.id ? 'در حال بررسی…' : 'ورود به شعبه'}
-                        <ArrowIcon />
-                      </Button>
-                    </td>
+          <>
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th scope="col">شعبه</th>
+                    <th scope="col">وضعیت</th>
+                    <th scope="col">دستگاه</th>
+                    <th scope="col">آنلاین</th>
+                    <th scope="col">نیازمند رسیدگی</th>
+                    <th scope="col">
+                      <span className={styles.srOnly}>عملیات</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {visibleRows.map((branch) => (
+                    <tr key={branch.id}>
+                      <td>
+                        <div className={styles.branchCell}>
+                          <span className={styles.branchIcon} aria-hidden="true">
+                            <BranchIcon />
+                          </span>
+                          <span>
+                            <strong>{branch.name}</strong>
+                            <small>{branch.city || 'شهر ثبت نشده'}</small>
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <StatusBadge status={branch.status} />
+                      </td>
+                      <td>
+                        {branch.devicesTotal === null ? (
+                          <span className={styles.unavailable}>—</span>
+                        ) : (
+                          formatNumber(branch.devicesTotal)
+                        )}
+                      </td>
+                      <td>
+                        {branch.online === null ? (
+                          <span className={styles.unavailable}>—</span>
+                        ) : (
+                          formatNumber(branch.online)
+                        )}
+                      </td>
+                      <td>
+                        {branch.attention === null ? (
+                          <span className={styles.unavailable}>—</span>
+                        ) : (
+                          <Badge tone={branch.attention ? 'warning' : 'success'}>
+                            {formatNumber(branch.attention)}
+                          </Badge>
+                        )}
+                      </td>
+                      <td>
+                        <Button
+                          className={styles.branchAction}
+                          disabled={branch.status !== 'active' || selectingBranchId !== null}
+                          onClick={() => void openBranch(branch.id)}
+                          title={
+                            branch.status !== 'active'
+                              ? 'ورود به محدوده فقط برای شعبهٔ فعال امکان‌پذیر است'
+                              : undefined
+                          }
+                          tone="ghost"
+                          type="button"
+                        >
+                          {selectingBranchId === branch.id ? 'در حال بررسی…' : 'ورود به شعبه'}
+                          <ArrowIcon />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div aria-label="فهرست شعب" className={styles.mobileDirectory} role="list">
+              {visibleRows.map((branch) => (
+                <article
+                  aria-label={`شعبهٔ ${branch.name}`}
+                  className={styles.mobileBranchCard}
+                  key={branch.id}
+                  role="listitem"
+                >
+                  <div className={styles.mobileBranchHeading}>
+                    <div className={styles.branchCell}>
+                      <span className={styles.branchIcon} aria-hidden="true">
+                        <BranchIcon />
+                      </span>
+                      <span>
+                        <strong>{branch.name}</strong>
+                        <small>{branch.city || 'شهر ثبت نشده'}</small>
+                      </span>
+                    </div>
+                    <StatusBadge status={branch.status} />
+                  </div>
+                  <dl className={styles.mobileBranchMetrics}>
+                    <div>
+                      <dt>دستگاه‌ها</dt>
+                      <dd>
+                        {branch.devicesTotal === null
+                          ? 'در گزارش نیست'
+                          : formatNumber(branch.devicesTotal)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>آنلاین</dt>
+                      <dd>
+                        {branch.online === null ? 'در گزارش نیست' : formatNumber(branch.online)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>نیازمند رسیدگی</dt>
+                      <dd>
+                        {branch.attention === null ? (
+                          <span className={styles.unavailable}>در گزارش نیست</span>
+                        ) : (
+                          <Badge tone={branch.attention ? 'warning' : 'success'}>
+                            {formatNumber(branch.attention)}
+                          </Badge>
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                  <Button
+                    className={styles.branchAction}
+                    disabled={branch.status !== 'active' || selectingBranchId !== null}
+                    onClick={() => void openBranch(branch.id)}
+                    title={
+                      branch.status !== 'active'
+                        ? 'ورود به محدوده فقط برای شعبهٔ فعال امکان‌پذیر است'
+                        : undefined
+                    }
+                    tone="ghost"
+                    type="button"
+                  >
+                    {selectingBranchId === branch.id ? 'در حال بررسی…' : 'ورود به شعبه'}
+                    <ArrowIcon />
+                  </Button>
+                </article>
+              ))}
+            </div>
+          </>
         ) : (
           <div className={styles.emptyState}>
             <span className={styles.emptyIcon} aria-hidden="true">

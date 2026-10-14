@@ -1,9 +1,26 @@
+:root {
+  /* Operations-only refinement; shared design-system values remain unchanged for other apps. */
+  --ft-ink: #1f2937;
+  --ft-ink-soft: #526176;
+  --ft-muted: #68778c;
+  --ft-surface: #fff;
+  --ft-surface-soft: #f4f7fa;
+  --ft-line: #dfe6ec;
+  --ft-shadow-sm: 0 1px 3px rgb(15 23 42 / 5%);
+  --ft-shadow-md: 0 10px 28px rgb(15 23 42 / 8%);
+  --ft-radius-sm: 8px;
+  --ft-radius-md: 12px;
+  --ft-radius-lg: 16px;
+  --ft-focus: 0 0 0 3px rgb(0 107 112 / 20%);
+  color-scheme: light;
+}
+
 html,
 body {
   min-height: 100%;
   margin: 0;
   overflow-x: clip;
-  background: #f6f7fb;
+  background: #f3f6f8;
   color: var(--ft-ink);
   font-family: 'Vazirmatn', Tahoma, 'Segoe UI', Arial, sans-serif;
 }
@@ -18,12 +35,85 @@ button {
 }
 
 button:focus-visible,
-a:focus-visible {
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
   outline: none;
   box-shadow: var(--ft-focus);
 }
 
+#workspace-content {
+  min-width: 0;
+  overflow-x: clip;
+}
+
+#workspace-content :where(.ft-surface) {
+  border-color: var(--ft-line);
+  border-radius: 14px;
+  background: var(--ft-surface);
+  box-shadow: var(--ft-shadow-sm);
+}
+
+#workspace-content :where(input:not([type='checkbox']):not([type='radio']), select, textarea) {
+  min-height: 44px;
+  border-color: #cfd9e1;
+  border-radius: 9px;
+  background-color: #fff;
+  color: var(--ft-ink);
+  font-family: inherit;
+}
+
+#workspace-content
+  :where(input:not([type='checkbox']):not([type='radio']), select, textarea):hover:not(:disabled) {
+  border-color: #9aadb9;
+}
+
+#workspace-content :where(input, select, textarea):disabled {
+  cursor: not-allowed;
+  color: #748398;
+  background-color: #f1f4f6;
+}
+
+#workspace-content button:not(.ft-button) {
+  font-family: inherit;
+}
+
+#workspace-content input[type='checkbox'],
+#workspace-content input[type='radio'] {
+  accent-color: var(--ft-teal-dark);
+}
+
+#workspace-content :where(table) {
+  font-variant-numeric: tabular-nums;
+}
+
+#workspace-content :where(th) {
+  font-weight: 750;
+}
+
 ::selection {
   color: var(--ft-ink);
-  background: rgb(14 207 193 / 25%);
+  background: rgb(14 207 193 / 24%);
+}
+
+@media (max-width: 620px) {
+  #workspace-content :where(.ft-surface) {
+    border-radius: 12px;
+  }
+
+  #workspace-content button:not(.ft-button) {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

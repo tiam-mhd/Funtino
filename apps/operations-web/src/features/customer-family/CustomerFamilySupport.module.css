@@ -175,3 +175,93 @@
     min-width: 8rem;
   }
 }
+
+.page {
+  gap: 1.1rem;
+}
+
+.intro h2,
+.householdHeading h3 {
+  color: var(--ft-ink);
+}
+
+.intro p,
+.privacy {
+  color: var(--ft-ink-soft);
+}
+
+.intro > span,
+.householdHeading > div > span {
+  color: var(--ft-teal-dark);
+}
+
+.searchCard,
+.household {
+  border-color: var(--ft-line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.field {
+  color: var(--ft-ink);
+}
+
+.field input,
+.field select {
+  border-color: #cfd9e1;
+  border-radius: 9px;
+}
+
+.field input:focus-visible,
+.field select:focus-visible {
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.selectedBranch,
+.memberList li {
+  background: #f4f7f9;
+}
+
+.memberList li {
+  border: 1px solid #e9eef1;
+}
+
+.memberList li > div {
+  min-width: 0;
+}
+
+.loadingState {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--ft-line);
+  border-radius: 14px;
+  padding: 14px;
+  color: var(--ft-ink-soft);
+  background: #fff;
+  box-shadow: var(--ft-shadow-sm);
+  font-size: 0.82rem;
+}
+
+.loadingSkeleton {
+  display: block;
+  min-height: 94px;
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, #f2f5f7 25%, #e7edf0 37%, #f2f5f7 63%) 0 0 / 200% 100%,
+    #f2f5f7;
+  animation: familySkeleton 1.4s ease infinite;
+}
+
+@keyframes familySkeleton {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingSkeleton {
+    animation: none;
+  }
+}
