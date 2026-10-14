@@ -155,6 +155,7 @@ export function AccessManagement() {
   const [inviteRoleId, setInviteRoleId] = useState('');
   const [inviteReason, setInviteReason] = useState('');
   const [reason, setReason] = useState('');
+  const [roleEditReasons, setRoleEditReasons] = useState<Record<string, string>>({});
   const [roleEdits, setRoleEdits] = useState<
     Record<string, { name: string; status: Role['status']; permissionKeys: string[] }>
   >({});
@@ -263,6 +264,7 @@ export function AccessManagement() {
     setScopedInvitations([]);
     setAudit([]);
     setRoleEdits({});
+    setRoleEditReasons({});
     setStaffRoleEdits({});
     setOverrides({});
     if (!scope) {
@@ -327,6 +329,7 @@ export function AccessManagement() {
       setScopedInvitations([]);
       setAudit([]);
       setRoleEdits({});
+      setRoleEditReasons({});
       setStaffRoleEdits({});
       setOverrides({});
       setAuditError('');
@@ -406,11 +409,12 @@ export function AccessManagement() {
       ...(changedStatus ? { status: edit.status } : {}),
       ...(changedPermissionKeys ? { permissionKeys: edit.permissionKeys } : {}),
     };
+    const editReason = roleEditReasons[role.id] ?? '';
     if (Object.keys(changes).length === 0) {
       setError('تغییری برای ذخیره وجود ندارد.');
       return;
     }
-    if ((changedStatus || changedPermissionKeys) && reason.trim().length < 8) {
+    if ((changedStatus || changedPermissionKeys) && editReason.trim().length < 8) {
       setError('برای تغییر دسترسی‌های نقش، دلیل حداقل ۸ نویسه‌ای الزامی است.');
       return;
     }
@@ -420,14 +424,18 @@ export function AccessManagement() {
         await apiRequest(`/api/v1/operations/roles/${role.id}`, {
           method: 'PATCH',
           headers: { 'Idempotency-Key': freshIdempotencyKey(), 'If-Match': `"${role.version}"` },
-          body: { ...changes, ...optionalReason(reason) },
+          body: { ...changes, ...optionalReason(editReason) },
         });
         setRoleEdits((current) => {
           const next = { ...current };
           delete next[role.id];
           return next;
         });
-        setReason('');
+        setRoleEditReasons((current) => {
+          const next = { ...current };
+          delete next[role.id];
+          return next;
+        });
       },
       true,
     );
@@ -980,6 +988,13 @@ export function AccessManagement() {
           <div className={styles.list}>
             {roles.map((role) => {
               const edit = roleEdits[role.id];
+              const roleEditReason = roleEditReasons[role.id] ?? '';
+              const rolePermissionsChanged =
+                edit !== undefined &&
+                [...edit.permissionKeys].sort().join('\u0000') !==
+                  [...role.permissionKeys].sort().join('\u0000');
+              const roleEditReasonRequired =
+                edit !== undefined && (edit.status !== role.status || rolePermissionsChanged);
               return (
                 <article className={styles.roleCard} key={role.id}>
                   <div className={styles.sectionHeading}>
@@ -1082,6 +1097,28 @@ export function AccessManagement() {
                               </label>
                             ))}
                           </fieldset>
+                          <label>
+                            دلیل تغییر
+                            <textarea
+                              value={roleEditReason}
+                              onChange={(event) =>
+                                setRoleEditReasons((current) => ({
+                                  ...current,
+                                  [role.id]: event.target.value,
+                                }))
+                              }
+                              minLength={roleEditReasonRequired ? 8 : undefined}
+                              maxLength={500}
+                              rows={2}
+                              required={roleEditReasonRequired}
+                              aria-describedby={`role-edit-reason-hint-${role.id}`}
+                            />
+                            <small id={`role-edit-reason-hint-${role.id}`}>
+                              {roleEditReasonRequired
+                                ? 'برای تغییر مجوز یا وضعیت نقش، حداقل ۸ نویسه وارد کنید.'
+                                : 'برای تغییر نام اختیاری است؛ حداکثر ۵۰۰ نویسه.'}
+                            </small>
+                          </label>
                           <button
                             className={styles.primaryButton}
                             type="button"
