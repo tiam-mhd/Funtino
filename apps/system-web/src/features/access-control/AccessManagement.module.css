@@ -4,6 +4,32 @@
   padding: 28px 0 56px;
   color: var(--ft-ink);
 }
+.pageNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block: 0 20px;
+  border-block-end: 1px solid var(--sys-line);
+  padding-block-end: 14px;
+}
+.pageNav a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  border: 1px solid var(--sys-line);
+  border-radius: 7px;
+  padding: 5px 10px;
+  color: var(--sys-muted);
+  background: var(--sys-surface);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.pageNav a:hover {
+  border-color: var(--sys-brand);
+  color: var(--sys-brand-strong);
+  background: var(--sys-brand-soft);
+}
 .header,
 .sectionHeading {
   display: flex;
@@ -417,4 +443,48 @@
 
 .textButton {
   color: var(--ft-teal-dark);
+}
+
+.page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.page > header {
+  margin: 0 0 22px;
+}
+.pageNav a:focus-visible {
+  outline: 3px solid var(--sys-brand);
+  outline-offset: 2px;
+}
+.count {
+  color: var(--sys-brand-strong);
+  background: var(--sys-brand-soft);
+}
+.form {
+  border-color: var(--sys-line);
+  background: var(--sys-surface-muted);
+}
+.roleCard,
+.staffCard,
+.card {
+  border-color: var(--sys-line);
+  border-radius: var(--sys-radius-md);
+  background: var(--sys-surface);
+}
+.secondaryButton {
+  border-color: var(--sys-line);
+  color: var(--sys-brand-strong);
+  background: var(--sys-brand-soft);
+}
+.dangerButton {
+  color: #922d3a;
+  background: #fff1f2;
+}
+.keyList code {
+  background: var(--sys-surface-muted);
+}
+.overrideRow {
+  background: var(--sys-surface-muted);
 }

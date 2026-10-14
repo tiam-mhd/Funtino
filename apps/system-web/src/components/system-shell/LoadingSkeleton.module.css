@@ -8,10 +8,10 @@
   min-height: 68px;
   align-items: center;
   gap: 12px;
-  border: 1px solid #e1e8e9;
+  border: 1px solid var(--sys-line, #e1e8e9);
   border-radius: 10px;
   padding: 12px;
-  background: #fff;
+  background: var(--sys-surface, #fff);
 }
 
 .square,
@@ -19,7 +19,12 @@
 .pill {
   display: block;
   border-radius: 6px;
-  background: linear-gradient(90deg, #eef2f2 20%, #e3ebeb 45%, #eef2f2 70%);
+  background: linear-gradient(
+    90deg,
+    var(--sys-surface-muted, #f1f4f4) 20%,
+    var(--sys-line, #e3ebeb) 45%,
+    var(--sys-surface-muted, #f1f4f4) 70%
+  );
   background-size: 240% 100%;
   animation: shimmer 1.3s ease-in-out infinite;
 }

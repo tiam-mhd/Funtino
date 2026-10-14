@@ -1,20 +1,20 @@
 .app {
-  --sidebar-width: 264px;
-  --system-ink: #202341;
-  --system-muted: #626783;
-  --system-line: #ebeaf3;
+  --sidebar-width: 276px;
+  --system-ink: #1d3035;
+  --system-muted: #5c6e72;
+  --system-line: #dfe7e7;
   --system-surface: #fff;
-  --system-canvas: #f4f7f7;
+  --system-canvas: #f4f7f6;
   display: grid;
   min-height: 100vh;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   color: var(--system-ink);
   background: var(--system-canvas);
-  transition: grid-template-columns 180ms ease;
+  transition: grid-template-columns 160ms ease;
 }
 
 .app[data-collapsed='true'] {
-  --sidebar-width: 76px;
+  --sidebar-width: 80px;
 }
 
 .skipLink {
@@ -45,8 +45,8 @@
   border-inline-end: 1px solid var(--system-line);
   background: var(--system-surface);
   transition:
-    width 180ms ease,
-    transform 180ms ease;
+    width 160ms ease,
+    transform 160ms ease;
 }
 
 .sidebarHeader {
@@ -74,10 +74,10 @@
   height: 40px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid #d6e9e8;
-  border-radius: 11px;
-  color: #006b70;
-  background: #edf7f6;
+  border: 1px solid #d6e8e6;
+  border-radius: 10px;
+  color: var(--sys-brand, #006b70);
+  background: #edf6f4;
   font-size: 19px;
   font-weight: 800;
 }
@@ -133,8 +133,8 @@
 
 .groupToggle:hover,
 .navItem:hover {
-  color: #006b70;
-  background: #f3f8f7;
+  color: var(--sys-brand, #006b70);
+  background: #f1f7f6;
 }
 
 .groupToggle:focus-visible,
@@ -143,7 +143,7 @@
 .accountButton:focus-visible,
 .accountMenu a:focus-visible,
 .accountMenu button:focus-visible {
-  outline: 3px solid #137a7d;
+  outline: 3px solid var(--sys-brand, #137a7d);
   outline-offset: 2px;
 }
 
@@ -166,7 +166,7 @@
 }
 
 .groupToggleActive {
-  color: #006b70;
+  color: var(--sys-brand, #006b70);
 }
 
 .navItems {
@@ -176,15 +176,15 @@
 }
 
 .navItem {
-  min-height: 42px;
+  min-height: 44px;
   padding-inline: 12px;
   font-size: 12px;
   font-weight: 500;
 }
 
 .navItemActive {
-  color: #006b70;
-  background: #eaf4f3;
+  color: var(--sys-brand, #006b70);
+  background: #eaf4f2;
   font-weight: 700;
 }
 
@@ -214,7 +214,7 @@
   height: 8px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #15817d;
+  background: #278477;
 }
 
 .workspace {
@@ -232,8 +232,8 @@
   gap: 16px;
   border-block-end: 1px solid var(--system-line);
   padding: 10px clamp(16px, 2.8vw, 36px);
-  background: rgb(255 255 255 / 96%);
-  backdrop-filter: blur(8px);
+  background: rgb(255 255 255 / 94%);
+  backdrop-filter: blur(10px);
 }
 
 .topbarStart,
@@ -249,7 +249,8 @@
 }
 
 .breadcrumbs {
-  flex-wrap: wrap;
+  overflow: hidden;
+  flex-wrap: nowrap;
   gap: 7px;
   color: var(--system-muted);
   font-size: 12px;
@@ -283,15 +284,15 @@
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid var(--system-line);
-  border-radius: 8px;
+  border-radius: 9px;
   color: #40555f;
   background: #fff;
   cursor: pointer;
 }
 
 .iconButton:hover {
-  color: #006b70;
-  background: #f5f9f8;
+  color: var(--sys-brand, #006b70);
+  background: #f1f7f6;
 }
 
 .account {
@@ -312,7 +313,7 @@
 }
 
 .accountButton:hover {
-  background: #f3f7f7;
+  background: #f1f6f5;
 }
 
 .accountAvatar {
@@ -365,7 +366,7 @@
 .accountMenu a,
 .accountMenu button {
   display: flex;
-  min-height: 42px;
+  min-height: 44px;
   align-items: center;
   gap: 10px;
   border: 0;
@@ -382,8 +383,8 @@
 
 .accountMenu a:hover,
 .accountMenu button:hover:not(:disabled) {
-  color: #006b70;
-  background: #f3f8f7;
+  color: var(--sys-brand, #006b70);
+  background: #f1f7f6;
 }
 
 .accountMenu button:disabled {
@@ -399,6 +400,16 @@
 .content {
   min-width: 0;
   padding: clamp(18px, 2.8vw, 36px);
+}
+
+.accountMenu a:focus-visible,
+.accountMenu button:focus-visible,
+.iconButton:focus-visible,
+.accountButton:focus-visible,
+.groupToggle:focus-visible,
+.navItem:focus-visible {
+  outline: 3px solid var(--sys-brand, #137a7d);
+  outline-offset: 2px;
 }
 
 .backdrop {
@@ -539,6 +550,13 @@
   .accountLabel,
   .accountButton > .icon {
     display: none;
+  }
+
+  .accountButton {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+    padding: 4px;
   }
 
   .content {

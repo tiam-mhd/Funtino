@@ -1,6 +1,6 @@
 .page {
-  min-height: 100vh;
-  background: #f7f7fb;
+  min-height: 0;
+  background: transparent;
   color: var(--ft-ink);
 }
 
@@ -31,10 +31,13 @@
 
 .content {
   display: grid;
-  width: min(100%, 1380px);
+  width: 100%;
   gap: 20px;
-  margin: 0 auto;
-  padding: 28px clamp(16px, 4vw, 52px) 56px;
+  margin: 0;
+  padding: 0 0 32px;
+}
+.content > header {
+  margin: 0;
 }
 
 .heading,
@@ -65,7 +68,7 @@
 }
 
 .eyebrow {
-  color: #7045d4;
+  color: var(--sys-brand);
   font-size: 12px;
   font-weight: 900;
 }
@@ -75,6 +78,60 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  color: var(--ft-ink-soft);
+  font-size: 12px;
+}
+
+.overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.overview > div {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  border: 1px solid var(--ft-line);
+  border-radius: var(--sys-radius-md);
+  padding: 14px 16px;
+  background: var(--sys-surface);
+}
+
+.overview span {
+  color: var(--ft-ink-soft);
+  font-size: 12px;
+}
+
+.overview strong {
+  color: var(--ft-ink);
+  font-size: 23px;
+  font-weight: 750;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.overview .metricWarning {
+  color: var(--sys-warning);
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block: 4px -4px;
+}
+
+.sectionHeading h2 {
+  margin: 0;
+  color: var(--ft-ink);
+  font-size: 17px;
+}
+
+.sectionHeading p,
+.sectionHeading > span {
+  margin: 3px 0 0;
   color: var(--ft-ink-soft);
   font-size: 12px;
 }
@@ -119,7 +176,7 @@
 
 .metrics div {
   min-width: 0;
-  border-radius: 12px;
+  border-radius: var(--sys-radius-sm);
   padding: 10px;
   background: var(--ft-surface-soft);
 }
@@ -165,7 +222,7 @@
 }
 
 .staleNotice {
-  color: #704600;
+  color: #75520e;
   background: #fff4d8;
 }
 
@@ -236,7 +293,7 @@
 
   .content {
     gap: 16px;
-    padding-top: 20px;
+    padding-bottom: 24px;
   }
 
   .heading,
@@ -254,6 +311,27 @@
 
   .serviceGrid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .overview {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .overview > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .overview strong {
+    font-size: 19px;
+  }
+
+  .sectionHeading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

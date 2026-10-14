@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
+import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
 import styles from './ManagementPasswordSettings.module.css';
 
 type PasswordStatus = { enabled: boolean };
@@ -129,13 +130,13 @@ export function ManagementPasswordSettings() {
 
   return (
     <main className={styles.page} dir="rtl">
+      <SystemPageHeader
+        eyebrow="امنیت حساب مدیریت"
+        title="رمز اختیاری مدیریت"
+        description="ورود مدیریت با رمز یک‌بارمصرف انجام می‌شود. در صورت فعال‌کردن رمز، پس از تأیید OTP از شما خواسته می‌شود؛ MFA فقط برای فرمان‌های پرریسک درخواست می‌شود."
+      />
       <section className={styles.card} aria-labelledby="management-password-title">
-        <span className={styles.eyebrow}>امنیت نشست مدیریت</span>
-        <h1 id="management-password-title">رمز اختیاری مدیریت</h1>
-        <p className={styles.intro}>
-          ورود مدیریت با OTP انجام می‌شود. اگر رمز را فعال کنید، پس از OTP نیز پرسیده می‌شود؛ MFA
-          فقط برای فرمان‌های پرریسک درخواست می‌شود.
-        </p>
+        <h2 id="management-password-title">وضعیت و تغییر رمز</h2>
 
         {!isReady && statusLoading && (
           <LoadingSkeleton label="در حال بررسی وضعیت رمز مدیریت" rows={1} />

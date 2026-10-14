@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
+import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
 import styles from './SessionPolicySettings.module.css';
 
 type SessionPolicy = { managementSessionTtlHours: number; policyVersion: number };
@@ -76,14 +77,11 @@ export function SessionPolicySettings() {
 
   return (
     <main className={styles.page}>
-      <header className={styles.header}>
-        <p className={styles.eyebrow}>امنیت سراسری</p>
-        <h1>مدت نشست کارکنان</h1>
-        <p className={styles.lead}>
-          مدت نگه‌داشتن نشست پنل را برای اعضای مدیریتی تعیین کنید. نشست مشتریانی که عضویت مدیریتی
-          ندارند تغییر نمی‌کند.
-        </p>
-      </header>
+      <SystemPageHeader
+        eyebrow="امنیت سراسری"
+        title="مدت نشست کارکنان"
+        description="مدت نگه‌داشتن نشست را برای اعضای مدیریتی تنظیم کنید. این سیاست روی مشتریان و نشست‌های فعالِ قبلی اثر نمی‌گذارد."
+      />
 
       <section className={styles.panel} aria-labelledby="policy-heading">
         <div>

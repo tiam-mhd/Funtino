@@ -267,6 +267,14 @@ export function SystemShell({
     [pathname],
   );
 
+  useEffect(() => {
+    if (!activeGroup) return;
+    setExpandedGroups((current) => {
+      if (current.has(activeGroup.id)) return current;
+      return new Set(current).add(activeGroup.id);
+    });
+  }, [activeGroup]);
+
   return (
     <div
       className={`system-console ${styles.app}`}
@@ -402,6 +410,7 @@ export function SystemShell({
 
           <div className={styles.account} ref={accountRef}>
             <button
+              aria-label="حساب مدیریت"
               aria-expanded={accountOpen}
               aria-controls="system-account-menu"
               className={styles.accountButton}

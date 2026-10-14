@@ -1,7 +1,8 @@
 .page {
-  width: min(100% - 28px, 920px);
-  margin: 0 auto;
-  padding: 28px 0 56px;
+  width: 100%;
+  max-width: 920px;
+  margin: 0;
+  padding: 0;
   color: var(--ft-ink);
 }
 .header {
@@ -114,7 +115,34 @@
 }
 @media (max-width: 560px) {
   .page {
-    width: min(100% - 20px, 920px);
-    padding-top: 18px;
+    width: 100%;
   }
+}
+.page > header {
+  margin: 0 0 22px;
+}
+.panel {
+  border-color: var(--sys-line);
+  border-radius: var(--sys-radius-md);
+  background: var(--sys-surface);
+  box-shadow: var(--sys-shadow);
+}
+.panel h2 {
+  font-size: 18px;
+}
+.form select,
+.form textarea {
+  border-color: var(--sys-line);
+  border-radius: var(--sys-radius-sm);
+}
+.form button,
+.error button {
+  min-height: 44px;
+  border-radius: var(--sys-radius-sm);
+  background: var(--sys-brand-strong);
+}
+.form button:focus-visible,
+.error button:focus-visible {
+  outline: 3px solid var(--sys-brand);
+  outline-offset: 2px;
 }

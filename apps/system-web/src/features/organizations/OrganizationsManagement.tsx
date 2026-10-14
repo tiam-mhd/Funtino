@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Badge, Button, Surface } from '@funtino/design-system';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
+import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
 import styles from './OrganizationsManagement.module.css';
 
 type ResourceStatus = 'active' | 'suspended' | 'archived';
@@ -617,44 +618,46 @@ export function OrganizationsManagement() {
   }
 
   const stale = Boolean(organizationsError && organizations.length > 0);
+  const activeCount = organizations.filter(
+    (organization) => organization.status === 'active',
+  ).length;
+  const suspendedCount = organizations.filter(
+    (organization) => organization.status === 'suspended',
+  ).length;
 
   return (
     <main className={styles.app}>
       <div className={styles.page}>
-        <div className={styles.heading}>
-          <div>
-            <p className={styles.eyebrow}>ساختار سازمانی · داده‌ی سرویس مالک</p>
-            <h1 id="page-title" tabIndex={-1}>
-              مجموعه‌ها و شعب
-            </h1>
-            <p className={styles.lead}>
-              ایجاد و مدیریت مجموعه و شعبه، با وضعیت، نسخه و زمان به‌روزرسانی واقعی از سرویس مالک.
-            </p>
-          </div>
-          <div className={styles.headingActions}>
-            <Button
-              type="button"
-              tone="secondary"
-              onClick={reloadCurrentData}
-              disabled={
-                organizationsLoading ||
-                busyAction !== null ||
-                creatingOrganization ||
-                editingOrganizationId !== null ||
-                statusTarget !== null
-              }
-            >
-              {organizationsLoading ? 'در حال دریافت…' : 'به‌روزرسانی'}
-            </Button>
-            <Button
-              type="button"
-              onClick={openOrganizationCreate}
-              disabled={busyAction !== null || organizationsLoading}
-            >
-              ایجاد مجموعه
-            </Button>
-          </div>
-        </div>
+        <SystemPageHeader
+          eyebrow="عملیات سامانه · ساختار سازمانی"
+          title="مجموعه‌ها و شعب"
+          description="مجموعه را ایجاد کنید، شعبه‌هایش را مدیریت کنید و وضعیت و آخرین نسخهٔ ثبت‌شده را ببینید."
+          actions={
+            <>
+              <Button
+                type="button"
+                tone="secondary"
+                onClick={reloadCurrentData}
+                disabled={
+                  organizationsLoading ||
+                  busyAction !== null ||
+                  creatingOrganization ||
+                  editingOrganizationId !== null ||
+                  statusTarget !== null
+                }
+              >
+                {organizationsLoading ? 'در حال دریافت…' : 'به‌روزرسانی'}
+              </Button>
+              <Button
+                type="button"
+                onClick={openOrganizationCreate}
+                disabled={busyAction !== null || organizationsLoading}
+              >
+                ایجاد مجموعه
+              </Button>
+            </>
+          }
+        />
 
         <div className={styles.policyNote} role="note">
           <span aria-hidden="true">ⓘ</span>
@@ -664,6 +667,23 @@ export function OrganizationsManagement() {
             نمی‌شود.
           </p>
         </div>
+
+        {organizationsLoaded && (
+          <div className={styles.summary} aria-label="خلاصه‌ی فهرست مجموعه‌ها">
+            <div>
+              <strong>{organizations.length.toLocaleString('fa-IR')}</strong>
+              <span>مجموعه در فهرست فعلی</span>
+            </div>
+            <div>
+              <strong>{activeCount.toLocaleString('fa-IR')}</strong>
+              <span>فعال</span>
+            </div>
+            <div>
+              <strong>{suspendedCount.toLocaleString('fa-IR')}</strong>
+              <span>تعلیق‌شده</span>
+            </div>
+          </div>
+        )}
 
         {feedback && (
           <div

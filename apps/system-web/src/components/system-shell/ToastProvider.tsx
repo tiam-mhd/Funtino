@@ -20,7 +20,7 @@ export type ToastInput = {
   action?: { label: string; run: () => void };
   duration?: number;
 };
-type ToastItem = ToastInput & { id: number };
+type ToastItem = ToastInput & { id: number; exiting?: boolean };
 type ToastContextValue = { showToast: (input: ToastInput) => void };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -47,10 +47,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const dismiss = useCallback(
     (id: number) => {
+      const item = itemsRef.current.find((current) => current.id === id);
+      if (!item || item.exiting) return;
       const timer = timers.current.get(id);
       if (timer) clearTimeout(timer);
-      timers.current.delete(id);
-      updateItems((current) => current.filter((item) => item.id !== id));
+      updateItems((current) =>
+        current.map((currentItem) =>
+          currentItem.id === id ? { ...currentItem, exiting: true } : currentItem,
+        ),
+      );
+      timers.current.set(
+        id,
+        setTimeout(() => {
+          timers.current.delete(id);
+          updateItems((current) => current.filter((currentItem) => currentItem.id !== id));
+        }, 160),
+      );
     },
     [updateItems],
   );
@@ -98,7 +110,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {items.map((item) => (
           <article
             aria-live={item.tone === 'error' ? 'assertive' : 'polite'}
-            className={`${styles.toast} ${styles[item.tone]}`}
+            className={`${styles.toast} ${styles[item.tone]} ${item.exiting ? styles.exiting : ''}`}
             key={item.id}
             role={item.tone === 'error' ? 'alert' : 'status'}
           >
@@ -125,6 +137,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               aria-label="بستن اعلان"
               className={styles.close}
               onClick={() => dismiss(item.id)}
+              disabled={item.exiting}
               type="button"
             >
               ×

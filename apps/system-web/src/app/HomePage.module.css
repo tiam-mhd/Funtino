@@ -3,8 +3,8 @@
   min-height: 100vh;
   flex-direction: column;
   padding: 20px clamp(16px, 4vw, 52px);
-  color: #1e2b34;
-  background: #f4f7f7;
+  color: #1d3035;
+  background: #f4f7f6;
 }
 
 .header {
@@ -12,7 +12,7 @@
   min-height: 56px;
   align-items: center;
   gap: 14px;
-  color: #40555f;
+  color: #5c6e72;
   font-size: 13px;
   font-weight: 600;
 }
@@ -20,11 +20,15 @@
 .content {
   width: min(100%, 560px);
   margin: auto;
-  padding-block: 64px;
+  border: 1px solid #dfe7e7;
+  border-radius: 16px;
+  padding: clamp(24px, 6vw, 40px);
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(29 48 53 / 5%);
 }
 
 .eyebrow {
-  color: #087b7d;
+  color: #087579;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -32,7 +36,7 @@
 
 .content h1 {
   margin: 14px 0 10px;
-  color: #1e2b34;
+  color: #1d3035;
   font-size: clamp(26px, 5vw, 38px);
   line-height: 1.45;
   letter-spacing: -0.03em;
@@ -41,7 +45,7 @@
 .content p {
   max-width: 480px;
   margin: 0;
-  color: #61737d;
+  color: #5c6e72;
   font-size: 14px;
   line-height: 1.9;
 }
@@ -56,23 +60,23 @@
   border-radius: 8px;
   padding: 0 18px;
   color: #fff;
-  background: #075f62;
+  background: #006b70;
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
 }
 
 .primaryAction:hover {
-  background: #034f52;
+  background: #00585c;
 }
 .primaryAction:focus-visible {
-  outline: 3px solid #13888a;
+  outline: 3px solid #087579;
   outline-offset: 3px;
 }
 
 .footer {
-  border-block-start: 1px solid #e0e7e8;
+  border-block-start: 1px solid #dfe7e7;
   padding-block-start: 14px;
-  color: #72838c;
+  color: #5c6e72;
   font-size: 11px;
 }

@@ -332,45 +332,42 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 
     apps/system-web/src/
       app/
+        page.tsx
+        layout.tsx
+        globals.css
         [locale]/
           (auth)/
-            login/
             mfa/
               page.tsx
           (console)/
             layout.tsx
-            overview/
-            security/session-policy/
-            security/management-password/
+            access/page.tsx
+            customer-family/page.tsx
+            forms/page.tsx
             organizations/
-            branches/
-            users/
-            memberships/
-            roles/
-            integrations/
+              page.tsx
             system-health/
-            audit/
-            feature-flags/
-            support/
+              page.tsx
+            security/
+              mfa/page.tsx
+              management-password/page.tsx
+              session-policy/page.tsx
       features/
         organizations/
         access-control/
         security/
-        integrations/
-        audit/
+        customer-family/
+        forms/
         health/
-        support/
       components/
         system-shell/
-        permission-matrix/
-        audit-table/
-        danger-zone/
       lib/
         api/
-        auth/
-        permissions/
-        audit/
       tests/
+
+در وضعیت فعلی source، صفحه‌ی ورود مستقل وجود ندارد: گروه `(console)` با `ManagementAuthGate` نشست مدیریتی را بررسی و در صورت نیاز OTP و رمز اختیاری را دریافت می‌کند. مسیر `(auth)/mfa` فقط به تنظیمات MFA در کنسول هدایت می‌شود. مسیر `/` صفحه‌ی ورود به پنل است. routeهای `overview`، `branches`، `users`، `memberships`، `roles`، `integrations`، `audit`، `feature-flags` و `support` در برنامه‌ی محصول آمده‌اند اما در source فعلی route مستقل ندارند؛ تا زمان پیاده‌سازی قرارداد و صفحه‌ی واقعی، نباید در navigation نمایش داده شوند.
+
+کامپوننت‌های مشترک کنسول (پوسته، header صفحه، تأیید عملیات، toast و loading skeleton) در `components/system-shell/` قرار می‌گیرند. APIهای ویژه‌ی system-web در `lib/api/` باقی می‌مانند و فرم، خانواده، health، organization، security و access control در feature مالک خود پیاده می‌شوند.
 
 قواعد system-web:
 

@@ -15,6 +15,7 @@ import {
 import { FormRenderer } from '@funtino/forms-renderer';
 import { ApiRequestError } from '../../lib/api/client';
 import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
+import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
 import {
   createSystemFormTemplate,
   getSystemFormTemplates,
@@ -256,16 +257,11 @@ export function SystemFormsManagement() {
 
   return (
     <main className={styles.page} dir="rtl">
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>مدیریت سراسری · Forms</p>
-          <h1>فرم‌ها و قالب‌های فانتینو</h1>
-          <p>
-            فهرست زیر فقط فراداده و شمارنده‌های تجمیعی را نشان می‌دهد؛ پاسخ‌های مشتری در این بستر
-            نمایش داده نمی‌شوند.
-          </p>
-        </div>
-      </header>
+      <SystemPageHeader
+        eyebrow="مدیریت سراسری · فرم‌ها"
+        title="فرم‌ها و قالب‌های فانتینو"
+        description="فراداده و آمار تجمیعی فرم‌ها را بررسی کنید و قالب‌ها و ظاهر پیش‌فرض فرم‌های سراسری را مدیریت کنید. محتوای پاسخ مشتری در این پنل نمایش داده نمی‌شود."
+      />
 
       {error && (
         <p className={styles.error} role="alert">
@@ -373,12 +369,12 @@ export function SystemFormsManagement() {
                         {form.title}
                         <small dir="ltr">{form.slug}</small>
                       </th>
-                      <td>
+                      <td data-label="محدوده">
                         <small dir="ltr">
                           {form.organizationId.slice(0, 8)} · {form.branchId.slice(0, 8)}
                         </small>
                       </td>
-                      <td>
+                      <td data-label="وضعیت">
                         <Badge
                           tone={
                             form.status === 'published'
@@ -391,9 +387,11 @@ export function SystemFormsManagement() {
                           {statusLabel(form.status)}
                         </Badge>
                       </td>
-                      <td>{form.currentVersion ?? '—'}</td>
-                      <td>{form.responseCount.toLocaleString('fa-IR')}</td>
-                      <td>{new Date(form.createdAt).toLocaleDateString('fa-IR')}</td>
+                      <td data-label="نسخه">{form.currentVersion ?? '—'}</td>
+                      <td data-label="پاسخ‌ها">{form.responseCount.toLocaleString('fa-IR')}</td>
+                      <td data-label="زمان ایجاد">
+                        {new Date(form.createdAt).toLocaleDateString('fa-IR')}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

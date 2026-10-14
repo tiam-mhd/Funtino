@@ -150,6 +150,92 @@
   background: #f9f8ff;
 }
 
+.app {
+  min-height: 0;
+  background: transparent;
+}
+
+.app > .page {
+  width: 100%;
+  margin: 0;
+  padding: 0 0 32px;
+}
+
+.policyNote {
+  border-color: var(--sys-line);
+  border-radius: var(--sys-radius-md);
+  background: var(--sys-brand-soft);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-block: 18px 24px;
+}
+
+.summary > div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  border-inline-start: 1px solid var(--sys-line);
+  padding-inline: 12px;
+}
+
+.summary > div:first-child {
+  padding-inline-start: 0;
+}
+
+.summary strong {
+  color: var(--sys-ink);
+  font-size: 20px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary span {
+  color: var(--sys-muted);
+  font-size: 12px;
+}
+
+.skipLink {
+  background: var(--sys-brand-strong);
+}
+.skipLink:focus-visible {
+  outline-color: var(--sys-brand);
+}
+.count {
+  color: var(--sys-brand-strong);
+  background: var(--sys-brand-soft);
+}
+.scopeCard,
+.organizationCard,
+.branchCard,
+.hoursCard {
+  border-color: var(--sys-line);
+  border-radius: var(--sys-radius-md);
+  background: var(--sys-surface);
+  box-shadow: var(--sys-shadow);
+}
+.emptyIcon,
+.resourceIcon {
+  color: var(--sys-brand-strong);
+  background: var(--sys-brand-soft);
+}
+.page input:focus-visible,
+.page select:focus-visible,
+.page textarea:focus-visible,
+.page button:focus-visible,
+.page a:focus-visible,
+.page summary:focus-visible {
+  outline-color: var(--sys-brand);
+}
+.mutedNotice {
+  color: var(--sys-muted);
+  border-color: var(--sys-line);
+}
+
 .policyNote > span {
   flex: 0 0 auto;
   color: var(--ft-purple);
@@ -642,9 +728,17 @@
 }
 
 @media (max-width: 620px) {
-  .page {
-    width: min(100% - 20px, 1280px);
-    padding-top: 20px;
+  .summary {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    margin-block: 14px 20px;
+  }
+
+  .summary > div {
+    justify-content: space-between;
+    border: 0;
+    border-bottom: 1px solid var(--sys-line);
+    padding: 7px 0;
   }
 
   .sectionHeading,

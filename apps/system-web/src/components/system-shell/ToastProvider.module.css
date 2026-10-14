@@ -14,13 +14,13 @@
   grid-template-columns: 28px minmax(0, 1fr) 32px;
   align-items: start;
   gap: 10px;
-  border: 1px solid #dce5e6;
+  border: 1px solid var(--sys-line, #dce5e6);
   border-inline-start: 3px solid #006b70;
   border-radius: 10px;
   padding: 12px;
-  color: #22343b;
-  background: rgb(255 255 255 / 96%);
-  box-shadow: 0 8px 24px rgb(24 43 49 / 12%);
+  color: var(--sys-ink, #22343b);
+  background: rgb(255 255 255 / 97%);
+  box-shadow: 0 8px 24px rgb(24 43 49 / 10%);
   backdrop-filter: blur(8px);
   pointer-events: auto;
   animation: toast-enter 140ms ease-out both;
@@ -37,6 +37,10 @@
 }
 .error {
   border-inline-start-color: #b3414d;
+}
+.exiting {
+  animation: toast-exit 150ms ease-in both;
+  pointer-events: none;
 }
 
 .marker {
@@ -80,7 +84,7 @@
 
 .action,
 .close {
-  min-height: 32px;
+  min-height: 44px;
   border: 0;
   border-radius: 6px;
   color: #006b70;
@@ -97,7 +101,7 @@
 }
 
 .close {
-  width: 32px;
+  width: 44px;
   font-size: 20px;
   line-height: 1;
 }
@@ -123,6 +127,17 @@
   }
 }
 
+@keyframes toast-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
 @media (max-width: 560px) {
   .viewport {
     inset-inline: 12px;
@@ -133,6 +148,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .toast {
+    animation-duration: 0.01ms;
+  }
+  .exiting {
     animation-duration: 0.01ms;
   }
 }

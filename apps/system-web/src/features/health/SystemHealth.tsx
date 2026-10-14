@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Surface } from '@funtino/design-system';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
+import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
 import styles from './SystemHealth.module.css';
 
 type ServiceStatus = 'healthy' | 'degraded' | 'down' | 'stale' | 'unknown';
@@ -99,25 +100,27 @@ export function SystemHealth() {
   }, [refresh]);
 
   const pageStale = Boolean(snapshot && error);
+  const unavailableTargets =
+    snapshot?.services.reduce((total, service) => total + service.unavailableTargets, 0) ?? 0;
 
   return (
     <main className={styles.page} aria-busy={loading || refreshing}>
       <div className={styles.content}>
-        <div className={styles.heading}>
-          <div>
-            <span className={styles.eyebrow}>کنترل سامانه · دسترسی سراسری</span>
-            <h1>پایش عملیاتی</h1>
-            <p>نمای تجمیعی از دسترس‌پذیری سرویس‌ها، خطای HTTP، تاخیر و صف پیام.</p>
-          </div>
-          <Button
-            type="button"
-            tone="secondary"
-            onClick={() => void refresh()}
-            disabled={refreshing}
-          >
-            {refreshing ? 'در حال همگام‌سازی…' : 'به‌روزرسانی'}
-          </Button>
-        </div>
+        <SystemPageHeader
+          eyebrow="عملیات سامانه · نمای سراسری"
+          title="پایش عملیاتی"
+          description="دسترس‌پذیری سرویس‌ها، خطای HTTP، تاخیر و هشدارهای فعال را از آخرین دریافت ببینید."
+          actions={
+            <Button
+              type="button"
+              tone="secondary"
+              onClick={() => void refresh()}
+              disabled={refreshing}
+            >
+              {refreshing ? 'در حال همگام‌سازی…' : 'به‌روزرسانی'}
+            </Button>
+          }
+        />
 
         {loading && !snapshot && <LoadingSkeleton label="در حال دریافت وضعیت سرویس‌ها" rows={4} />}
 
@@ -138,6 +141,33 @@ export function SystemHealth() {
                 {pageStale ? 'نمای ذخیره‌شده · stale' : 'منبع: Prometheus'}
               </Badge>
               <span>آخرین دریافت: {dateLabel(snapshot.observedAt)}</span>
+            </div>
+
+            <section className={styles.overview} aria-label="خلاصه‌ی وضعیت پایش">
+              <div>
+                <span>سرویس‌های دریافت‌شده</span>
+                <strong>{numberLabel(snapshot.services.length, 0)}</strong>
+              </div>
+              <div>
+                <span>هدف‌های در دسترس نیست</span>
+                <strong className={unavailableTargets ? styles.metricWarning : ''}>
+                  {numberLabel(unavailableTargets, 0)}
+                </strong>
+              </div>
+              <div>
+                <span>هشدارهای فعال</span>
+                <strong className={snapshot.activeAlerts.length ? styles.metricWarning : ''}>
+                  {numberLabel(snapshot.activeAlerts.length, 0)}
+                </strong>
+              </div>
+            </section>
+
+            <div className={styles.sectionHeading}>
+              <div>
+                <h2>وضعیت سرویس‌ها</h2>
+                <p>شاخص‌ها فقط از telemetry مجاز Gateway نمایش داده می‌شوند.</p>
+              </div>
+              <span>{numberLabel(snapshot.services.length, 0)} سرویس</span>
             </div>
 
             <section className={styles.serviceGrid} aria-label="وضعیت سرویس‌ها">

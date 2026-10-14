@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
+import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
 
 type MfaStatus = {
   enabled: boolean;
@@ -237,16 +238,13 @@ export function MfaManagement() {
   return (
     <main className="mfa-page" dir="rtl">
       <section className="mfa-shell" aria-labelledby="mfa-title">
-        <div className="mfa-heading">
-          <span className="mfa-eyebrow">هویت مدیریتی · S0</span>
-          <h1 id="mfa-title" tabIndex={-1}>
-            تأیید دومرحله‌ای
-          </h1>
-          <p>
-            ثبت عامل MFA برای ورود عادی لازم نیست. فرمان‌های پرریسک طبق مجوز و سیاست زنده‌ی سرور
-            درخواست step-up می‌کنند.
-          </p>
-        </div>
+        <SystemPageHeader
+          eyebrow="هویت مدیریتی · امنیت حساب"
+          title="تأیید دومرحله‌ای"
+          titleId="mfa-title"
+          titleTabIndex={-1}
+          description="ثبت عامل MFA برای ورود عادی لازم نیست. فرمان‌های پرریسک طبق مجوز و سیاست زنده‌ی سرور، تأیید اضافه می‌خواهند."
+        />
 
         {message && (
           <p className="mfa-notice" role="status" aria-live="polite">

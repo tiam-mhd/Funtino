@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Badge, Button, Surface } from '@funtino/design-system';
 import { ApiRequestError } from '../../lib/api/client';
+import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
 import {
   getSystemOrganizationBranches,
   getSystemOrganizations,
@@ -112,14 +113,11 @@ export function SystemCustomerFamilySupport() {
 
   return (
     <main className={styles.page}>
-      <header className={styles.header}>
-        <span>پشتیبانی سراسری · فقط‌خواندنی</span>
-        <h1>مشاهده‌ی خانواده‌ی مشتری</h1>
-        <p>
-          قبل از جست‌وجو مجموعه و شعبه را انتخاب کن. نتیجه‌ها فقط خانواده‌هایی هستند که کارت فعال
-          همان شعبه را دارند.
-        </p>
-      </header>
+      <SystemPageHeader
+        eyebrow="پشتیبانی سراسری · فقط‌خواندنی"
+        title="مشاهده‌ی خانواده‌ی مشتری"
+        description="برای جست‌وجو، مجموعه و شعبه‌ی فعال را انتخاب کنید. فقط خانواده‌هایی نمایش داده می‌شوند که کارت فعال همان شعبه را دارند."
+      />
 
       {error && (
         <div className={styles.error} role="alert">
@@ -212,6 +210,19 @@ export function SystemCustomerFamilySupport() {
 
       {items !== null && !error && (
         <section className={styles.results} aria-live="polite" aria-label="نتیجه‌ی جست‌وجو">
+          <div className={styles.resultsHeading}>
+            <div>
+              <h2>نتیجه‌ی جست‌وجو</h2>
+              <p>
+                {organizations.find((item) => item.id === organizationId)?.name ?? 'مجموعه'}
+                {' · '}
+                {branches.find((item) => item.id === branchId)?.name ?? 'شعبه'}
+              </p>
+            </div>
+            <Badge tone={items.length ? 'info' : 'neutral'}>
+              {items.length.toLocaleString('fa-IR')} خانواده
+            </Badge>
+          </div>
           {!items.length ? (
             <Surface className={styles.empty}>
               خانواده‌ای با کارت فعال در شعبه‌ی انتخاب‌شده پیدا نشد.

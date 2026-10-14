@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
+import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
+import { SystemConfirmDialog } from '../../components/system-shell/SystemConfirmDialog';
 import {
   activeScopeOptions,
   loadAllScopeOptions,
@@ -94,6 +96,9 @@ type ScopedInvitationPage = {
   nextCursor: string | null;
   policyVersion: number;
 };
+type PendingConfirmation =
+  | { kind: 'membership'; member: Staff }
+  | { kind: 'override'; member: Staff; override: Override };
 
 const iranPhonePattern = /^\+?[1-9][0-9]{7,14}$/;
 
@@ -173,6 +178,7 @@ export function AccessManagement() {
   const [organizationsError, setOrganizationsError] = useState('');
   const [branchesError, setBranchesError] = useState('');
   const [branchListRefresh, setBranchListRefresh] = useState(0);
+  const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
 
   const loadOrganizations = useCallback(async () => {
     setOrganizationsLoading(true);
@@ -478,20 +484,17 @@ export function AccessManagement() {
   }
 
   async function changeStaffStatus(member: Staff, action: 'suspend' | 'reactivate' | 'revoke') {
-    if (action === 'revoke' && reason.trim().length < 8) {
-      setError('برای لغو عضویت فعال، دلیل حداقل ۸ نویسه‌ای الزامی است.');
-      return;
-    }
-    if (
-      action === 'revoke' &&
-      !window.confirm('لغو عضویت، دسترسی این کارمند را متوقف می‌کند. ادامه می‌دهید؟')
-    ) {
+    if (action === 'revoke') {
+      if (reason.trim().length < 8) {
+        setError('برای لغو عضویت فعال، دلیل حداقل ۸ نویسه‌ای الزامی است.');
+        return;
+      }
+      setPendingConfirmation({ kind: 'membership', member });
       return;
     }
     const labels = {
       suspend: 'عضویت تعلیق شد.',
       reactivate: 'عضویت دوباره فعال شد.',
-      revoke: 'عضویت لغو شد.',
     };
     await perform(
       labels[action],
@@ -503,7 +506,7 @@ export function AccessManagement() {
         });
         setReason('');
       },
-      action === 'revoke',
+      false,
     );
   }
 
@@ -588,12 +591,34 @@ export function AccessManagement() {
       setError('برای لغو override، دلیل حداقل ۸ نویسه‌ای الزامی است.');
       return;
     }
-    if (!window.confirm('این مجوز اختصاصی فوراً لغو می‌شود. ادامه می‌دهید؟')) return;
+    setPendingConfirmation({ kind: 'override', member, override });
+  }
+
+  async function confirmPendingAction() {
+    const pending = pendingConfirmation;
+    if (!pending) return;
+    setPendingConfirmation(null);
+    if (pending.kind === 'membership') {
+      await perform(
+        'عضویت لغو شد.',
+        async () => {
+          await apiRequest(`/api/v1/operations/staff/${pending.member.membershipId}/revoke`, {
+            method: 'POST',
+            headers: { 'Idempotency-Key': freshIdempotencyKey() },
+            body: optionalReason(reason),
+          });
+          setReason('');
+        },
+        true,
+      );
+      return;
+    }
+
     await perform(
       'override لغو شد.',
       async () => {
         await apiRequest(
-          `/api/v1/operations/staff/${member.membershipId}/permission-overrides/${override.id}`,
+          `/api/v1/operations/staff/${pending.member.membershipId}/permission-overrides/${pending.override.id}`,
           {
             method: 'DELETE',
             headers: { 'Idempotency-Key': freshIdempotencyKey() },
@@ -602,9 +627,12 @@ export function AccessManagement() {
         );
         setReason('');
         const result = await apiRequest<OverridePage>(
-          `/api/v1/operations/staff/${member.membershipId}/permission-overrides`,
+          `/api/v1/operations/staff/${pending.member.membershipId}/permission-overrides`,
         );
-        setOverrides((current) => ({ ...current, [member.membershipId]: result.data }));
+        setOverrides((current) => ({
+          ...current,
+          [pending.member.membershipId]: result.data,
+        }));
       },
       true,
     );
@@ -637,16 +665,20 @@ export function AccessManagement() {
 
   return (
     <main className={styles.page}>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>کنترل مرکزی · امنیت و دسترسی</p>
-          <h1>مدیریت نقش‌ها و کارکنان</h1>
-          <p className={styles.lead}>
-            مجوز و محدوده در سرور ارزیابی می‌شوند. ساخت یا تغییر role، تغییر نقش عضویت و override به
-            MFA تازه نیاز دارند؛ برای تغییر مؤثر دسترسی و لغو عضویت یا override نیز دلیل ثبت می‌شود.
-          </p>
-        </div>
-      </header>
+      <SystemPageHeader
+        eyebrow="کنترل مرکزی · امنیت و دسترسی"
+        title="مدیریت نقش‌ها و کارکنان"
+        description="نقش‌ها، عضویت‌ها، دعوت‌ها و رویدادهای ممیزی را در محدوده‌ی انتخاب‌شده مدیریت کنید. مجوز نهایی در سرور بررسی می‌شود؛ فرمان‌های پرریسک تأیید MFA و تغییر مؤثر دسترسی دلیل می‌خواهد."
+      />
+
+      <nav className={styles.pageNav} aria-label="رفتن به بخش‌های مدیریت دسترسی">
+        <a href="#scope-heading">محدوده</a>
+        <a href="#invitations-heading">دعوت‌های دریافتی</a>
+        <a href="#issued-invitations-heading">دعوت‌های صادرشده</a>
+        <a href="#roles-heading">نقش‌ها</a>
+        <a href="#staff-heading">کارکنان</a>
+        <a href="#audit-heading">گزارش ممیزی</a>
+      </nav>
 
       <section className={styles.scopePanel} aria-labelledby="scope-heading">
         <div>
@@ -1406,6 +1438,22 @@ export function AccessManagement() {
         فرمان‌های پرریسک درخواست step-up می‌کنند؛ تغییر عامل، عضویت یا مجوز همچنان در سرور بررسی
         می‌شود.
       </p>
+
+      {pendingConfirmation && (
+        <SystemConfirmDialog
+          title={
+            pendingConfirmation.kind === 'membership' ? 'لغو عضویت کارکنان' : 'لغو مجوز اختصاصی'
+          }
+          description={
+            pendingConfirmation.kind === 'membership'
+              ? `با تأیید، دسترسی عضویت «${pendingConfirmation.member.role.name}» در ${labelScope(pendingConfirmation.member.scope)} متوقف می‌شود.`
+              : `مجوز «${pendingConfirmation.override.permissionKey}» در ${labelScope(pendingConfirmation.override.scope)} فوراً لغو می‌شود.`
+          }
+          confirmLabel={pendingConfirmation.kind === 'membership' ? 'لغو عضویت' : 'لغو مجوز'}
+          onCancel={() => setPendingConfirmation(null)}
+          onConfirm={() => void confirmPendingAction()}
+        />
+      )}
     </main>
   );
 }

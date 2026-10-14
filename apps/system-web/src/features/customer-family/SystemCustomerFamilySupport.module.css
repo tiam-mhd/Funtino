@@ -1,4 +1,5 @@
 .page {
+  gap: 18px;
   display: grid;
   gap: 1.1rem;
   max-width: 76rem;
@@ -169,6 +170,82 @@
 .error a {
   color: #0c7771;
   font-weight: 800;
+}
+
+.page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.page > header {
+  margin: 0;
+}
+.searchCard,
+.household {
+  border-color: var(--sys-line);
+  border-radius: var(--sys-radius-md);
+  background: var(--sys-surface);
+  box-shadow: var(--sys-shadow);
+}
+.field {
+  color: var(--sys-ink);
+}
+.field input,
+.field select {
+  min-height: 44px;
+  border-color: var(--sys-line);
+  border-radius: var(--sys-radius-sm);
+  color: var(--sys-ink);
+}
+.field input:focus-visible,
+.field select:focus-visible {
+  outline: 3px solid var(--sys-brand);
+  outline-offset: 2px;
+  border-color: var(--sys-brand);
+}
+.resultsHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.resultsHeading h2 {
+  margin: 0;
+  color: var(--sys-ink);
+  font-size: 17px;
+}
+.resultsHeading p {
+  margin: 4px 0 0;
+  color: var(--sys-muted);
+  font-size: 12px;
+}
+.memberList li {
+  background: var(--sys-surface-muted);
+}
+.empty {
+  border: 1px dashed var(--sys-line);
+  border-radius: var(--sys-radius-md);
+}
+.householdHeading h2,
+.invitationHistory h3 {
+  color: var(--sys-ink);
+}
+.header p,
+.privacy,
+.memberList span,
+.memberList small {
+  color: var(--sys-muted);
+}
+.error {
+  border: 1px solid #efd5d9;
+}
+
+@media (max-width: 560px) {
+  .resultsHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (min-width: 900px) {

@@ -62,6 +62,18 @@ const apps = [
       { path: '/fa/system-health?a11y-state=system-health-error', state: 'health-error' },
       { path: '/fa/system-health?a11y-state=system-health-empty', state: 'health-empty' },
       { path: '/fa/system-health?a11y-state=system-health-stale', state: 'health-stale' },
+      { path: '/fa/access?a11y-state=system-access', state: 'system-access' },
+      { path: '/fa/customer-family?a11y-state=system-family', state: 'system-family' },
+      { path: '/fa/forms?a11y-state=system-forms', state: 'system-forms' },
+      {
+        path: '/fa/security/session-policy?a11y-state=system-session-policy',
+        state: 'system-session-policy',
+      },
+      {
+        path: '/fa/security/management-password?a11y-state=system-management-password',
+        state: 'system-management-password',
+      },
+      { path: '/fa/security/mfa?a11y-state=system-mfa', state: 'system-mfa' },
       { path: '/fa/access', state: 'api-unavailable' },
       { path: '/fa/mfa', state: 'api-unavailable' },
     ],
@@ -99,6 +111,7 @@ const fixtureScript = `(() => {
   };
   const branch = {
     id: branchId, organizationId, name: 'A11y Fixture Branch', city: 'Tehran',
+    status: 'active',
   };
   const scopeOption = {
     scope: { type: 'branch', organizationId, branchId },
@@ -128,6 +141,13 @@ const fixtureScript = `(() => {
     const path = requestUrl.pathname;
     window.__funtinoA11yRequestCounts[path] = (window.__funtinoA11yRequestCounts[path] ?? 0) + 1;
     const count = window.__funtinoA11yRequestCounts[path];
+
+    if (path === '/api/v1/auth/management/me' && state?.startsWith('system-')) {
+      return success({
+        id: '10000000-0000-4000-8000-000000000012',
+        audience: 'management',
+      });
+    }
 
     if (
       path === '/api/v1/customer/profile' &&
@@ -275,6 +295,48 @@ const fixtureScript = `(() => {
         };
       });
       return success({ observedAt: now, source: 'prometheus', services, activeAlerts: [] });
+    }
+
+    if (path === '/api/v1/system/organizations' && state === 'system-family') {
+      return success({ items: [{ id: organizationId, name: organization.name, status: 'active' }], nextCursor: null });
+    }
+    if (path === '/api/v1/system/organizations/' + organizationId + '/branches' && state === 'system-family') {
+      return success({ items: [{ id: branchId, organizationId, name: branch.name, status: 'active' }], nextCursor: null });
+    }
+    if (path === '/api/v1/system/forms' && state === 'system-forms') {
+      return success({ items: [], nextCursor: null });
+    }
+    if (path === '/api/v1/system/forms/templates' && state === 'system-forms') {
+      return success([]);
+    }
+    if (path === '/api/v1/system/forms/settings' && state === 'system-forms') {
+      return success({
+        defaultTheme: {
+          primaryColor: '#006b70', accentColor: '#eea13b', backgroundColor: '#f4f7f6',
+          surfaceColor: '#ffffff', font: 'vazirmatn', cornerStyle: 'soft', layout: 'paged',
+          showProgress: true, cardStyle: {}, density: 'comfortable', buttonStyle: 'solid',
+        },
+        updatedAt: null,
+      });
+    }
+    if (path === '/api/v1/system/security/session-policy' && state === 'system-session-policy') {
+      return success({ managementSessionTtlHours: 12, policyVersion: 1 });
+    }
+    if (path === '/api/v1/auth/management/password' && state === 'system-management-password') {
+      return success({ enabled: false });
+    }
+    if (path === '/api/v1/operations/mfa/status' && state === 'system-mfa') {
+      return success({ enabled: false, enrollmentPending: false, recoveryCodesRemaining: 0 });
+    }
+    if (state === 'system-access') {
+      if (path === '/api/v1/system/organizations') return success({ items: [], nextCursor: null });
+      if (path === '/api/v1/operations/staff/invitations/pending') return success({ data: [] });
+      if (path === '/api/v1/operations/permissions') return success([]);
+      if (path === '/api/v1/operations/roles') return success([]);
+      if (path === '/api/v1/operations/staff') return success({ data: [], nextCursor: null, policyVersion: 1 });
+      if (path === '/api/v1/operations/staff/invitations') return success({ data: [], nextCursor: null, policyVersion: 1 });
+      if (path === '/api/v1/operations/roles/templates') return success({ data: [], catalogVersion: 1, policyVersion: 1 });
+      if (path === '/api/v1/operations/audit') return success({ data: [], nextCursor: null, policyVersion: 1 });
     }
 
     return originalFetch(input, init);
@@ -565,6 +627,59 @@ async function exerciseRouteState(page, app, route) {
       app.name + ' stale telemetry state',
     );
     return;
+  }
+
+  if (app.name === 'system-web' && route.state === 'system-access') {
+    await waitForExpression(
+      page,
+      "Boolean(document.querySelector('#scope-heading')) && document.body.innerText.includes('رخداد ممیزی در این محدوده ثبت نشده است')",
+      app.name + ' access management data',
+    );
+    return;
+  }
+
+  if (app.name === 'system-web' && route.state === 'system-family') {
+    await waitForExpression(
+      page,
+      'Boolean(document.querySelector(\'select option[value="10000000-0000-4000-8000-000000000001"]\'))',
+      app.name + ' family support scopes',
+    );
+    return;
+  }
+
+  if (app.name === 'system-web' && route.state === 'system-forms') {
+    await waitForExpression(
+      page,
+      "document.body.innerText.includes('هنوز فرمی در سامانه ثبت نشده است') && document.body.innerText.includes('قالب‌های سراسری')",
+      app.name + ' forms metadata and templates',
+    );
+    return;
+  }
+
+  if (app.name === 'system-web' && route.state === 'system-session-policy') {
+    await waitForExpression(
+      page,
+      "Boolean(document.querySelector('#session-duration'))",
+      app.name + ' session policy form',
+    );
+    return;
+  }
+
+  if (app.name === 'system-web' && route.state === 'system-management-password') {
+    await waitForExpression(
+      page,
+      "document.body.innerText.includes('فعال نیست؛ ورود با OTP به‌تنهایی ادامه می‌یابد.')",
+      app.name + ' management password status',
+    );
+    return;
+  }
+
+  if (app.name === 'system-web' && route.state === 'system-mfa') {
+    await waitForExpression(
+      page,
+      "document.body.innerText.includes('تأیید دومرحله‌ای فعال نیست')",
+      app.name + ' MFA status',
+    );
   }
 
   if (app.name === 'system-web' && route.action === 'reload-system-organizations') {
