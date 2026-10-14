@@ -1,8 +1,6 @@
 .app {
   min-height: 100vh;
-  background:
-    radial-gradient(ellipse at 92% 0, rgb(113 89 224 / 7%), transparent 34rem),
-    var(--ft-surface-soft, #f7f7fb);
+  background: var(--ft-surface-soft, #f7f7fb);
   color: var(--ft-ink);
 }
 
@@ -167,10 +165,10 @@
 .section {
   min-width: 0;
   border: 1px solid var(--ft-line);
-  border-radius: 18px;
+  border-radius: var(--ft-radius-md);
   padding: clamp(15px, 2.5vw, 24px);
   background: rgb(255 255 255 / 92%);
-  box-shadow: 0 12px 32px rgb(36 38 79 / 5%);
+  box-shadow: var(--ft-shadow-sm);
 }
 
 .sectionHeading {

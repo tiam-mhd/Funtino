@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
 
 type MfaStatus = {
   enabled: boolean;
@@ -21,6 +22,8 @@ function formatIsoTime(value: string | null): string {
 }
 
 export function MfaManagement() {
+  const recoveryDialogRef = useRef<HTMLElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
   const [phase, setPhase] = useState<LoginPhase>('loading');
   const [status, setStatus] = useState<MfaStatus | null>(null);
   const [enrollment, setEnrollment] = useState<EnrollmentStart | null>(null);
@@ -60,6 +63,71 @@ export function MfaManagement() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!visibleCodes) return;
+    const dialog = recoveryDialogRef.current;
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const shell = dialog?.closest('.mfa-shell');
+    const localBackground = shell
+      ? Array.from(shell.children).filter(
+          (element): element is HTMLElement =>
+            element instanceof HTMLElement && !element.classList.contains('mfa-code-backdrop'),
+        )
+      : [];
+    const app = document.querySelector('.system-console');
+    const sidebar = app?.querySelector(':scope > aside');
+    const topbar = app?.querySelector(':scope > div > header');
+    const globalBackground = [sidebar, topbar].filter(
+      (element): element is HTMLElement => element instanceof HTMLElement,
+    );
+    const inertTargets = [...localBackground, ...globalBackground];
+    const wasInert = inertTargets.map((element) => element.inert);
+    inertTargets.forEach((element) => {
+      element.inert = true;
+    });
+    document.body.style.overflow = 'hidden';
+    dialog?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setVisibleCodes(null);
+        return;
+      }
+      if (event.key !== 'Tab' || !dialog) return;
+      const focusable = dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      inertTargets.forEach((element, index) => {
+        element.inert = wasInert[index];
+      });
+      if (returnFocusRef.current?.isConnected) returnFocusRef.current.focus();
+      else document.getElementById('mfa-title')?.focus();
+    };
+  }, [visibleCodes]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -168,24 +236,12 @@ export function MfaManagement() {
 
   return (
     <main className="mfa-page" dir="rtl">
-      <header className="mfa-header">
-        <a href="/" className="mfa-brand" aria-label="فانتینو، صفحه‌ی اصلی">
-          <span className="mfa-brand__mark" aria-hidden="true">
-            ف
-          </span>
-          <span>
-            فانتینو <small>کنترل سامانه</small>
-          </span>
-        </a>
-        <span className="mfa-security-label">
-          <span aria-hidden="true">●</span> تنظیمات امنیت حساب
-        </span>
-      </header>
-
       <section className="mfa-shell" aria-labelledby="mfa-title">
         <div className="mfa-heading">
           <span className="mfa-eyebrow">هویت مدیریتی · S0</span>
-          <h1 id="mfa-title">تأیید دومرحله‌ای</h1>
+          <h1 id="mfa-title" tabIndex={-1}>
+            تأیید دومرحله‌ای
+          </h1>
           <p>
             ثبت عامل MFA برای ورود عادی لازم نیست. فرمان‌های پرریسک طبق مجوز و سیاست زنده‌ی سرور
             درخواست step-up می‌کنند.
@@ -202,7 +258,7 @@ export function MfaManagement() {
             {error}
           </p>
         )}
-        {phase === 'loading' && <p role="status">در حال دریافت وضعیت امنیت…</p>}
+        {phase === 'loading' && <LoadingSkeleton label="در حال دریافت وضعیت امنیت حساب" rows={2} />}
         {phase === 'forbidden' && (
           <button
             className="mfa-button mfa-button--primary"
@@ -227,7 +283,7 @@ export function MfaManagement() {
                 </h2>
                 <p>
                   {status.enabled
-                    ? `${status.recoveryCodesRemaining} کد بازیابیِ استفاده‌نشده باقی مانده است.`
+                    ? `${new Intl.NumberFormat('fa-IR').format(status.recoveryCodesRemaining)} کد بازیابیِ استفاده‌نشده باقی مانده است.`
                     : 'برای ورود معمولی لازم نیست؛ فرمان‌های پرریسک بدون عامل معتبر step-up نمی‌گیرند.'}
                 </p>
               </div>
@@ -386,41 +442,56 @@ export function MfaManagement() {
         )}
 
         {visibleCodes && (
-          <section className="mfa-code-dialog" aria-labelledby="recovery-title">
-            <div className="mfa-code-dialog__header">
-              <div>
-                <span className="mfa-eyebrow">فقط یک‌بار نمایش داده می‌شوند</span>
-                <h2 id="recovery-title">کدهای بازیابی را ذخیره کنید</h2>
-              </div>
-              <button
-                className="mfa-close"
-                onClick={() => setVisibleCodes(null)}
-                aria-label="بستن فهرست کدها"
-              >
-                ×
-              </button>
-            </div>
-            <p>
-              این کدها در سرور به‌صورت متن قابل‌بازیابی نگه‌داری نمی‌شوند و پس از بستن این صفحه
-              دوباره نمایش داده نخواهند شد.
-            </p>
-            <ol className="mfa-code-list" dir="ltr">
-              {visibleCodes.map((code) => (
-                <li key={code}>
-                  <code>{code}</code>
-                </li>
-              ))}
-            </ol>
-            <button className="mfa-button mfa-button--secondary" onClick={copyCodes}>
-              کپی کدها
-            </button>
-            <button
-              className="mfa-button mfa-button--primary"
-              onClick={() => setVisibleCodes(null)}
+          <div className="mfa-code-backdrop">
+            <section
+              aria-labelledby="recovery-title"
+              aria-modal="true"
+              className="mfa-code-dialog"
+              ref={recoveryDialogRef}
+              role="dialog"
+              tabIndex={-1}
             >
-              کدها را ذخیره کردم
-            </button>
-          </section>
+              <div className="mfa-code-dialog__header">
+                <div>
+                  <span className="mfa-eyebrow">فقط یک‌بار نمایش داده می‌شوند</span>
+                  <h2 id="recovery-title">کدهای بازیابی را ذخیره کنید</h2>
+                </div>
+                <button
+                  className="mfa-close"
+                  onClick={() => setVisibleCodes(null)}
+                  aria-label="بستن فهرست کدها"
+                  type="button"
+                >
+                  ×
+                </button>
+              </div>
+              <p>
+                این کدها در سرور به‌صورت متن قابل‌بازیابی نگه‌داری نمی‌شوند و پس از بستن این صفحه
+                دوباره نمایش داده نخواهند شد.
+              </p>
+              <ol className="mfa-code-list" dir="ltr">
+                {visibleCodes.map((code) => (
+                  <li key={code}>
+                    <code>{code}</code>
+                  </li>
+                ))}
+              </ol>
+              <button
+                className="mfa-button mfa-button--secondary"
+                onClick={copyCodes}
+                type="button"
+              >
+                کپی کدها
+              </button>
+              <button
+                className="mfa-button mfa-button--primary"
+                onClick={() => setVisibleCodes(null)}
+                type="button"
+              >
+                کدها را ذخیره کردم
+              </button>
+            </section>
+          </div>
         )}
       </section>
     </main>

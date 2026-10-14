@@ -206,3 +206,65 @@
     border-radius: 22px;
   }
 }
+
+.page {
+  background: #f4f7f7;
+  color: #1e2b34;
+}
+
+.card {
+  gap: 16px;
+  border-color: #e0e7e8;
+  border-radius: 16px;
+  box-shadow: 0 8px 28px rgb(21 45 53 / 7%);
+}
+
+.brandMark {
+  border-radius: 10px;
+  background: #edf7f6;
+  color: #075f62;
+}
+
+.eyebrow {
+  color: #075f62;
+}
+
+.form input {
+  min-height: 46px;
+  border-radius: 8px;
+  border-color: #cbd8da;
+}
+
+.form input:focus-visible,
+.primaryButton:focus-visible,
+.textButton:focus-visible,
+.brand:focus-visible {
+  outline: 3px solid #118184;
+}
+
+.primaryButton {
+  min-height: 46px;
+  border-radius: 8px;
+  background: #075f62;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #034f52;
+}
+
+.textButton {
+  color: #075f62;
+}
+
+.status,
+.devCode {
+  border: 1px solid #dce9e8;
+  border-radius: 8px;
+  background: #f1f7f6;
+  color: #31585b;
+}
+
+.error {
+  border: 1px solid #efd5d9;
+  border-radius: 8px;
+}

@@ -5,6 +5,8 @@ import '@fontsource/estedad/arabic.css';
 import '@funtino/design-system/styles.css';
 import '@funtino/forms-renderer/forms.css';
 import './globals.css';
+import '../components/system-shell/SystemConsole.css';
+import { ToastProvider } from '../components/system-shell/ToastProvider';
 
 export const metadata: Metadata = {
   title: 'فانتینو | پنل سیستم',
@@ -17,7 +19,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fa" dir="rtl">
-      <body>{children}</body>
+      <body>
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

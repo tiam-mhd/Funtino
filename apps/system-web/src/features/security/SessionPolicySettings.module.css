@@ -36,10 +36,10 @@
   display: grid;
   gap: 20px;
   border: 1px solid var(--ft-line);
-  border-radius: 18px;
+  border-radius: var(--ft-radius-md);
   padding: clamp(16px, 3vw, 26px);
   background: #fff;
-  box-shadow: 0 10px 30px #25234a0a;
+  box-shadow: var(--ft-shadow-sm);
 }
 .panel h2 {
   margin: 0;

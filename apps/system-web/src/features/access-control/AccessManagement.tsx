@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
 import {
   activeScopeOptions,
   loadAllScopeOptions,
@@ -638,23 +639,12 @@ export function AccessManagement() {
     <main className={styles.page}>
       <header className={styles.header}>
         <div>
-          <a className={styles.backLink} href="/fa">
-            بازگشت به نمای کلی
-          </a>
           <p className={styles.eyebrow}>کنترل مرکزی · امنیت و دسترسی</p>
           <h1>مدیریت نقش‌ها و کارکنان</h1>
           <p className={styles.lead}>
             مجوز و محدوده در سرور ارزیابی می‌شوند. ساخت یا تغییر role، تغییر نقش عضویت و override به
             MFA تازه نیاز دارند؛ برای تغییر مؤثر دسترسی و لغو عضویت یا override نیز دلیل ثبت می‌شود.
           </p>
-        </div>
-        <div className={styles.headerLinks}>
-          <a className={styles.mfaLink} href="/fa/security/mfa">
-            تنظیم تأیید دومرحله‌ای
-          </a>
-          <a className={styles.mfaLink} href="/fa/security/session-policy">
-            مدت نشست کارکنان
-          </a>
         </div>
       </header>
 
@@ -812,13 +802,7 @@ export function AccessManagement() {
           {notice}
         </p>
       )}
-      {loading && (
-        <p className={styles.loading} role="status">
-          در حال دریافت اطلاعات…
-        </p>
-      )}
-
-      <section className={styles.section} aria-labelledby="invitations-heading">
+      <section className={styles.section} aria-labelledby="invitations-heading" aria-busy={loading}>
         <div className={styles.sectionHeading}>
           <div>
             <p className={styles.eyebrow}>پذیرش صریح</p>
@@ -826,8 +810,10 @@ export function AccessManagement() {
           </div>
           <span className={styles.count}>{pendingInvitations.length}</span>
         </div>
-        {pendingInvitations.length === 0 ? (
-          <p className={styles.empty}>دعوت در انتظار پذیرش ندارید.</p>
+        {loading ? (
+          <LoadingSkeleton label="در حال دریافت دعوت‌های دریافتی" rows={1} />
+        ) : pendingInvitations.length === 0 ? (
+          !error && <p className={styles.empty}>دعوت در انتظار پذیرش ندارید.</p>
         ) : (
           <div className={styles.cardGrid}>
             {pendingInvitations.map((invitation) => (
@@ -867,7 +853,11 @@ export function AccessManagement() {
         )}
       </section>
 
-      <section className={styles.section} aria-labelledby="issued-invitations-heading">
+      <section
+        className={styles.section}
+        aria-labelledby="issued-invitations-heading"
+        aria-busy={loading}
+      >
         <div className={styles.sectionHeading}>
           <div>
             <p className={styles.eyebrow}>مدیریت دعوت‌ها · {scope?.type ?? '—'}</p>
@@ -875,8 +865,10 @@ export function AccessManagement() {
           </div>
           <span className={styles.count}>{scopedInvitations.length}</span>
         </div>
-        {scopedInvitations.length === 0 ? (
-          <p className={styles.empty}>دعوت بازی در این محدوده وجود ندارد یا مجوز مشاهده ندارید.</p>
+        {loading ? (
+          <LoadingSkeleton label="در حال دریافت دعوت‌های صادرشده" rows={1} />
+        ) : scopedInvitations.length === 0 ? (
+          !error && <p className={styles.empty}>دعوت بازی در این محدوده ثبت نشده است.</p>
         ) : (
           <div className={styles.cardGrid}>
             {scopedInvitations.map((invitation) => (
@@ -910,7 +902,7 @@ export function AccessManagement() {
       </section>
 
       <div className={styles.grid}>
-        <section className={styles.section} aria-labelledby="roles-heading">
+        <section className={styles.section} aria-labelledby="roles-heading" aria-busy={loading}>
           <div className={styles.sectionHeading}>
             <div>
               <p className={styles.eyebrow}>
@@ -986,157 +978,163 @@ export function AccessManagement() {
             </button>
           </form>
           <div className={styles.list}>
-            {roles.map((role) => {
-              const edit = roleEdits[role.id];
-              const roleEditReason = roleEditReasons[role.id] ?? '';
-              const rolePermissionsChanged =
-                edit !== undefined &&
-                [...edit.permissionKeys].sort().join('\u0000') !==
-                  [...role.permissionKeys].sort().join('\u0000');
-              const roleEditReasonRequired =
-                edit !== undefined && (edit.status !== role.status || rolePermissionsChanged);
-              return (
-                <article className={styles.roleCard} key={role.id}>
-                  <div className={styles.sectionHeading}>
-                    <div>
-                      <h3>{role.name}</h3>
-                      <small>
-                        {role.systemManaged ? 'نقش محافظت‌شده' : 'نقش سفارشی'} · نسخه {role.version}{' '}
-                        · {role.permissionKeys.length} مجوز
-                      </small>
+            {loading ? (
+              <LoadingSkeleton label="در حال دریافت نقش‌ها" rows={2} />
+            ) : roles.length === 0 ? (
+              !error && <p className={styles.empty}>نقشی برای این محدوده ثبت نشده است.</p>
+            ) : (
+              roles.map((role) => {
+                const edit = roleEdits[role.id];
+                const roleEditReason = roleEditReasons[role.id] ?? '';
+                const rolePermissionsChanged =
+                  edit !== undefined &&
+                  [...edit.permissionKeys].sort().join('\u0000') !==
+                    [...role.permissionKeys].sort().join('\u0000');
+                const roleEditReasonRequired =
+                  edit !== undefined && (edit.status !== role.status || rolePermissionsChanged);
+                return (
+                  <article className={styles.roleCard} key={role.id}>
+                    <div className={styles.sectionHeading}>
+                      <div>
+                        <h3>{role.name}</h3>
+                        <small>
+                          {role.systemManaged ? 'نقش محافظت‌شده' : 'نقش سفارشی'} · نسخه{' '}
+                          {role.version} · {role.permissionKeys.length} مجوز
+                        </small>
+                      </div>
+                      <span
+                        className={
+                          role.status === 'active' ? styles.activeBadge : styles.inactiveBadge
+                        }
+                      >
+                        {role.status === 'active' ? 'فعال' : 'غیرفعال'}
+                      </span>
                     </div>
-                    <span
-                      className={
-                        role.status === 'active' ? styles.activeBadge : styles.inactiveBadge
-                      }
-                    >
-                      {role.status === 'active' ? 'فعال' : 'غیرفعال'}
-                    </span>
-                  </div>
-                  <details>
-                    <summary>مشاهده‌ی مجوزها</summary>
-                    <div className={styles.keyList}>
-                      {role.permissionKeys.map((key) => (
-                        <code key={key}>{key}</code>
-                      ))}
-                    </div>
-                  </details>
-                  {!role.systemManaged && (
-                    <>
-                      {!edit ? (
-                        <button
-                          className={styles.textButton}
-                          type="button"
-                          onClick={() =>
-                            setRoleEdits((current) => ({
-                              ...current,
-                              [role.id]: {
-                                name: role.name,
-                                status: role.status,
-                                permissionKeys: [...role.permissionKeys],
-                              },
-                            }))
-                          }
-                        >
-                          ویرایش نقش
-                        </button>
-                      ) : (
-                        <div className={styles.form}>
-                          <label>
-                            نام
-                            <input
-                              value={edit.name}
-                              onChange={(event) =>
-                                setRoleEdits((current) => ({
-                                  ...current,
-                                  [role.id]: { ...edit, name: event.target.value },
-                                }))
-                              }
-                            />
-                          </label>
-                          <label>
-                            وضعیت
-                            <select
-                              value={edit.status}
-                              onChange={(event) =>
-                                setRoleEdits((current) => ({
-                                  ...current,
-                                  [role.id]: {
-                                    ...edit,
-                                    status: event.target.value as Role['status'],
-                                  },
-                                }))
-                              }
-                            >
-                              <option value="active">فعال</option>
-                              <option value="disabled">غیرفعال</option>
-                            </select>
-                          </label>
-                          <fieldset className={styles.permissions}>
-                            <legend>مجوزها</legend>
-                            {applicablePermissions.map((permission) => (
-                              <label className={styles.checkRow} key={permission.key}>
-                                <input
-                                  type="checkbox"
-                                  checked={edit.permissionKeys.includes(permission.key)}
-                                  onChange={(event) =>
-                                    setRoleEdits((current) => ({
-                                      ...current,
-                                      [role.id]: {
-                                        ...edit,
-                                        permissionKeys: event.target.checked
-                                          ? [...edit.permissionKeys, permission.key]
-                                          : edit.permissionKeys.filter(
-                                              (key) => key !== permission.key,
-                                            ),
-                                      },
-                                    }))
-                                  }
-                                />
-                                <bdi>{permission.key}</bdi>
-                              </label>
-                            ))}
-                          </fieldset>
-                          <label>
-                            دلیل تغییر
-                            <textarea
-                              value={roleEditReason}
-                              onChange={(event) =>
-                                setRoleEditReasons((current) => ({
-                                  ...current,
-                                  [role.id]: event.target.value,
-                                }))
-                              }
-                              minLength={roleEditReasonRequired ? 8 : undefined}
-                              maxLength={500}
-                              rows={2}
-                              required={roleEditReasonRequired}
-                              aria-describedby={`role-edit-reason-hint-${role.id}`}
-                            />
-                            <small id={`role-edit-reason-hint-${role.id}`}>
-                              {roleEditReasonRequired
-                                ? 'برای تغییر مجوز یا وضعیت نقش، حداقل ۸ نویسه وارد کنید.'
-                                : 'برای تغییر نام اختیاری است؛ حداکثر ۵۰۰ نویسه.'}
-                            </small>
-                          </label>
+                    <details>
+                      <summary>مشاهده‌ی مجوزها</summary>
+                      <div className={styles.keyList}>
+                        {role.permissionKeys.map((key) => (
+                          <code key={key}>{key}</code>
+                        ))}
+                      </div>
+                    </details>
+                    {!role.systemManaged && (
+                      <>
+                        {!edit ? (
                           <button
-                            className={styles.primaryButton}
+                            className={styles.textButton}
                             type="button"
-                            onClick={() => void saveRole(role)}
+                            onClick={() =>
+                              setRoleEdits((current) => ({
+                                ...current,
+                                [role.id]: {
+                                  name: role.name,
+                                  status: role.status,
+                                  permissionKeys: [...role.permissionKeys],
+                                },
+                              }))
+                            }
                           >
-                            ذخیره‌ی نسخه‌ی جدید
+                            ویرایش نقش
                           </button>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </article>
-              );
-            })}
+                        ) : (
+                          <div className={styles.form}>
+                            <label>
+                              نام
+                              <input
+                                value={edit.name}
+                                onChange={(event) =>
+                                  setRoleEdits((current) => ({
+                                    ...current,
+                                    [role.id]: { ...edit, name: event.target.value },
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label>
+                              وضعیت
+                              <select
+                                value={edit.status}
+                                onChange={(event) =>
+                                  setRoleEdits((current) => ({
+                                    ...current,
+                                    [role.id]: {
+                                      ...edit,
+                                      status: event.target.value as Role['status'],
+                                    },
+                                  }))
+                                }
+                              >
+                                <option value="active">فعال</option>
+                                <option value="disabled">غیرفعال</option>
+                              </select>
+                            </label>
+                            <fieldset className={styles.permissions}>
+                              <legend>مجوزها</legend>
+                              {applicablePermissions.map((permission) => (
+                                <label className={styles.checkRow} key={permission.key}>
+                                  <input
+                                    type="checkbox"
+                                    checked={edit.permissionKeys.includes(permission.key)}
+                                    onChange={(event) =>
+                                      setRoleEdits((current) => ({
+                                        ...current,
+                                        [role.id]: {
+                                          ...edit,
+                                          permissionKeys: event.target.checked
+                                            ? [...edit.permissionKeys, permission.key]
+                                            : edit.permissionKeys.filter(
+                                                (key) => key !== permission.key,
+                                              ),
+                                        },
+                                      }))
+                                    }
+                                  />
+                                  <bdi>{permission.key}</bdi>
+                                </label>
+                              ))}
+                            </fieldset>
+                            <label>
+                              دلیل تغییر
+                              <textarea
+                                value={roleEditReason}
+                                onChange={(event) =>
+                                  setRoleEditReasons((current) => ({
+                                    ...current,
+                                    [role.id]: event.target.value,
+                                  }))
+                                }
+                                minLength={roleEditReasonRequired ? 8 : undefined}
+                                maxLength={500}
+                                rows={2}
+                                required={roleEditReasonRequired}
+                                aria-describedby={`role-edit-reason-hint-${role.id}`}
+                              />
+                              <small id={`role-edit-reason-hint-${role.id}`}>
+                                {roleEditReasonRequired
+                                  ? 'برای تغییر مجوز یا وضعیت نقش، حداقل ۸ نویسه وارد کنید.'
+                                  : 'برای تغییر نام اختیاری است؛ حداکثر ۵۰۰ نویسه.'}
+                              </small>
+                            </label>
+                            <button
+                              className={styles.primaryButton}
+                              type="button"
+                              onClick={() => void saveRole(role)}
+                            >
+                              ذخیره‌ی نسخه‌ی جدید
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </article>
+                );
+              })
+            )}
           </div>
         </section>
 
-        <section className={styles.section} aria-labelledby="staff-heading">
+        <section className={styles.section} aria-labelledby="staff-heading" aria-busy={loading}>
           <div className={styles.sectionHeading}>
             <div>
               <p className={styles.eyebrow}>{staff.length} عضویت</p>
@@ -1199,6 +1197,7 @@ export function AccessManagement() {
             />
           </label>
           <div className={styles.list}>
+            {loading && <LoadingSkeleton label="در حال دریافت کارکنان این محدوده" rows={3} />}
             {staff.map((member) => (
               <article className={styles.staffCard} key={member.membershipId}>
                 <div className={styles.sectionHeading}>
@@ -1346,14 +1345,14 @@ export function AccessManagement() {
                 )}
               </article>
             ))}
-            {staff.length === 0 && (
-              <p className={styles.empty}>در این محدوده عضویتی پیدا نشد یا مجوز مشاهده ندارید.</p>
+            {!loading && staff.length === 0 && !error && (
+              <p className={styles.empty}>در این محدوده عضویتی ثبت نشده است.</p>
             )}
           </div>
         </section>
       </div>
 
-      <section className={styles.section} aria-labelledby="audit-heading">
+      <section className={styles.section} aria-labelledby="audit-heading" aria-busy={loading}>
         <div className={styles.sectionHeading}>
           <div>
             <p className={styles.eyebrow}>ثبت تغییرناپذیر · {audit.length} رویداد اخیر</p>
@@ -1369,28 +1368,36 @@ export function AccessManagement() {
           </p>
         )}
         <div className={styles.auditList}>
-          {audit.map((item) => (
-            <article className={styles.auditRow} key={item.id}>
-              <span
-                className={item.outcome === 'succeeded' ? styles.activeBadge : styles.inactiveBadge}
-              >
-                {item.outcome === 'succeeded' ? 'موفق' : 'ردشده'}
-              </span>
-              <div>
-                <strong>
-                  <bdi>{item.action}</bdi>
-                </strong>
-                <small>
-                  {item.actorType === 'system' ? item.actorLabel : item.actorUserId}
-                  {item.reason ? ` · ${item.reason}` : ''}
-                </small>
-              </div>
-              <time dateTime={item.createdAt}>
-                {new Date(item.createdAt).toLocaleString('fa-IR')}
-              </time>
-            </article>
-          ))}
-          {audit.length === 0 && <p className={styles.empty}>رخدادی در دسترس نیست.</p>}
+          {loading ? (
+            <LoadingSkeleton label="در حال دریافت رخدادهای ممیزی" rows={3} />
+          ) : (
+            audit.map((item) => (
+              <article className={styles.auditRow} key={item.id}>
+                <span
+                  className={
+                    item.outcome === 'succeeded' ? styles.activeBadge : styles.inactiveBadge
+                  }
+                >
+                  {item.outcome === 'succeeded' ? 'موفق' : 'ردشده'}
+                </span>
+                <div>
+                  <strong>
+                    <bdi>{item.action}</bdi>
+                  </strong>
+                  <small>
+                    {item.actorType === 'system' ? item.actorLabel : item.actorUserId}
+                    {item.reason ? ` · ${item.reason}` : ''}
+                  </small>
+                </div>
+                <time dateTime={item.createdAt}>
+                  {new Date(item.createdAt).toLocaleString('fa-IR')}
+                </time>
+              </article>
+            ))
+          )}
+          {audit.length === 0 && !loading && !auditError && (
+            <p className={styles.empty}>رخداد ممیزی در این محدوده ثبت نشده است.</p>
+          )}
         </div>
       </section>
 

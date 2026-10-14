@@ -162,7 +162,7 @@
 
 .columns {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
   align-items: start;
   gap: 22px;
 }
@@ -184,7 +184,7 @@
 
 .templateField {
   display: grid;
-  grid-template-columns: minmax(140px, 1fr) minmax(150px, .8fr) auto;
+  grid-template-columns: minmax(140px, 1fr) minmax(150px, 0.8fr) auto;
   align-items: end;
   gap: 12px;
   border: 1px solid var(--ft-line);
@@ -303,4 +303,36 @@
   .themePreview {
     grid-column: auto;
   }
+}
+
+.emptyState {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  border: 1px dashed var(--ft-line);
+  border-radius: 10px;
+  padding: 18px;
+  color: var(--ft-ink);
+  background: var(--ft-surface-soft);
+  font-size: 12px;
+}
+
+.emptyState span {
+  color: var(--ft-muted);
+  line-height: 1.8;
+}
+
+.resultsMeta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-block: 12px 8px;
+  color: var(--ft-muted);
+  font-size: 11px;
+}
+
+.section {
+  border-radius: var(--ft-radius-md);
+  box-shadow: var(--ft-shadow-sm);
 }

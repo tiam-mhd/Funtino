@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
 import styles from './ManagementPasswordSettings.module.css';
 
 type PasswordStatus = { enabled: boolean };
@@ -22,6 +23,7 @@ export function ManagementPasswordSettings() {
   const [confirmation, setConfirmation] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -30,11 +32,14 @@ export function ManagementPasswordSettings() {
   }, []);
 
   async function refresh() {
+    setStatusLoading(true);
     setError('');
     try {
       setStatus(await apiRequest<PasswordStatus>('/api/v1/auth/management/password'));
     } catch (failure) {
       setError(messageFor(failure));
+    } finally {
+      setStatusLoading(false);
     }
   }
 
@@ -125,9 +130,6 @@ export function ManagementPasswordSettings() {
   return (
     <main className={styles.page} dir="rtl">
       <section className={styles.card} aria-labelledby="management-password-title">
-        <a className={styles.backLink} href="/fa">
-          بازگشت به پنل سامانه
-        </a>
         <span className={styles.eyebrow}>امنیت نشست مدیریت</span>
         <h1 id="management-password-title">رمز اختیاری مدیریت</h1>
         <p className={styles.intro}>
@@ -135,7 +137,9 @@ export function ManagementPasswordSettings() {
           فقط برای فرمان‌های پرریسک درخواست می‌شود.
         </p>
 
-        {!isReady && !error && <p role="status">در حال دریافت وضعیت رمز…</p>}
+        {!isReady && statusLoading && (
+          <LoadingSkeleton label="در حال بررسی وضعیت رمز مدیریت" rows={1} />
+        )}
         {isReady && (
           <p className={status.enabled ? styles.enabled : styles.disabled} role="status">
             رمز مدیریت{' '}
@@ -143,9 +147,14 @@ export function ManagementPasswordSettings() {
           </p>
         )}
         {error && (
-          <p className={styles.error} role="alert">
-            {error}
-          </p>
+          <div className={styles.error} role="alert">
+            <p>{error}</p>
+            {!isReady && (
+              <button disabled={statusLoading} onClick={() => void refresh()} type="button">
+                {statusLoading ? 'در حال تلاش…' : 'تلاش دوباره'}
+              </button>
+            )}
+          </div>
         )}
         {notice && (
           <p className={styles.notice} role="status" aria-live="polite">

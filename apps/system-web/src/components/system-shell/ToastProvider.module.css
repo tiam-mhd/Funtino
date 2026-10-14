@@ -1,0 +1,138 @@
+.viewport {
+  position: fixed;
+  z-index: 50;
+  inset-block-end: 18px;
+  inset-inline-end: 18px;
+  display: grid;
+  width: min(420px, calc(100vw - 24px));
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 32px;
+  align-items: start;
+  gap: 10px;
+  border: 1px solid #dce5e6;
+  border-inline-start: 3px solid #006b70;
+  border-radius: 10px;
+  padding: 12px;
+  color: #22343b;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 8px 24px rgb(24 43 49 / 12%);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+  animation: toast-enter 140ms ease-out both;
+}
+
+.success {
+  border-inline-start-color: #25845b;
+}
+.info {
+  border-inline-start-color: #006b70;
+}
+.warning {
+  border-inline-start-color: #a16a10;
+}
+.error {
+  border-inline-start-color: #b3414d;
+}
+
+.marker {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  color: #006b70;
+  background: #e9f5f4;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.success .marker {
+  color: #237c56;
+  background: #e9f5ee;
+}
+.warning .marker {
+  color: #875a10;
+  background: #fbf2e1;
+}
+.error .marker {
+  color: #a63f4b;
+  background: #f9e9eb;
+}
+
+.copy {
+  min-width: 0;
+}
+.copy strong {
+  display: block;
+  margin-block-end: 2px;
+  font-size: 12px;
+}
+.copy p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.action,
+.close {
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  color: #006b70;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.action {
+  margin-block-start: 5px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.close {
+  width: 32px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.action:hover,
+.close:hover {
+  background: #f1f6f6;
+}
+.action:focus-visible,
+.close:focus-visible {
+  outline: 2px solid #006b70;
+  outline-offset: 2px;
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 560px) {
+  .viewport {
+    inset-inline: 12px;
+    inset-block-end: 12px;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation-duration: 0.01ms;
+  }
+}

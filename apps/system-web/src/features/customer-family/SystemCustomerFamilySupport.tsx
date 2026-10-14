@@ -21,6 +21,7 @@ export function SystemCustomerFamilySupport() {
   const [phone, setPhone] = useState('');
   const [items, setItems] = useState<SystemFamilyResult[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [branchesLoading, setBranchesLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,10 +40,12 @@ export function SystemCustomerFamilySupport() {
     if (!organizationId) {
       setBranches([]);
       setBranchId('');
+      setBranchesLoading(false);
       return;
     }
     let cancelled = false;
     setError('');
+    setBranchesLoading(true);
     setBranchId('');
     setBranches([]);
     void getSystemOrganizationBranches(organizationId)
@@ -54,11 +57,39 @@ export function SystemCustomerFamilySupport() {
       })
       .catch((failure: unknown) => {
         if (!cancelled) setError(readError(failure));
+      })
+      .finally(() => {
+        if (!cancelled) setBranchesLoading(false);
       });
     return () => {
       cancelled = true;
     };
   }, [organizationId]);
+
+  async function retryOptions() {
+    setError('');
+    if (!organizationId) {
+      setLoading(true);
+      try {
+        const result = await getSystemOrganizations();
+        setOrganizations(result.filter((organization) => organization.status === 'active'));
+      } catch (failure) {
+        setError(readError(failure));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+    setBranchesLoading(true);
+    try {
+      const result = await getSystemOrganizationBranches(organizationId);
+      setBranches(result.filter((branch) => branch.status === 'active'));
+    } catch (failure) {
+      setError(readError(failure));
+    } finally {
+      setBranchesLoading(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -93,6 +124,16 @@ export function SystemCustomerFamilySupport() {
       {error && (
         <div className={styles.error} role="alert">
           <span>{error}</span>
+          {(organizations.length === 0 || (organizationId && branches.length === 0)) && (
+            <Button
+              type="button"
+              tone="ghost"
+              onClick={() => void retryOptions()}
+              disabled={loading || branchesLoading}
+            >
+              {loading || branchesLoading ? 'در حال تلاش…' : 'تلاش دوباره'}
+            </Button>
+          )}
         </div>
       )}
       <Surface className={styles.searchCard} aria-busy={loading || searching}>
@@ -105,34 +146,44 @@ export function SystemCustomerFamilySupport() {
               value={organizationId}
               onChange={(event) => setOrganizationId(event.currentTarget.value)}
             >
-              {organizations.length ? (
-                organizations.map((organization) => (
-                  <option key={organization.id} value={organization.id}>
-                    {organization.name}
-                  </option>
-                ))
-              ) : (
-                <option value="">مجموعه‌ای در دسترس نیست</option>
-              )}
+              <option value="">
+                {loading
+                  ? 'در حال دریافت مجموعه‌ها…'
+                  : organizations.length
+                    ? 'انتخاب مجموعه'
+                    : 'مجموعه‌ای در دسترس نیست'}
+              </option>
+              {!loading && organizations.length
+                ? organizations.map((organization) => (
+                    <option key={organization.id} value={organization.id}>
+                      {organization.name}
+                    </option>
+                  ))
+                : null}
             </select>
           </label>
           <label className={styles.field}>
             <span>شعبه‌ی فعال</span>
             <select
-              disabled={!branches.length}
+              disabled={branchesLoading || !branches.length}
               required
               value={branchId}
               onChange={(event) => setBranchId(event.currentTarget.value)}
             >
-              {branches.length ? (
-                branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))
-              ) : (
-                <option value="">شعبه‌ای انتخاب نشده</option>
-              )}
+              <option value="">
+                {branchesLoading
+                  ? 'در حال دریافت شعب…'
+                  : branches.length
+                    ? 'انتخاب شعبه'
+                    : 'شعبه‌ای انتخاب نشده'}
+              </option>
+              {!branchesLoading && branches.length
+                ? branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))
+                : null}
             </select>
           </label>
           <label className={styles.field}>

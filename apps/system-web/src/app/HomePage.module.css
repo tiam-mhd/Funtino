@@ -1,0 +1,78 @@
+.page {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  padding: 20px clamp(16px, 4vw, 52px);
+  color: #1e2b34;
+  background: #f4f7f7;
+}
+
+.header {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  gap: 14px;
+  color: #40555f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.content {
+  width: min(100%, 560px);
+  margin: auto;
+  padding-block: 64px;
+}
+
+.eyebrow {
+  color: #087b7d;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.content h1 {
+  margin: 14px 0 10px;
+  color: #1e2b34;
+  font-size: clamp(26px, 5vw, 38px);
+  line-height: 1.45;
+  letter-spacing: -0.03em;
+}
+
+.content p {
+  max-width: 480px;
+  margin: 0;
+  color: #61737d;
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.primaryAction {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-block-start: 26px;
+  border-radius: 8px;
+  padding: 0 18px;
+  color: #fff;
+  background: #075f62;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.primaryAction:hover {
+  background: #034f52;
+}
+.primaryAction:focus-visible {
+  outline: 3px solid #13888a;
+  outline-offset: 3px;
+}
+
+.footer {
+  border-block-start: 1px solid #e0e7e8;
+  padding-block-start: 14px;
+  color: #72838c;
+  font-size: 11px;
+}

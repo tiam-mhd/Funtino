@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
 import styles from './SessionPolicySettings.module.css';
 
 type SessionPolicy = { managementSessionTtlHours: number; policyVersion: number };
@@ -76,9 +77,6 @@ export function SessionPolicySettings() {
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <a href="/fa/access" className={styles.backLink}>
-          بازگشت به مدیریت دسترسی
-        </a>
         <p className={styles.eyebrow}>امنیت سراسری</p>
         <h1>مدت نشست کارکنان</h1>
         <p className={styles.lead}>
@@ -94,9 +92,7 @@ export function SessionPolicySettings() {
         </div>
 
         {loading ? (
-          <p className={styles.status} role="status">
-            در حال بارگذاری تنظیم...
-          </p>
+          <LoadingSkeleton label="در حال بارگذاری سیاست نشست" rows={2} />
         ) : error && !policy ? (
           <div className={styles.error} role="alert">
             <p>{error}</p>
@@ -115,7 +111,7 @@ export function SessionPolicySettings() {
             >
               {Array.from({ length: 12 }, (_, index) => index + 1).map((hour) => (
                 <option key={hour} value={hour}>
-                  {hour} ساعت
+                  {new Intl.NumberFormat('fa-IR').format(hour)} ساعت
                 </option>
               ))}
             </select>

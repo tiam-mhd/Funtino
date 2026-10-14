@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { Badge, Button, FuntinoMark, Surface } from '@funtino/design-system';
+import { Badge, Button, Surface } from '@funtino/design-system';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
 import styles from './OrganizationsManagement.module.css';
 
 type ResourceStatus = 'active' | 'suspended' | 'archived';
@@ -619,27 +620,6 @@ export function OrganizationsManagement() {
 
   return (
     <main className={styles.app}>
-      <a className={styles.skipLink} href="#page-title">
-        رفتن به محتوای اصلی
-      </a>
-      <header className={styles.topbar}>
-        <a className={styles.brand} href="/fa" aria-label="بازگشت به نمای کلی سامانه">
-          <FuntinoMark compact />
-          <span>
-            پنل سیستم<small>مدیریت متمرکز</small>
-          </span>
-        </a>
-        <nav className={styles.navigation} aria-label="ناوبری پنل سیستم">
-          <a href="/fa">نمای کلی</a>
-          <a href="/fa/organizations" aria-current="page">
-            مجموعه‌ها و شعب
-          </a>
-          <a href="/fa/forms">فرم‌ها و قالب‌ها</a>
-          <a href="/fa/access">کاربران و دسترسی</a>
-          <a href="/fa/security/mfa">تأیید دومرحله‌ای</a>
-        </nav>
-      </header>
-
       <div className={styles.page}>
         <div className={styles.heading}>
           <div>
@@ -746,10 +726,7 @@ export function OrganizationsManagement() {
             </div>
           )}
           {organizationsLoading && organizations.length === 0 && (
-            <div className={styles.loading} role="status">
-              <span className={styles.spinner} aria-hidden="true" />
-              در حال دریافت مجموعه‌ها…
-            </div>
+            <LoadingSkeleton label="در حال دریافت مجموعه‌ها" rows={4} />
           )}
           {!organizationsLoading && !organizationsError && organizations.length === 0 && (
             <div className={styles.empty}>

@@ -1,0 +1,67 @@
+.group {
+  display: grid;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #e1e8e9;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+.square,
+.lines i,
+.pill {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eef2f2 20%, #e3ebeb 45%, #eef2f2 70%);
+  background-size: 240% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+.square {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+}
+.lines {
+  display: grid;
+  flex: 1;
+  gap: 8px;
+}
+.lines i:first-child {
+  width: min(42%, 220px);
+  height: 10px;
+}
+.lines i:last-child {
+  width: min(68%, 340px);
+  height: 8px;
+}
+.pill {
+  width: 72px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .square,
+  .lines i,
+  .pill {
+    animation: none;
+  }
+}

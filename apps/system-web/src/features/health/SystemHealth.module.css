@@ -85,6 +85,10 @@
   gap: 14px;
 }
 
+.noServices {
+  grid-column: 1 / -1;
+}
+
 .serviceCard {
   min-width: 0;
   padding: 18px;

@@ -2,6 +2,9 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import { useSystemToast } from '../../components/system-shell/ToastProvider';
+import { SystemShell } from '../../components/system-shell/SystemShell';
+import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
 import styles from './ManagementAuthGate.module.css';
 
 type Phase = 'checking' | 'phone' | 'otp' | 'password' | 'authenticated' | 'unavailable';
@@ -13,6 +16,7 @@ type OtpChallenge = {
 };
 
 export function ManagementAuthGate({ children }: { children: ReactNode }) {
+  const showToast = useSystemToast();
   const [phase, setPhase] = useState<Phase>('checking');
   const [phone, setPhone] = useState('');
   const [challenge, setChallenge] = useState<OtpChallenge | null>(null);
@@ -128,8 +132,10 @@ export function ManagementAuthGate({ children }: { children: ReactNode }) {
       setCode('');
       setPassword('');
       setNotice('از نشست مدیریتی خارج شدید.');
+      showToast({ tone: 'success', message: 'از نشست مدیریتی خارج شدید.' });
     } catch (failure) {
       setError(messageFor(failure));
+      showToast({ tone: 'error', message: messageFor(failure) });
     } finally {
       setBusy(false);
     }
@@ -137,18 +143,9 @@ export function ManagementAuthGate({ children }: { children: ReactNode }) {
 
   if (phase === 'authenticated') {
     return (
-      <div className={styles.consoleShell}>
-        <header className={styles.sessionBar} dir="rtl">
-          <span>نشست مدیریت سامانه</span>
-          <nav aria-label="کنترل نشست مدیریت">
-            <a href="/fa/security/management-password">امنیت حساب</a>
-            <button onClick={() => void logout()} disabled={busy} type="button">
-              {busy ? 'در حال خروج…' : 'خروج امن'}
-            </button>
-          </nav>
-        </header>
+      <SystemShell onLogout={() => void logout()} logoutPending={busy}>
         {children}
-      </div>
+      </SystemShell>
     );
   }
 
@@ -167,11 +164,7 @@ export function ManagementAuthGate({ children }: { children: ReactNode }) {
         <h1 id="management-auth-title">{titleFor(phase)}</h1>
         <p className={styles.intro}>{introFor(phase)}</p>
 
-        {phase === 'checking' && (
-          <p className={styles.status} role="status">
-            در حال بررسی نشست مدیریت…
-          </p>
-        )}
+        {phase === 'checking' && <LoadingSkeleton label="در حال بررسی نشست مدیریت" rows={1} />}
         {phase === 'phone' && (
           <form className={styles.form} onSubmit={(event) => void requestOtp(event)}>
             <label htmlFor="system-management-phone">شماره‌ی همراه تأییدشده</label>

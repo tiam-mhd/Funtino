@@ -1,8 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import Link from 'next/link';
-import { Badge, Button, Surface } from '@funtino/design-system';
+import { Badge, Button } from '@funtino/design-system';
 import {
   createEmptyFormDefinition,
   formFieldTypes,
@@ -15,6 +14,7 @@ import {
 } from '@funtino/forms-schema';
 import { FormRenderer } from '@funtino/forms-renderer';
 import { ApiRequestError } from '../../lib/api/client';
+import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
 import {
   createSystemFormTemplate,
   getSystemFormTemplates,
@@ -68,6 +68,10 @@ export function SystemFormsManagement() {
   const [formQuery, setFormQuery] = useState('');
   const [formStatus, setFormStatus] = useState<FormStatus | ''>('');
   const [formNextCursor, setFormNextCursor] = useState<string | null>(null);
+  const [appliedFilters, setAppliedFilters] = useState<{
+    query: string;
+    status: FormStatus | '';
+  } | null>(null);
   const [filterBusy, setFilterBusy] = useState(false);
 
   const selectedTemplate = useMemo(
@@ -100,6 +104,9 @@ export function SystemFormsManagement() {
       ]);
       setForms(page.items);
       setFormNextCursor(page.nextCursor);
+      setAppliedFilters(null);
+      setFormQuery('');
+      setFormStatus('');
       setTemplates(globalTemplates);
       setSelectedTemplateId((current) =>
         globalTemplates.some((item) => item.id === current)
@@ -125,6 +132,24 @@ export function SystemFormsManagement() {
     setError('');
     try {
       await loadMetadata(undefined, false);
+      setAppliedFilters({ query: formQuery.trim(), status: formStatus });
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setFilterBusy(false);
+    }
+  }
+
+  async function clearFilters() {
+    setFormQuery('');
+    setFormStatus('');
+    setFilterBusy(true);
+    setError('');
+    try {
+      const page = await getSystemForms({ pageSize: 50 });
+      setForms(page.items);
+      setFormNextCursor(page.nextCursor);
+      setAppliedFilters(null);
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -240,11 +265,6 @@ export function SystemFormsManagement() {
             نمایش داده نمی‌شوند.
           </p>
         </div>
-        <nav className={styles.nav} aria-label="بخش‌های مدیریت سامانه">
-          <Link href="/fa/organizations">مجموعه‌ها</Link>
-          <Link href="/fa/access">دسترسی‌ها</Link>
-          <Link href="/fa/system-health">سلامت سامانه</Link>
-        </nav>
       </header>
 
       {error && (
@@ -298,60 +318,88 @@ export function SystemFormsManagement() {
           <Button type="submit" disabled={filterBusy}>
             {filterBusy ? 'در حال دریافت…' : 'اعمال فیلتر'}
           </Button>
+          {(formQuery || formStatus || appliedFilters) && (
+            <Button
+              type="button"
+              tone="ghost"
+              disabled={filterBusy}
+              onClick={() => void clearFilters()}
+            >
+              پاک‌کردن فیلترها
+            </Button>
+          )}
         </form>
         {loading ? (
-          <p role="status">در حال دریافت فراداده…</p>
-        ) : forms.length === 0 ? (
-          <p>فرمی با این فیلتر پیدا نشد.</p>
-        ) : (
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <caption>
-                فرم‌ها، وضعیت و شمارنده‌ی کلی پاسخ‌ها؛ بدون محتوای پاسخ یا شناسه‌ی مشتری.
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">عنوان</th>
-                  <th scope="col">محدوده</th>
-                  <th scope="col">وضعیت</th>
-                  <th scope="col">نسخه</th>
-                  <th scope="col">پاسخ‌ها</th>
-                  <th scope="col">زمان ایجاد</th>
-                </tr>
-              </thead>
-              <tbody>
-                {forms.map((form) => (
-                  <tr key={form.id}>
-                    <th scope="row">
-                      {form.title}
-                      <small dir="ltr">{form.slug}</small>
-                    </th>
-                    <td>
-                      <small dir="ltr">
-                        {form.organizationId.slice(0, 8)} · {form.branchId.slice(0, 8)}
-                      </small>
-                    </td>
-                    <td>
-                      <Badge
-                        tone={
-                          form.status === 'published'
-                            ? 'success'
-                            : form.status === 'paused'
-                              ? 'warning'
-                              : 'neutral'
-                        }
-                      >
-                        {statusLabel(form.status)}
-                      </Badge>
-                    </td>
-                    <td>{form.currentVersion ?? '—'}</td>
-                    <td>{form.responseCount.toLocaleString('fa-IR')}</td>
-                    <td>{new Date(form.createdAt).toLocaleDateString('fa-IR')}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <LoadingSkeleton label="در حال دریافت فهرست فرم‌ها" rows={4} />
+        ) : forms.length === 0 && error ? null : forms.length === 0 ? (
+          <div className={styles.emptyState} role="status">
+            <strong>
+              {appliedFilters && (appliedFilters.query || appliedFilters.status)
+                ? 'با فیلترهای اعمال‌شده نتیجه‌ای پیدا نشد.'
+                : 'هنوز فرمی در سامانه ثبت نشده است.'}
+            </strong>
+            {appliedFilters && (appliedFilters.query || appliedFilters.status) && (
+              <span>عبارت جست‌وجو یا وضعیت را تغییر دهید و دوباره اعمال کنید.</span>
+            )}
           </div>
+        ) : (
+          <>
+            <div className={styles.resultsMeta} aria-live="polite">
+              <span>{forms.length.toLocaleString('fa-IR')} فرم در فهرست فعلی</span>
+              {appliedFilters && (appliedFilters.query || appliedFilters.status) && (
+                <span>فیلتر فعال</span>
+              )}
+              {formNextCursor && <span>نتایج ادامه دارد</span>}
+            </div>
+            <div className={styles.tableWrap} data-table-scroll>
+              <table className={styles.table}>
+                <caption>
+                  فرم‌ها، وضعیت و شمارنده‌ی کلی پاسخ‌ها؛ بدون محتوای پاسخ یا شناسه‌ی مشتری.
+                </caption>
+                <thead>
+                  <tr>
+                    <th scope="col">عنوان</th>
+                    <th scope="col">محدوده</th>
+                    <th scope="col">وضعیت</th>
+                    <th scope="col">نسخه</th>
+                    <th scope="col">پاسخ‌ها</th>
+                    <th scope="col">زمان ایجاد</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {forms.map((form) => (
+                    <tr key={form.id}>
+                      <th scope="row">
+                        {form.title}
+                        <small dir="ltr">{form.slug}</small>
+                      </th>
+                      <td>
+                        <small dir="ltr">
+                          {form.organizationId.slice(0, 8)} · {form.branchId.slice(0, 8)}
+                        </small>
+                      </td>
+                      <td>
+                        <Badge
+                          tone={
+                            form.status === 'published'
+                              ? 'success'
+                              : form.status === 'paused'
+                                ? 'warning'
+                                : 'neutral'
+                          }
+                        >
+                          {statusLabel(form.status)}
+                        </Badge>
+                      </td>
+                      <td>{form.currentVersion ?? '—'}</td>
+                      <td>{form.responseCount.toLocaleString('fa-IR')}</td>
+                      <td>{new Date(form.createdAt).toLocaleDateString('fa-IR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
         {formNextCursor && (
           <Button

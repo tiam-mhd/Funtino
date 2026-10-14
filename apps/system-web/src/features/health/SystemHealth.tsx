@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, FuntinoMark, Surface } from '@funtino/design-system';
+import { Badge, Button, Surface } from '@funtino/design-system';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
 import styles from './SystemHealth.module.css';
 
 type ServiceStatus = 'healthy' | 'degraded' | 'down' | 'stale' | 'unknown';
@@ -101,13 +102,6 @@ export function SystemHealth() {
 
   return (
     <main className={styles.page} aria-busy={loading || refreshing}>
-      <header className={styles.topbar}>
-        <FuntinoMark />
-        <a href="/fa" className={styles.homeLink}>
-          بازگشت به نمای کلی
-        </a>
-      </header>
-
       <div className={styles.content}>
         <div className={styles.heading}>
           <div>
@@ -125,11 +119,7 @@ export function SystemHealth() {
           </Button>
         </div>
 
-        {loading && !snapshot && (
-          <p className={styles.feedback} role="status" aria-live="polite">
-            در حال دریافت telemetry مجاز…
-          </p>
-        )}
+        {loading && !snapshot && <LoadingSkeleton label="در حال دریافت وضعیت سرویس‌ها" rows={4} />}
 
         {error && (
           <p
@@ -151,53 +141,61 @@ export function SystemHealth() {
             </div>
 
             <section className={styles.serviceGrid} aria-label="وضعیت سرویس‌ها">
-              {snapshot.services.map((service) => (
-                <Surface className={styles.serviceCard} key={service.key}>
-                  <div className={styles.serviceHeading}>
-                    <div>
-                      <h2>{service.name}</h2>
-                      <small>
-                        {numberLabel(service.targets, 0)} هدف ·{' '}
-                        {numberLabel(service.unavailableTargets, 0)} غیرقابل‌دسترسی
-                      </small>
-                    </div>
-                    <Badge tone={statusTones[service.status]}>{statusLabels[service.status]}</Badge>
-                  </div>
-                  <dl className={styles.metrics}>
-                    <div>
-                      <dt>درخواست / ثانیه</dt>
-                      <dd>{numberLabel(service.requestsPerSecond, 2)}</dd>
-                    </div>
-                    <div>
-                      <dt>خطای 5xx</dt>
-                      <dd>
-                        {service.serverErrorPercent === null
-                          ? '—'
-                          : `${numberLabel(service.serverErrorPercent, 2)}٪`}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>تاخیر p95</dt>
-                      <dd>
-                        {service.p95LatencyMs === null
-                          ? '—'
-                          : `${numberLabel(service.p95LatencyMs)} ms`}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>تازگی scrape</dt>
-                      <dd>
-                        {service.freshnessSeconds === null
-                          ? '—'
-                          : `${numberLabel(service.freshnessSeconds, 0)} ثانیه`}
-                      </dd>
-                    </div>
-                  </dl>
-                  <p className={styles.lastScrape}>
-                    آخرین scrape: {dateLabel(service.lastScrapedAt)}
-                  </p>
+              {snapshot.services.length === 0 ? (
+                <Surface className={`${styles.emptyAlerts} ${styles.noServices}`} role="status">
+                  فهرست سرویسی از منبع پایش دریافت نشد. اتصال و پیکربندی Prometheus را بررسی کنید.
                 </Surface>
-              ))}
+              ) : (
+                snapshot.services.map((service) => (
+                  <Surface className={styles.serviceCard} key={service.key}>
+                    <div className={styles.serviceHeading}>
+                      <div>
+                        <h2>{service.name}</h2>
+                        <small>
+                          {numberLabel(service.targets, 0)} هدف ·{' '}
+                          {numberLabel(service.unavailableTargets, 0)} غیرقابل‌دسترسی
+                        </small>
+                      </div>
+                      <Badge tone={statusTones[service.status]}>
+                        {statusLabels[service.status]}
+                      </Badge>
+                    </div>
+                    <dl className={styles.metrics}>
+                      <div>
+                        <dt>درخواست / ثانیه</dt>
+                        <dd>{numberLabel(service.requestsPerSecond, 2)}</dd>
+                      </div>
+                      <div>
+                        <dt>خطای 5xx</dt>
+                        <dd>
+                          {service.serverErrorPercent === null
+                            ? '—'
+                            : `${numberLabel(service.serverErrorPercent, 2)}٪`}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>تاخیر p95</dt>
+                        <dd>
+                          {service.p95LatencyMs === null
+                            ? '—'
+                            : `${numberLabel(service.p95LatencyMs)} ms`}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>تازگی scrape</dt>
+                        <dd>
+                          {service.freshnessSeconds === null
+                            ? '—'
+                            : `${numberLabel(service.freshnessSeconds, 0)} ثانیه`}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className={styles.lastScrape}>
+                      آخرین scrape: {dateLabel(service.lastScrapedAt)}
+                    </p>
+                  </Surface>
+                ))
+              )}
             </section>
 
             <Surface className={styles.alertPanel}>
