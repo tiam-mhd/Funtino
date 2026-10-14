@@ -21,10 +21,13 @@ import type {
   LedgerEntry,
   Mission,
   MissionProgress,
+  ManagementLoginChallenge,
+  ManagementPasswordState,
   OtpChallenge,
   Session,
   User,
   UserAvatar,
+  UserIdentitySummary,
   UserProfileUpdate,
   WalletAccount,
 } from '../../domain/models.js';
@@ -32,6 +35,8 @@ import {
   type CreateHouseholdInput,
   type CreateMemberInput,
   type FuntinoStorePort,
+  type OtpPurpose,
+  type OtpVerificationResult,
 } from './funtino-store.js';
 import { PrismaService } from '../persistence/prisma/prisma.service.js';
 import { OrganizationBranchClient } from '../organization-branch/organization-branch.client.js';
@@ -62,6 +67,111 @@ export class PrismaFuntinoStore implements FuntinoStorePort {
   async getUserByPhone(phoneE164: string): Promise<User | undefined> {
     const user = await this.prisma.user.findUnique({ where: { phoneE164 } });
     return user ? mapUser(user) : undefined;
+  }
+
+  async listUserIdentitySummaries(userIds: readonly string[]): Promise<UserIdentitySummary[]> {
+    if (userIds.length === 0) return [];
+    const rows = await this.prisma.user.findMany({
+      where: { id: { in: [...new Set(userIds)] } },
+      select: { id: true, displayName: true, firstName: true, lastName: true },
+    });
+    return rows.map((row) => ({
+      userId: row.id,
+      displayName: row.displayName,
+      firstName: row.firstName,
+      lastName: row.lastName,
+    }));
+  }
+
+  async getManagementPasswordState(userId: string): Promise<ManagementPasswordState> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        managementPasswordHash: true,
+        managementPasswordFailedAttempts: true,
+        managementPasswordLockedUntil: true,
+      },
+    });
+    if (!user) throw new DomainError('UNAUTHENTICATED', 'حساب کاربری پیدا نشد.');
+    return {
+      passwordHash: user.managementPasswordHash,
+      failedAttempts: user.managementPasswordFailedAttempts,
+      lockedUntil: user.managementPasswordLockedUntil?.getTime() ?? null,
+    };
+  }
+
+  async recordManagementPasswordFailure(
+    userId: string,
+    now: number,
+    maxAttempts: number,
+    lockoutMs: number,
+  ): Promise<ManagementPasswordState> {
+    return this.prisma.$transaction(async (tx) => {
+      const [user] = await tx.$queryRaw<
+        Array<{
+          management_password_hash: string | null;
+          management_password_failed_attempts: number;
+          management_password_locked_until: Date | null;
+        }>
+      >`SELECT management_password_hash, management_password_failed_attempts, management_password_locked_until
+        FROM users WHERE id = ${userId}::uuid FOR UPDATE`;
+      if (!user) throw new DomainError('UNAUTHENTICATED', 'حساب کاربری پیدا نشد.');
+      const currentLock = user.management_password_locked_until?.getTime() ?? null;
+      if (currentLock !== null && currentLock > now) {
+        return {
+          passwordHash: user.management_password_hash,
+          failedAttempts: user.management_password_failed_attempts,
+          lockedUntil: currentLock,
+        };
+      }
+      const previousAttempts = currentLock !== null ? 0 : user.management_password_failed_attempts;
+      const failedAttempts = previousAttempts + 1;
+      const lockedUntil = failedAttempts >= maxAttempts ? now + lockoutMs : null;
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          managementPasswordFailedAttempts: failedAttempts,
+          managementPasswordLockedUntil: lockedUntil === null ? null : new Date(lockedUntil),
+        },
+      });
+      return { passwordHash: user.management_password_hash, failedAttempts, lockedUntil };
+    });
+  }
+
+  async clearManagementPasswordFailures(userId: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        managementPasswordFailedAttempts: 0,
+        managementPasswordLockedUntil: null,
+      },
+    });
+  }
+
+  async setManagementPassword(
+    userId: string,
+    passwordHash: string | null,
+    keepSessionId: string,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          managementPasswordHash: passwordHash,
+          managementPasswordFailedAttempts: 0,
+          managementPasswordLockedUntil: null,
+        },
+      });
+      await tx.session.updateMany({
+        where: {
+          userId,
+          audience: 'management',
+          id: { not: keepSessionId },
+          revokedAt: null,
+        },
+        data: { revokedAt: new Date() },
+      });
+    });
   }
 
   async updateUserProfile(userId: string, input: UserProfileUpdate): Promise<User> {
@@ -161,15 +271,82 @@ export class PrismaFuntinoStore implements FuntinoStorePort {
     phoneE164: string;
     code: string;
     ttlMs: number;
+    purpose?: OtpPurpose;
   }): Promise<OtpChallenge> {
     const challenge = await this.prisma.otpChallenge.create({
       data: {
         phoneE164: input.phoneE164,
+        purpose: input.purpose ?? 'customer_login',
         codeHash: hashSecret(input.code),
         expiresAt: new Date(Date.now() + input.ttlMs),
       },
     });
     return mapOtp(challenge);
+  }
+
+  async consumeOtpRequestCooldown(key: string, now: number, cooldownMs: number): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<Array<{ key: string }>>`
+      INSERT INTO otp_request_throttles (key, next_allowed_at, updated_at)
+      VALUES (${key}, ${new Date(now + cooldownMs)}, CURRENT_TIMESTAMP)
+      ON CONFLICT (key) DO UPDATE
+      SET next_allowed_at = EXCLUDED.next_allowed_at, updated_at = CURRENT_TIMESTAMP
+      WHERE otp_request_throttles.next_allowed_at <= ${new Date(now)}
+      RETURNING key`;
+    return rows.length === 1;
+  }
+
+  async consumeOtpChallengeIfValid(input: {
+    challengeId: string;
+    phoneE164: string;
+    purpose: OtpPurpose;
+    codeHash: string;
+    now: number;
+  }): Promise<OtpVerificationResult> {
+    return this.prisma.$transaction(async (tx) => {
+      const [challenge] = await tx.$queryRaw<
+        Array<{
+          id: string;
+          phone_e164: string;
+          purpose: string;
+          code_hash: string;
+          attempts: number;
+          expires_at: Date;
+          consumed_at: Date | null;
+        }>
+      >`SELECT id, phone_e164, purpose, code_hash, attempts, expires_at, consumed_at
+        FROM otp_challenges WHERE id = ${input.challengeId}::uuid FOR UPDATE`;
+      if (!challenge) return { status: 'not_found' };
+      if (challenge.phone_e164 !== input.phoneE164) return { status: 'phone_mismatch' };
+      if (challenge.purpose !== input.purpose) return { status: 'purpose_mismatch' };
+      if (challenge.consumed_at !== null) return { status: 'consumed' };
+      if (challenge.expires_at.getTime() <= input.now) return { status: 'expired' };
+      if (challenge.attempts >= 5) return { status: 'rate_limited' };
+      if (challenge.code_hash !== input.codeHash) {
+        const attempts = challenge.attempts + 1;
+        await tx.otpChallenge.update({
+          where: { id: input.challengeId },
+          data: { attempts },
+        });
+        return { status: attempts >= 5 ? 'rate_limited' : 'invalid_code' };
+      }
+      const consumedAt = new Date(input.now);
+      await tx.otpChallenge.update({
+        where: { id: input.challengeId },
+        data: { consumedAt },
+      });
+      return {
+        status: 'verified',
+        challenge: {
+          id: challenge.id,
+          phoneE164: challenge.phone_e164,
+          purpose: challenge.purpose as OtpPurpose,
+          codeHash: challenge.code_hash,
+          attempts: challenge.attempts,
+          expiresAt: challenge.expires_at.getTime(),
+          consumedAt: consumedAt.getTime(),
+        },
+      };
+    });
   }
 
   async getOtpChallenge(challengeId: string): Promise<OtpChallenge> {
@@ -197,9 +374,8 @@ export class PrismaFuntinoStore implements FuntinoStorePort {
     userId: string,
     tokenHash: string,
     ttlMs: number,
-    policy: { isSystemAdmin: boolean; mfaLoginDeadlineAt: number | null } = {
-      isSystemAdmin: false,
-      mfaLoginDeadlineAt: null,
+    policy: { audience: 'customer' | 'management' } = {
+      audience: 'customer',
     },
   ): Promise<Session> {
     const now = Date.now();
@@ -209,13 +385,72 @@ export class PrismaFuntinoStore implements FuntinoStorePort {
           userId,
           tokenHash,
           expiresAt: new Date(now + ttlMs),
-          isSystemAdmin: policy.isSystemAdmin,
-          mfaLoginDeadlineAt:
-            policy.mfaLoginDeadlineAt === null ? null : new Date(policy.mfaLoginDeadlineAt),
+          audience: policy.audience,
           lastActivityAt: new Date(now),
         },
       }),
     );
+  }
+
+  async saveManagementLoginChallenge(
+    userId: string,
+    tokenHash: string,
+    ttlMs: number,
+  ): Promise<ManagementLoginChallenge> {
+    const challenge = await this.prisma.managementLoginChallenge.create({
+      data: { userId, tokenHash, expiresAt: new Date(Date.now() + ttlMs) },
+    });
+    return mapManagementLoginChallenge(challenge);
+  }
+
+  async findManagementLoginChallenge(
+    tokenHash: string,
+  ): Promise<ManagementLoginChallenge | undefined> {
+    const challenge = await this.prisma.managementLoginChallenge.findUnique({
+      where: { tokenHash },
+    });
+    return challenge ? mapManagementLoginChallenge(challenge) : undefined;
+  }
+
+  async incrementManagementLoginChallengeAttempt(
+    tokenHash: string,
+    now: number,
+    maxAttempts: number,
+  ): Promise<boolean> {
+    const result = await this.prisma.managementLoginChallenge.updateMany({
+      where: {
+        tokenHash,
+        consumedAt: null,
+        expiresAt: { gt: new Date(now) },
+        attempts: { lt: maxAttempts },
+      },
+      data: { attempts: { increment: 1 } },
+    });
+    if (result.count !== 1) return false;
+    const challenge = await this.prisma.managementLoginChallenge.findUnique({
+      where: { tokenHash },
+      select: { id: true, attempts: true },
+    });
+    if (challenge && challenge.attempts >= maxAttempts) {
+      await this.prisma.managementLoginChallenge.updateMany({
+        where: { id: challenge.id, consumedAt: null },
+        data: { consumedAt: new Date(now) },
+      });
+    }
+    return true;
+  }
+
+  async consumeManagementLoginChallenge(tokenHash: string, now: number): Promise<boolean> {
+    const result = await this.prisma.managementLoginChallenge.updateMany({
+      where: {
+        tokenHash,
+        consumedAt: null,
+        expiresAt: { gt: new Date(now) },
+        attempts: { lt: 5 },
+      },
+      data: { consumedAt: new Date(now) },
+    });
+    return result.count === 1;
   }
 
   async touchSessionActivity(sessionId: string, at: number): Promise<void> {
@@ -792,6 +1027,7 @@ function mapUser(value: {
 function mapOtp(value: {
   id: string;
   phoneE164: string;
+  purpose: string;
   codeHash: string;
   attempts: number;
   expiresAt: Date;
@@ -800,6 +1036,7 @@ function mapOtp(value: {
   return {
     id: value.id,
     phoneE164: value.phoneE164,
+    purpose: value.purpose as OtpPurpose,
     codeHash: value.codeHash,
     attempts: value.attempts,
     expiresAt: value.expiresAt.getTime(),
@@ -809,19 +1046,19 @@ function mapOtp(value: {
 function mapSession(value: {
   id: string;
   userId: string;
+  audience: string;
   tokenHash: string;
   expiresAt: Date;
   revokedAt: Date | null;
   mfaVerifiedAt: Date | null;
   mfaFactorVersion: number | null;
   mfaMethod: string | null;
-  isSystemAdmin: boolean;
-  mfaLoginDeadlineAt: Date | null;
   lastActivityAt: Date;
 }): Session {
   return {
     id: value.id,
     userId: value.userId,
+    audience: value.audience === 'management' ? 'management' : 'customer',
     tokenHash: value.tokenHash,
     expiresAt: value.expiresAt.getTime(),
     revokedAt: value.revokedAt?.getTime() ?? null,
@@ -829,9 +1066,25 @@ function mapSession(value: {
     mfaFactorVersion: value.mfaFactorVersion,
     mfaMethod:
       value.mfaMethod === 'totp' || value.mfaMethod === 'recovery' ? value.mfaMethod : null,
-    isSystemAdmin: value.isSystemAdmin,
-    mfaLoginDeadlineAt: value.mfaLoginDeadlineAt?.getTime() ?? null,
     lastActivityAt: value.lastActivityAt.getTime(),
+  };
+}
+
+function mapManagementLoginChallenge(value: {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  attempts: number;
+  expiresAt: Date;
+  consumedAt: Date | null;
+}): ManagementLoginChallenge {
+  return {
+    id: value.id,
+    userId: value.userId,
+    tokenHash: value.tokenHash,
+    attempts: value.attempts,
+    expiresAt: value.expiresAt.getTime(),
+    consumedAt: value.consumedAt?.getTime() ?? null,
   };
 }
 function mapHousehold(value: {

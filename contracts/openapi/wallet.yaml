@@ -347,7 +347,7 @@ components:
     RegisterCardRequest:
       type: object
       additionalProperties: false
-      required: [externalCardId, reason]
+      required: [externalCardId]
       properties:
         externalCardId:
           type: string
@@ -357,18 +357,16 @@ components:
           description: Private physical identifier; never returned in API responses, events or audit snapshots.
         reason:
           type: string
-          minLength: 8
           maxLength: 500
     ChangeCardStatusRequest:
       type: object
       additionalProperties: false
-      required: [status, reason]
+      required: [status]
       properties:
         status:
           $ref: '#/components/schemas/CardManualStatusTarget'
         reason:
           type: string
-          minLength: 8
           maxLength: 500
     CardInventory:
       type: object

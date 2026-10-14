@@ -49,7 +49,7 @@ export default function SystemHome() {
           <a href="/fa/access">
             <span aria-hidden="true">♙</span> کاربران و دسترسی
           </a>
-          <a href="/fa/mfa">
+          <a href="/fa/security/mfa">
             <span aria-hidden="true">♙</span> تأیید دومرحله‌ای
           </a>
           <a href="/fa/security/session-policy">

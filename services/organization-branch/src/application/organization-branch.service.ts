@@ -41,7 +41,12 @@ export const organizationInputSchema = z
       .max(80)
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
     timezone,
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
   })
   .strict();
 
@@ -56,7 +61,12 @@ export const organizationUpdateSchema = z
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
       .optional(),
     timezone: timezone.optional(),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
   })
   .strict()
   .refine(
@@ -76,7 +86,12 @@ export const branchInputSchema = z
     city: z.string().trim().min(2).max(120),
     timezone,
     openingHours: openingHoursSchema,
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
   })
   .strict();
 
@@ -94,7 +109,12 @@ export const branchUpdateSchema = z
     city: z.string().trim().min(2).max(120).optional(),
     timezone: timezone.optional(),
     openingHours: openingHoursSchema.optional(),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
   })
   .strict()
   .refine(
@@ -110,11 +130,16 @@ export const branchUpdateSchema = z
 export const statusInputSchema = z
   .object({
     status: z.enum(statuses),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
   })
   .strict()
   .superRefine((value, context) => {
-    if (value.status === 'archived' && !value.reason) {
+    if (value.status === 'archived' && (!value.reason || value.reason.length < 8)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['reason'],

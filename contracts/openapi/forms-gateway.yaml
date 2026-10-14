@@ -81,13 +81,22 @@ paths:
   /api/v1/operations/forms/capabilities:
     get:
       operationId: getOperationsFormCapabilities
-      description: Returns server-evaluated capabilities, including forms.responses.correct. Sensitive fields require forms.responses.pii.read and a current MFA step-up.
+      description: Returns server-evaluated capabilities, including forms.responses.correct and forms.responses.pii.read. Sensitive fields require the PII permission and are audited; ordinary reads do not require MFA step-up. correctionStepUpRequired and exportStepUpRequired are true only when the corresponding permission is otherwise granted and fresh MFA is the remaining requirement.
       parameters:
         - $ref: '#/components/parameters/ScopeType'
         - $ref: '#/components/parameters/OrganizationId'
         - $ref: '#/components/parameters/OptionalBranchId'
       responses:
-        '200': { $ref: '#/components/responses/Success' }
+        '200':
+          description: Server-evaluated operations form capabilities.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/SuccessEnvelope' }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/OperationsFormCapabilities' }
         '401': { $ref: '#/components/responses/Error' }
   /api/v1/operations/forms/responses/stats:
     get:
@@ -216,7 +225,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ReasonRequest' }
+            schema: { $ref: '#/components/schemas/OptionalReasonRequest' }
       responses:
         '200': { $ref: '#/components/responses/Success' }
         '409': { $ref: '#/components/responses/Error' }
@@ -230,7 +239,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ReasonRequest' }
+            schema: { $ref: '#/components/schemas/OptionalReasonRequest' }
       responses:
         '200': { $ref: '#/components/responses/Success' }
         '409': { $ref: '#/components/responses/Error' }
@@ -297,7 +306,7 @@ paths:
         - in: query
           name: includeSensitive
           schema: { type: boolean, default: false }
-          description: Requires forms.responses.pii.read and a current MFA step-up.
+          description: Requires forms.responses.pii.read. The export itself requires forms.responses.export and its MFA step-up.
       responses:
         '200': { $ref: '#/components/responses/Success' }
         '403': { $ref: '#/components/responses/Error' }
@@ -314,7 +323,7 @@ paths:
         - in: query
           name: includeSensitive
           schema: { type: boolean, default: false }
-          description: Requires forms.responses.pii.read and a current MFA step-up.
+          description: Requires forms.responses.pii.read; reading sensitive fields does not require MFA step-up.
       responses:
         '200': { $ref: '#/components/responses/Success' }
         '403': { $ref: '#/components/responses/Error' }
@@ -334,10 +343,10 @@ paths:
               allOf:
                 - { $ref: '#/components/schemas/TenantScope' }
                 - type: object
-                  required: [status, reason]
+                  required: [status]
                   properties:
                     status: { $ref: '#/components/schemas/ResponseStatus' }
-                    reason: { type: string, minLength: 8, maxLength: 500 }
+                    reason: { type: string, maxLength: 500 }
               unevaluatedProperties: false
       responses:
         '200': { $ref: '#/components/responses/Success' }
@@ -348,7 +357,7 @@ paths:
     patch:
       operationId: correctOperationsFormResponseAnswers
       x-funtino-permission: forms.responses.correct
-      description: Also requires forms.responses.read. Changes to sensitive fields require forms.responses.pii.read and a current MFA step-up. Each changed field is appended to the response correction history; submitted answer content is never emitted in the event.
+      description: Requires forms.responses.correct, forms.responses.read, and a fresh MFA step-up. Changes to sensitive fields also require forms.responses.pii.read; that permission alone never requires MFA. Each changed field is appended to the response correction history; submitted answer content is never emitted in the event.
       parameters:
         - $ref: '#/components/parameters/FormId'
         - $ref: '#/components/parameters/ResponseId'
@@ -588,6 +597,35 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   schemas:
+    OperationsFormCapabilities:
+      type: object
+      required:
+        [
+          canRead,
+          canManage,
+          canPublish,
+          canReadResponses,
+          canManageResponses,
+          canCorrectResponses,
+          correctionStepUpRequired,
+          canReadSensitiveResponses,
+          canExportResponses,
+          exportStepUpRequired,
+          canManageTemplates,
+        ]
+      properties:
+        canRead: { type: boolean }
+        canManage: { type: boolean }
+        canPublish: { type: boolean }
+        canReadResponses: { type: boolean }
+        canManageResponses: { type: boolean }
+        canCorrectResponses: { type: boolean }
+        correctionStepUpRequired: { type: boolean }
+        canReadSensitiveResponses: { type: boolean }
+        canExportResponses: { type: boolean }
+        exportStepUpRequired: { type: boolean }
+        canManageTemplates: { type: boolean }
+      additionalProperties: false
     SuccessEnvelope:
       type: object
       required: [status, data, meta]
@@ -645,6 +683,13 @@ components:
           required: [reason]
           properties:
             reason: { type: string, minLength: 8, maxLength: 500 }
+      unevaluatedProperties: false
+    OptionalReasonRequest:
+      allOf:
+        - { $ref: '#/components/schemas/TenantScope' }
+        - type: object
+          properties:
+            reason: { type: string, maxLength: 500 }
       unevaluatedProperties: false
     PublicResponseSubmission:
       type: object

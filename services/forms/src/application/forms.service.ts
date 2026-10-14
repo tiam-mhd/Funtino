@@ -334,7 +334,7 @@ export class FormsService {
     });
   }
 
-  async publish(formId: string, scope: TenantScope, reason: string, meta: CommandMeta) {
+  async publish(formId: string, scope: TenantScope, reason: string | null, meta: CommandMeta) {
     return this.prisma.$transaction(async (tx) => {
       const form = await tx.form.findFirst({ where: formWhere(formId, scope) });
       if (!form) throw new NotFoundException('فرم در این محدوده پیدا نشد.');
@@ -374,7 +374,7 @@ export class FormsService {
         actorUserId: meta.actorUserId,
         organizationId: form.organizationId,
         branchId: form.branchId,
-        reason,
+        reason: reason ?? undefined,
         correlationId: meta.correlationId,
         metadata: { version, formVersionId: snapshot.id },
       });
@@ -400,7 +400,7 @@ export class FormsService {
     });
   }
 
-  async pause(formId: string, scope: TenantScope, reason: string, meta: CommandMeta) {
+  async pause(formId: string, scope: TenantScope, reason: string | null, meta: CommandMeta) {
     return this.prisma.$transaction(async (tx) => {
       const form = await tx.form.findFirst({ where: formWhere(formId, scope) });
       if (!form) throw new NotFoundException('فرم در این محدوده پیدا نشد.');
@@ -417,7 +417,7 @@ export class FormsService {
         actorUserId: meta.actorUserId,
         organizationId: form.organizationId,
         branchId: form.branchId,
-        reason,
+        reason: reason ?? undefined,
         correlationId: meta.correlationId,
       });
       await this.recordEvent(
@@ -953,7 +953,7 @@ export class FormsService {
     responseId: string,
     scope: TenantScope,
     status: ResponseStatus,
-    reason: string,
+    reason: string | null,
     meta: CommandMeta,
   ) {
     const nextStatus = responseStatusSchema.parse(status);
@@ -982,7 +982,7 @@ export class FormsService {
         actorUserId: meta.actorUserId,
         organizationId: response.organizationId,
         branchId: response.branchId,
-        reason,
+        reason: reason ?? undefined,
         correlationId: meta.correlationId,
         metadata: { previousStatus: response.status, status: nextStatus },
       });

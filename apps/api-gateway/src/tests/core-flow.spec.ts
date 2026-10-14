@@ -48,9 +48,13 @@ function accessClient(systemAdmin = false): IdentityAccessClient {
   } as unknown as IdentityAccessClient;
 }
 
-test('customer OTP creates a non-admin session only after live IAM classification', async () => {
+test('customer OTP creates only a customer-audience session without consulting management IAM', async () => {
   const store = new InMemoryFuntinoStore();
-  const auth = new AuthService(store, accessClient());
+  const auth = new AuthService(store, {
+    currentAccessContext: async () => {
+      throw new Error('customer authentication must not classify management memberships');
+    },
+  } as unknown as IdentityAccessClient);
   const otp = await auth.requestOtp('09121234567');
   assert.ok(otp.devCode);
 
@@ -59,60 +63,110 @@ test('customer OTP creates a non-admin session only after live IAM classificatio
     phone: '09121234567',
     code: otp.devCode,
   });
-  assert.equal(login.mfaRequired, false);
   const session = store.findSession(hashSecret(login.token));
-  assert.equal(session?.isSystemAdmin, false);
-  assert.equal(session?.mfaLoginDeadlineAt, null);
+  assert.equal(session?.audience, 'customer');
 });
 
-test('global system administrators receive a five-minute MFA-pending session on every OTP login', async () => {
+test('management OTP creates a separate session without mandatory TOTP enrollment', async () => {
   const store = new InMemoryFuntinoStore();
   const auth = new AuthService(store, accessClient(true));
-  const otp = await auth.requestOtp('09121234568');
+  await store.createUser('+989121234568');
+  const otp = await auth.requestOtp('09121234568', 'management_login');
   assert.ok(otp.devCode);
 
-  const before = Date.now();
-  const login = await auth.verifyOtp({
+  const login = await auth.verifyManagementOtp({
     challengeId: otp.challengeId,
     phone: '09121234568',
     code: otp.devCode,
   });
-  const session = store.findSession(hashSecret(login.token));
-  assert.equal(login.mfaRequired, true);
-  assert.equal(session?.isSystemAdmin, true);
+  assert.equal(login.requiresPassword, false);
+  assert.ok(login.token);
+  const session = store.findSession(hashSecret(login.token!));
+  assert.equal(session?.audience, 'management');
   assert.equal(session?.mfaVerifiedAt, null);
-  assert.ok(session?.mfaLoginDeadlineAt && session.mfaLoginDeadlineAt >= before + 5 * 60_000 - 100);
 });
 
-test('IAM failure leaves the OTP unconsumed and does not create an unclassified session', async () => {
+test('management IAM failure does not create a session', async () => {
   const store = new InMemoryFuntinoStore();
+  store.createUser('09121234569');
   const auth = new AuthService(store, {
     currentAccessContext: async () => {
       throw new Error('IAM unavailable');
     },
   } as unknown as IdentityAccessClient);
-  const otp = await auth.requestOtp('09121234569');
+  const otp = await auth.requestOtp('09121234569', 'management_login');
   assert.ok(otp.devCode);
 
   await assert.rejects(
-    auth.verifyOtp({
+    auth.verifyManagementOtp({
       challengeId: otp.challengeId,
       phone: '09121234569',
       code: otp.devCode,
     }),
   );
-  assert.equal(store.getOtpChallenge(otp.challengeId).consumedAt, null);
+  assert.notEqual(store.getOtpChallenge(otp.challengeId).consumedAt, null);
   assert.equal(store.findSession('no-session'), undefined);
 });
 
-test('MFA evidence remains session-local and activity timestamps are persisted', () => {
+test('optional management password gates the second login factor and uses one-time challenges', async () => {
+  const store = new InMemoryFuntinoStore();
+  const auth = new AuthService(store, accessClient(true));
+  const phone = '09121234570';
+  await store.createUser('+989121234570');
+  const initialOtp = await auth.requestOtp(phone, 'management_login');
+  const initialLogin = await auth.verifyManagementOtp({
+    challengeId: initialOtp.challengeId,
+    phone,
+    code: initialOtp.devCode!,
+  });
+  const initialSession = store.findSession(hashSecret(initialLogin.token!));
+  assert.ok(initialSession);
+
+  const passwordOtp = await auth.requestManagementPasswordOtp(initialSession.userId);
+  await auth.updateManagementPassword({
+    userId: initialSession.userId,
+    sessionId: initialSession.id,
+    enabled: true,
+    challengeId: passwordOtp.challengeId,
+    code: passwordOtp.devCode!,
+    password: 'correct-horse-battery',
+  });
+  const state = store.getManagementPasswordState(initialSession.userId);
+  assert.ok(state.passwordHash);
+  assert.notEqual(state.passwordHash, 'correct-horse-battery');
+  assert.equal(store.findSession(hashSecret(initialLogin.token!))?.revokedAt, null);
+
+  (store as unknown as { otpRequestThrottles: Map<string, number> }).otpRequestThrottles.clear();
+  const loginOtp = await auth.requestOtp(phone, 'management_login');
+  const challenged = await auth.verifyManagementOtp({
+    challengeId: loginOtp.challengeId,
+    phone,
+    code: loginOtp.devCode!,
+  });
+  assert.equal(challenged.requiresPassword, true);
+  assert.ok(challenged.challengeToken);
+  assert.equal(store.findSession(hashSecret(challenged.challengeToken!)), undefined);
+
+  const completed = await auth.verifyManagementPassword({
+    challengeToken: challenged.challengeToken!,
+    password: 'correct-horse-battery',
+  });
+  assert.equal(store.findSession(hashSecret(completed.token))?.audience, 'management');
+  await assert.rejects(
+    auth.verifyManagementPassword({
+      challengeToken: challenged.challengeToken!,
+      password: 'correct-horse-battery',
+    }),
+  );
+});
+
+test('MFA evidence remains session-local and management activity timestamps are persisted', () => {
   const store = new InMemoryFuntinoStore();
   const session = store.saveSession(adminUserId, 'session-hash', 60_000, {
-    isSystemAdmin: true,
-    mfaLoginDeadlineAt: Date.now() + 5 * 60_000,
+    audience: 'management',
   });
   assert.equal(session.mfaVerifiedAt, null);
-  assert.equal(session.isSystemAdmin, true);
+  assert.equal(session.audience, 'management');
   const activity = Date.now() + 1000;
   store.touchSessionActivity(session.id, activity);
   assert.equal(store.findSession('session-hash')?.lastActivityAt, activity);

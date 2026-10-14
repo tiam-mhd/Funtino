@@ -299,6 +299,7 @@ export function OperationsForms({
     } else {
       setTemplates([]);
     }
+    return permissionSet;
   }, [branchId, formQuery, formStatusFilter, scope]);
 
   useEffect(() => {
@@ -694,7 +695,12 @@ export function OperationsForms({
   }
 
   async function changeFormState(action: 'publish' | 'pause' | 'archive') {
-    if (!selectedForm || !formScope || !capabilities?.canPublish || reason.trim().length < 8)
+    if (
+      !selectedForm ||
+      !formScope ||
+      !capabilities?.canPublish ||
+      (action === 'archive' && reason.trim().length < 8)
+    )
       return;
     if (action === 'publish' && settingsDirty) {
       setActiveTab('settings');
@@ -742,7 +748,7 @@ export function OperationsForms({
         selectedForm.id,
         formScope,
         action,
-        reason.trim(),
+        reason.trim() || undefined,
       );
       setSelectedForm((current) =>
         current?.id === updated.id ? { ...current, ...updated } : current,
@@ -857,8 +863,7 @@ export function OperationsForms({
   async function openResponse(responseId: string, revealSensitive = false) {
     if (!selectedForm || !formScope) return;
     if (revealSensitive && !capabilities?.canReadSensitiveResponses) {
-      if (capabilities?.sensitiveStepUpRequired) setShowStepUp(true);
-      else setError('برای نمایش داده‌های حساس مجوز forms.responses.pii.read لازم است.');
+      setError('برای نمایش داده‌های حساس مجوز forms.responses.pii.read لازم است.');
       return;
     }
     setError('');
@@ -875,25 +880,13 @@ export function OperationsForms({
       setTagsDraft(detail.tags.join(', '));
     } catch (failure) {
       if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
-      if (
-        failure instanceof ApiRequestError &&
-        failure.status === 403 &&
-        capabilities?.sensitiveStepUpRequired
-      )
-        setShowStepUp(true);
       setError(errorMessage(failure, onSessionExpired));
     }
   }
 
   async function updateResponseStatus(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (
-      !selectedForm ||
-      !selectedResponse ||
-      !formScope ||
-      !capabilities?.canManageResponses ||
-      responseReason.trim().length < 8
-    )
+    if (!selectedForm || !selectedResponse || !formScope || !capabilities?.canManageResponses)
       return;
     setSaving(true);
     try {
@@ -902,7 +895,7 @@ export function OperationsForms({
         selectedResponse.id,
         formScope,
         responseStatusDraft,
-        responseReason.trim(),
+        responseReason.trim() || undefined,
       );
       setResponseReason('');
       await loadResponses(false);
@@ -932,6 +925,10 @@ export function OperationsForms({
       await openResponse(selectedResponse.id, showSensitiveDetail);
       setNotice('اصلاح پاسخ ثبت شد و در سابقه باقی می‌ماند.');
     } catch (failure) {
+      if (failure instanceof ApiRequestError && failure.status === 403) {
+        const updatedCapabilities = await refreshForms().catch(() => null);
+        if (updatedCapabilities?.correctionStepUpRequired) setShowStepUp(true);
+      }
       setError(errorMessage(failure, onSessionExpired));
       throw failure;
     } finally {
@@ -991,10 +988,13 @@ export function OperationsForms({
   }
 
   async function exportCsv() {
-    if (!selectedForm || !formScope || !capabilities?.canExportResponses) return;
+    if (!selectedForm || !formScope || !capabilities) return;
+    if (!capabilities.canExportResponses) {
+      if (capabilities.exportStepUpRequired) setShowStepUp(true);
+      return;
+    }
     if (includeSensitive && !capabilities.canReadSensitiveResponses) {
-      if (capabilities.sensitiveStepUpRequired) setShowStepUp(true);
-      else setError('برای خروجی شامل داده‌ی حساس مجوز جداگانه لازم است.');
+      setError('برای خروجی شامل داده‌ی حساس مجوز forms.responses.pii.read لازم است.');
       return;
     }
     setSaving(true);
@@ -1015,6 +1015,10 @@ export function OperationsForms({
         `${file.exportedCount.toLocaleString('fa-IR')} پاسخ خروجی گرفته شد${file.truncated ? '؛ خروجی به سقف ۵۰۰۰ ردیف رسید.' : '.'}`,
       );
     } catch (failure) {
+      if (failure instanceof ApiRequestError && failure.status === 403) {
+        const updatedCapabilities = await refreshForms().catch(() => null);
+        if (updatedCapabilities?.exportStepUpRequired) setShowStepUp(true);
+      }
       setError(errorMessage(failure, onSessionExpired));
     } finally {
       setSaving(false);
@@ -2916,11 +2920,10 @@ export function OperationsForms({
                     </Button>
                   </div>
                   <label className={styles.reason}>
-                    دلیل تغییر وضعیت، حداقل ۸ نویسه
+                    دلیل (برای بایگانی اجباری است؛ برای انتشار و توقف اختیاری)
                     <input
                       value={reason}
                       onChange={(event) => setReason(event.target.value)}
-                      minLength={8}
                       maxLength={500}
                     />
                   </label>
@@ -2934,12 +2937,7 @@ export function OperationsForms({
                     <div className={styles.inlineActions}>
                       <Button
                         type="button"
-                        disabled={
-                          saving ||
-                          settingsDirty ||
-                          !capabilities?.canPublish ||
-                          reason.trim().length < 8
-                        }
+                        disabled={saving || settingsDirty || !capabilities?.canPublish}
                         onClick={requestPublish}
                       >
                         {selectedForm.currentVersion ? 'انتشار نسخه‌ی تازه' : 'انتشار فرم'}
@@ -2948,7 +2946,7 @@ export function OperationsForms({
                         <Button
                           type="button"
                           tone="secondary"
-                          disabled={saving || !capabilities?.canPublish || reason.trim().length < 8}
+                          disabled={saving || !capabilities?.canPublish}
                           onClick={() => void changeFormState('pause')}
                         >
                           توقف فرم
@@ -3127,6 +3125,7 @@ export function OperationsForms({
                 showStepUp={showStepUp}
                 mfaStepUpUntil={mfaStepUpUntil}
                 onMfaStepUp={(validUntil) => {
+                  setShowStepUp(false);
                   onMfaStepUp(validUntil);
                   void refreshForms();
                 }}
@@ -3399,7 +3398,9 @@ function ResponseManagement(props: ResponseManagementProps) {
             <Button
               type="button"
               tone="ghost"
-              disabled={saving || !capabilities.canExportResponses}
+              disabled={
+                saving || (!capabilities.canExportResponses && !capabilities.exportStepUpRequired)
+              }
               onClick={onExport}
             >
               خروجی CSV
@@ -3415,21 +3416,16 @@ function ResponseManagement(props: ResponseManagementProps) {
               در خروجی، فیلدهای حساس هم باشد
             </label>
           )}
-          {capabilities.sensitiveStepUpRequired && (
-            <div className={styles.piiNotice}>
-              <p>نمایش یا خروجی داده‌ی حساس به تأیید MFA کوتاه‌مدت نیاز دارد.</p>
-              <Button type="button" tone="secondary" onClick={() => onShowStepUp(!showStepUp)}>
-                {showStepUp ? 'بستن تأیید MFA' : 'تأیید MFA'}
-              </Button>
-            </div>
-          )}
           {showStepUp && (
-            <OperationsMfaStepUpPanel
-              idPrefix="forms-pii"
-              mfaStepUpUntil={mfaStepUpUntil}
-              onMfaStepUp={onMfaStepUp}
-              onSessionExpired={onSessionExpired}
-            />
+            <div className={styles.piiNotice}>
+              <p>این فرمان به تأیید MFA تازه نیاز دارد. پس از تأیید، فرمان را دوباره اجرا کنید.</p>
+              <OperationsMfaStepUpPanel
+                idPrefix="forms-high-risk-command"
+                mfaStepUpUntil={mfaStepUpUntil}
+                onMfaStepUp={onMfaStepUp}
+                onSessionExpired={onSessionExpired}
+              />
+            </div>
           )}
           <div className={styles.responseSplit}>
             <div className={styles.responseList} aria-busy={loading}>
@@ -3503,10 +3499,6 @@ function ResponseManagement(props: ResponseManagementProps) {
                         >
                           {showSensitiveDetail ? 'پنهان‌کردن داده‌ی حساس' : 'نمایش داده‌ی حساس'}
                         </Button>
-                      ) : capabilities.sensitiveStepUpRequired ? (
-                        <Button type="button" tone="secondary" onClick={() => onShowStepUp(true)}>
-                          تأیید MFA
-                        </Button>
                       ) : (
                         <span>مجوز داده‌ی حساس ندارید.</span>
                       )}
@@ -3524,6 +3516,11 @@ function ResponseManagement(props: ResponseManagementProps) {
                       }}
                     >
                       اصلاح پاسخ با ثبت سابقه
+                    </Button>
+                  )}
+                  {capabilities.correctionStepUpRequired && !editingCorrection && (
+                    <Button type="button" tone="secondary" onClick={() => onShowStepUp(true)}>
+                      تأیید MFA برای اصلاح پاسخ
                     </Button>
                   )}
                   {editingCorrection && correctionDefinition ? (
@@ -3674,14 +3671,12 @@ function ResponseManagement(props: ResponseManagementProps) {
                         <label>
                           دلیل تغییر وضعیت
                           <input
-                            required
-                            minLength={8}
                             value={responseReason}
                             onChange={(event) => onResponseReason(event.target.value)}
                             maxLength={500}
                           />
                         </label>
-                        <Button type="submit" disabled={saving || responseReason.trim().length < 8}>
+                        <Button type="submit" disabled={saving}>
                           ذخیره‌ی وضعیت
                         </Button>
                       </form>

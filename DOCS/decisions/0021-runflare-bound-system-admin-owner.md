@@ -4,7 +4,7 @@
 - وضعیت: accepted
 - تصمیم‌گیر: مالک محصول
 - دامنه: API Gateway، Identity & Access، bootstrap تولید، runtime بک‌اند و authorization سراسری
-- جایگزین: انتخاب permission مدیر در ADR-0019 و ADR-0020؛ قواعد MFA، عمر نشست و write gate در ADR-0020 حفظ می‌شوند.
+- جایگزین: انتخاب permission مدیر در ADR-0019 و ADR-0020؛ عمر نشست و write gate در ADR-0020 حفظ می‌شوند. الزام MFA در هر ورود ADR-0020 با ADR-0025 supersede شده است؛ TOTP/recovery تازه و یک‌باره‌ی `finalize` این ADR همچنان لازم است.
 
 ## مسئله و زمینه
 
@@ -25,7 +25,7 @@
 - `prepare` برای همان حساب نقش موقت ۲۴ساعته و فاقد مجوز مدیریتی عادی می‌سازد. `finalize` تنها پس از TOTP یا recovery code تازه و یک‌بارمصرف، membership را در تراکنش قفل‌شده‌ی policy به نقش سراسری system-managed تبدیل می‌کند. audit قبل/بعد و Outbox اتمیک می‌مانند.
 - `system_admin` تمام کلیدهای `permissionCatalog` جاری را می‌گیرد؛ `delegable` بودن مانع تخصیص کلید به نقش محافظت‌شده‌ی system-managed نیست. این شامل `organization.create`، `system.session_policy.manage`، `system.access.bootstrap` و `system.access.impersonate` است. هر کلید همچنان باید endpoint و authorization سمت سرور متناسب داشته باشد؛ تعریف کلید به‌تنهایی route تازه ایجاد نمی‌کند.
 - هنگام finalize برای مالک پیکربندی‌شده، membershipهای global با role نام `system_admin` و وضعیت غیر از revoked که به حساب دیگری تعلق دارند در همان تراکنش revoke و audit می‌شوند. نقش با permissionهای شناخته‌شده‌ی ناقص قابل reconcile است؛ وجود permission خارج از کاتالوگ، role غیرسیستمی/ناسازگار یا state آسیب‌دیده fail-closed می‌ماند.
-- مدیر سراسری همچنان MFA در هر ورود انجام می‌دهد؛ عمر session مدیریتی ۱ تا ۱۲ ساعت با پیش‌فرض ۱۲ و اعتبار proof تا پایان همان session از ADR-0020 می‌آید. write gate production همچنان default-off است و `IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED=true` فقط با تنظیم صریح Runflare writeهای عادی IAM را باز می‌کند.
+- قاعده‌ی «MFA در هر ورود مدیر سراسری» با ADR-0025 supersede شده است. عمر session مدیریتی ۱ تا ۱۲ ساعت با پیش‌فرض ۱۲ و write gate production همچنان طبق ADR-0020 می‌ماند؛ `finalize` یک‌باره‌ی همین ADR هنوز TOTP/recovery تازه می‌خواهد.
 - API Gateway مالک resolve رابطه‌ی شماره به حساب در کد فعلی است؛ IAM هیچ دسترسی مستقیمی به جدول `users` Gateway نمی‌گیرد. endpoint داخلی فقط برای CLI bootstrap است، cache نمی‌شود، و شماره یا token را در response/log قرار نمی‌دهد.
 
 ## پیامدها و trade-offها

@@ -292,30 +292,14 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 
     apps/operations-web/src/
       app/
-        [locale]/
-          (auth)/
-            login/
-            verify-otp/
-          (workspace)/
-            layout.tsx
-            dashboard/
-            cashier/
-              card-lookup/
-              card-link/
-              top-up/
-              receipts/
-            branch/
-              hours/
-              attractions/
-              devices/
-              products/
-              pricing/
-            campaigns/
-            crm/
-            reports/
+        page.tsx
+        account/
+          security/
+            management-password/
       features/
         branch-scope/
         staff-access/
+        security/
         cashier/
         devices/
         products-pricing/
@@ -341,6 +325,8 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 - عملیات شارژ، برگشت و اصلاح باید reason، confirmation و status قابل‌پیگیری داشته باشند.
 - عملیات پرتکرار صندوق برای keyboard و شبکه‌ی ضعیف بهینه شود.
 - data table و form از componentهای اختصاصی و قابل تست استفاده کنند؛ query مستقیم در component عمومی ممنوع است.
+- تنظیم رمز مدیریت در `features/security/ManagementPasswordSettings.tsx` و route `app/account/security/management-password/` است؛ API فقط از نشست دارای audience مدیریت استفاده می‌کند.
+- به‌دلیل ساختار موجود Operations که با `src/app/page.tsx` و `OperationsEntry` اجرا می‌شود، صفحه‌ی رمز مدیریت در `src/app/account/security/management-password/page.tsx` قرار می‌گیرد. این exception فقط route امنیت حساب را پوشش می‌دهد و هر گسترش routeهای چندزبانه یا تبدیل Entry به workspace layout به ADR جدا نیاز دارد.
 
 ## ۷. ساختار system-web
 
@@ -355,6 +341,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
             layout.tsx
             overview/
             security/session-policy/
+            security/management-password/
             organizations/
             branches/
             users/
@@ -388,12 +375,14 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 قواعد system-web:
 
 - scope و نقش فعلی در همه‌ی صفحات مدیریتی آشکار باشد.
-- تغییر نقش، حذف اتصال، impersonation، برگشت یا تغییر feature flag نیازمند تأیید مجدد و audit است. دلیل در mutationهای عادی اختیاری است و فقط هنگام لغو عضویت فعال یا override فعال اجباری می‌شود؛ [ADR-0023](decisions/0023-system-admin-audit-reason-policy.md) مرجع است.
+- تغییر دسترسی، حذف اتصال، impersonation، برگشت یا تغییر feature flag نیازمند مجوز server-side و audit است. reason و MFA طبق ریسک operation در [ADR-0025](decisions/0025-management-audience-optional-password-and-risk-policy.md) تعیین می‌شود.
 - صفحه‌ی system-health برای مشاهده است؛ restart یا عملیات زیرساختی حساس پشت permission جدا باشد.
 - داده‌ی خام secret، token provider یا credential در رابط نمایش داده نمی‌شود.
 - پنل سیستمی با density بالاتر ساخته می‌شود، اما خوانایی، focus و خطای قابل‌اقدام حفظ می‌شود.
 - قابلیت پایش در `features/health/` و route مجاز `app/[locale]/(console)/system-health/` قرار می‌گیرد؛ دریافت telemetry فقط از Gateway و پس از مجوز سراسری IAM انجام می‌شود.
 - تنظیم مدت نشست مدیریتی در `features/security/SessionPolicySettings.tsx` و route `app/[locale]/(console)/security/session-policy/` قرار می‌گیرد؛ API فقط از Gateway و پس از مجوز global در IAM فراخوانی می‌شود.
+- تنظیم رمز مدیریت در `features/security/ManagementPasswordSettings.tsx` و route `app/[locale]/(console)/security/management-password/` قرار می‌گیرد؛ نشست با audience مدیریت محافظت می‌شود و رمز فقط به‌صورت hash در User Gateway ذخیره می‌شود.
+- ورود مدیریتی در gate گروه `(console)` انجام می‌شود؛ OTP مدیریت از OTP مشتری جداست و customer session هرگز به management session ارتقا داده نمی‌شود.
 
 ## ۸. ساختار هر سرویس دامنه
 

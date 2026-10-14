@@ -61,7 +61,9 @@
 
 ### G4 — هسته‌ی هویت و دسترسی
 
-وضعیت 2026-10-05: نشست مدیریتی مطلق و قابل‌تنظیم ۱ تا ۱۲ ساعت (پیش‌فرض ۱۲)، اعتبار MFA مدیر سراسری تا پایان همان نشست، صفحه‌ی تنظیمات System Web و مجوز اختصاصی غیرقابل‌واگذاری آماده است. Bootstrap اکنون تنها حساب متناظر با شماره‌ی مالک تنظیم‌شده در Runflare را از API Gateway resolve می‌کند؛ IAM UUID آزاد نمی‌پذیرد و به جدول Gateway دسترسی ندارد. مدیر سراسری هنگام finalize تمام کلیدهای کاتالوگ را می‌گیرد و مدیرهای global دیگر در همان تراکنش revoke می‌شوند. Customer-only همچنان ۳۰ روز و step-up کارکنان غیرمدیر سراسری پنج دقیقه است. write gate production همچنان default-off است و باید جداگانه در Runflare روی `true` تنظیم شود تا mutationهای معمول IAM کار کنند. انتشار snapshot بک‌اند و پیکربندی secretهای Runflare هنوز لازم است.
+وضعیت 2026-10-14: بسته‌ی هویت/نشست/deny/MFA/reason طبق [ADR-0025](decisions/0025-management-audience-optional-password-and-risk-policy.md) در source پیاده‌سازی و تست شده است. نشست‌های customer و management audience و cookie جدا دارند؛ Operations/System از OTP مدیریت و رمز اختیاری استفاده می‌کنند؛ MFA فقط برای commandهای پرریسک prompt می‌شود. Gateway، IAM، ownerها، UI و قراردادها بر سر union عضویت‌ها، scope deny، reason و step-up همسو هستند. migrationهای owner-specific در source هستند اما روی دیتابیس اجرا نشده‌اند؛ Runflare انتشار/تنظیم نشده و GitNexus impact به‌علت خطای دسترسی محیط اجرا نشد. جزئیات و شواهد در [ImplementationStatus.md](ImplementationStatus.md) آمده‌اند.
+
+وضعیت 2026-10-05 (تاریخی؛ سیاست ورود و step-up با ADR-0025 به‌روز شده است): نشست مدیریتی مطلق و قابل‌تنظیم ۱ تا ۱۲ ساعت (پیش‌فرض ۱۲)، صفحه‌ی تنظیمات System Web و مجوز اختصاصی غیرقابل‌واگذاری آماده است. Bootstrap اکنون تنها حساب متناظر با شماره‌ی مالک تنظیم‌شده در Runflare را از API Gateway resolve می‌کند؛ IAM UUID آزاد نمی‌پذیرد و به جدول Gateway دسترسی ندارد. مدیر سراسری هنگام finalize تمام کلیدهای کاتالوگ را می‌گیرد و مدیرهای global دیگر در همان تراکنش revoke می‌شوند. نشست مشتری ۳۰ روز و write gate production default-off است. انتشار snapshot بک‌اند و پیکربندی secretهای Runflare هنوز لازم است.
 
 وضعیت 2026-10-01: commandهای IAM (role/membership/invitation/override)، فهرست و لغو دعوت‌های صادرشده، delegation، idempotency، audit/outbox، ممیزی خواندن داده‌های حساس، حفاظت آخرین مدیر، MFA step-up و bootstrap آفلاین در source پیاده‌سازی شده‌اند؛ Operations Web نیز inbox پذیرش دعوت، roster و UI مدیریت role/status/override را به BFF متصل می‌کند. گزینه‌ی ۱ ADR-0010 اجرا شده است: IAM permission/delegation/MFA را ارزیابی می‌کند و سپس در production هر mutation tenant scope را با Owner فعال/هم‌والد بودن بررسی می‌کند. ADR-0011 gate مدیریتی production را default-off، bootstrap را one-shot و membership موقت آن را ۲۴ساعته می‌کند؛ تنظیم نشست‌ها و اعتبار MFA از این پس طبق ADR-0020 هستند. Owner failure یا configuration نامعتبر fail-closed است؛ rollout staging، secretهای مستقل و E2E tenant همچنان gate هستند. این وضعیت مجوز انتشار نیست.
 
@@ -184,6 +186,8 @@
 
 ### O0 — Shell، نقش و scope عملیاتی
 
+وضعیت 2026-10-14: ورود Operations از نشست audience=`management` استفاده می‌کند؛ انتخاب scope نقش/عضویت تازه نمی‌سازد. نقش‌ها و scopeهای فعال همان `userId` و منبع هویت آن در [ADR-0025](decisions/0025-management-audience-optional-password-and-risk-policy.md) تشریح می‌شوند.
+
 - ورود و session پنل؛
 - انتخاب سازمان و شعبه؛
 - shell و navigation عملیاتی؛
@@ -196,7 +200,7 @@
 
 ### O1 — صندوق و اتصال کارت
 
-وضعیت 2026-10-01: `services/wallet` و Customer & Household owner اکنون منبع موجودی و household/card assignment هستند. Gateway و Operations Web پشتیبانی می‌کنند: فهرست شعبه‌ای، ثبت، فیلتر و صفحه‌بندی، mask شناسه، optimistic status، lookup شماره‌ی دقیق با audit، تخصیص/انتقال/لغو household card با scope، مجوز، MFA، idempotency و تاریخچه. Customer Web تخصیص‌های فعال خانوارهای مجاز را بدون member-specific یا مبلغ مالی نمایش می‌دهد. کارت تا تأیید adapter همچنان `unknown` و غیرقابل تخصیص است؛ migration/backfill/staging، reconciliation، اثبات provider و E2E احراز‌شده هنوز gate هستند.
+وضعیت 2026-10-01 (سیاست MFA بعداً با ADR-0025 اصلاح شد): `services/wallet` و Customer & Household owner اکنون منبع موجودی و household/card assignment هستند. Gateway و Operations Web پشتیبانی می‌کنند: فهرست شعبه‌ای، ثبت، فیلتر و صفحه‌بندی، mask شناسه، optimistic status، lookup شماره‌ی دقیق با audit، تخصیص/انتقال/لغو household card با scope، مجوز، reason، idempotency و تاریخچه؛ این فرمان‌های عادی step-up نمی‌خواهند. Customer Web تخصیص‌های فعال خانوارهای مجاز را بدون member-specific یا مبلغ مالی نمایش می‌دهد. کارت تا تأیید adapter همچنان `unknown` و غیرقابل تخصیص است؛ migration/backfill/staging، reconciliation، اثبات provider و E2E احراز‌شده هنوز gate هستند.
 
 - جست‌وجوی مشتری و خانواده؛
 - مشاهده‌ی وضعیت کارت؛
@@ -279,8 +283,9 @@
 
 ### S0 — هویت مدیریتی و کنترل ویژه
 
-- ورود مدیر با MFA؛ TOTP با پنجره‌ی ۳۰ ثانیه و تلورانس یک بازه و ۱۰ recovery code یک‌بارمصرف (ADR-0006)؛
-- نشست مدیر با مدت مطلق ۱ تا ۱۲ ساعت و MFA proof تا پایان همان نشست؛ step-up کارکنان دیگر حداکثر ۳۰۰ ثانیه (ADR-0020)؛
+- ورود مدیریتی با OTP و audience جدا؛ رمز مدیریت اختیاری و MFA غیرالزامی هنگام login طبق ADR-0025؛
+- TOTP و recovery code برای step-up فرمان‌های پرریسک؛ evidence، عامل جاری و policy زنده در IAM بررسی می‌شوند؛
+- نشست مدیریت با مدت مطلق ۱ تا ۱۲ ساعت و نشست مشتری ۳۰ روز؛
 - نقش مدیر سامانه و پشتیبانی؛
 - break-glass policy؛
 - lock/unlock حساب؛
@@ -303,9 +308,9 @@
 
 ### S2 — کاربران، membership و policy
 
-وضعیت 2026-10-05: پنل system و APIهای مدیریت role، staff، فهرست/ایجاد/پذیرش/لغو invite، override و audit به Identity & Access متصل‌اند؛ audit حساس به step-up تازه‌ی نشست نیاز دارد. صفحه‌ی دسترسی System فهرست مجاز مجموعه‌ها و شعب فعال را برای انتخاب scope نشان می‌دهد و واگذاری مدیر مجموعه را با الگوی کامل `organization_manager` و دعوت شماره‌محور راهبری می‌کند؛ مدیر مجموعه scope خود مجموعه و شعب فعال فعلی/آینده‌ی آن را در Operations Web انتخاب می‌کند. عضویت مجموعه روی شعب آن اعمال می‌شود و مجوز global سامانه را واگذار نمی‌کند. IAM پس از permission/delegation/MFA از API زنده‌ی owner برای اعتبارسنجی وجود و active state scope استفاده می‌کند. در production نبودن تنظیمات یا عدم دسترسی owner هر mutation را fail-closed می‌کند؛ nonproduction همچنان scopeهای opaque را فقط برای توسعه/آزمون می‌پذیرد. اجرای staging/E2E و deployment مستقل باقی است.
+وضعیت 2026-10-05 (تاریخی؛ audit.read اکنون MFA نمی‌خواهد): پنل system و APIهای مدیریت role، staff، فهرست/ایجاد/پذیرش/لغو invite، override و audit به Identity & Access متصل‌اند. صفحه‌ی دسترسی System فهرست مجاز مجموعه‌ها و شعب فعال را برای انتخاب scope نشان می‌دهد و واگذاری مدیر مجموعه را با الگوی کامل `organization_manager` و دعوت شماره‌محور راهبری می‌کند؛ مدیر مجموعه scope خود مجموعه و شعب فعال فعلی/آینده‌ی آن را در Operations Web انتخاب می‌کند. عضویت مجموعه روی شعب آن اعمال می‌شود و مجوز global سامانه را واگذار نمی‌کند. IAM پس از permission/delegation و step-up لازم برای commandهای پرریسک از API زنده‌ی owner برای اعتبارسنجی وجود و active state scope استفاده می‌کند. در production نبودن تنظیمات یا عدم دسترسی owner هر mutation را fail-closed می‌کند؛ nonproduction همچنان scopeهای opaque را فقط برای توسعه/آزمون می‌پذیرد. اجرای staging/E2E و deployment مستقل باقی است.
 
-سیاست دلیل در پنل System مطابق [ADR-0023](decisions/0023-system-admin-audit-reason-policy.md) است: دلیل create/update و گذارهای برگشت‌پذیر اختیاری است؛ لغو دسترسی عضویت فعال و لغو override فعال همچنان دلیل و تأیید می‌خواهد. actor، scope، before/after، نتیجه، نسخه و Outbox برای mutationهای IAM حفظ می‌شوند.
+سیاست جدید دلیل/MFA در [ADR-0025](decisions/0025-management-audience-optional-password-and-risk-policy.md) است؛ این تصمیم دامنه‌ی دلیل و step-up را command به command بسط می‌دهد و فقط موارد پرریسک را اجباری می‌کند. actor، scope، before/after، نتیجه، نسخه و Outbox برای mutationهای IAM حفظ می‌شوند.
 
 - جست‌وجوی کاربر؛
 - عضویت در سازمان و شعبه؛

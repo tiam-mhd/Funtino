@@ -34,7 +34,7 @@ export class CardInventoryService {
   async registerCard(
     organizationId: string,
     branchId: string,
-    input: { externalCardId: string; reason: string },
+    input: { externalCardId: string; reason?: string },
     meta: CardCommandMeta,
   ): Promise<CardInventoryView> {
     let externalCardId: string;
@@ -43,10 +43,10 @@ export class CardInventoryService {
     } catch {
       throw new BadRequestException('Card identifier is invalid.');
     }
-    const normalizedReason = input.reason.trim();
+    const normalizedReason = input.reason?.trim() || null;
     if (
       externalCardId.length >= 4 &&
-      normalizedReason.toLowerCase().includes(externalCardId.toLowerCase())
+      normalizedReason?.toLowerCase().includes(externalCardId.toLowerCase())
     ) {
       throw new BadRequestException('Reason must not contain the physical card identifier.');
     }
@@ -71,7 +71,7 @@ export class CardInventoryService {
     command: ChangeCardStatusCommand,
     meta: CardCommandMeta,
   ): Promise<CardInventoryView> {
-    const normalized = { ...command, reason: command.reason.trim() };
+    const normalized = { ...command, reason: command.reason?.trim() || null };
     const replay = await this.repository.findIdempotentMutation<CardInventoryView>(
       'card.inventory.change-status',
       normalized,

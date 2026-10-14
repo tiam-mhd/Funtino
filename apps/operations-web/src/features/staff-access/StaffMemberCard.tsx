@@ -24,7 +24,7 @@ type StaffMemberCardProps = {
   roles: OperationsAccessRole[];
   permissions: OperationsPermission[];
   actionsDisabled: boolean;
-  onSensitiveAction: (label: string, action: () => Promise<void>) => void;
+  onSensitiveAction: (label: string, action: () => Promise<void>, requiresStepUp: boolean) => void;
   onSessionExpired: () => void;
 };
 
@@ -115,26 +115,30 @@ export function StaffMemberCard(props: StaffMemberCardProps) {
     const actionKey = 'role';
     const fingerprint = JSON.stringify({ roleId, reason, version: member.version });
     const key = keyFor(actionKey, fingerprint);
-    onSensitiveAction('نقش کارمند تغییر کرد.', async () => {
-      await changeOperationsStaffRole(member, roleId, reason, key);
-      completeKey(actionKey);
-      setRoleReason('');
-    });
+    onSensitiveAction(
+      'نقش کارمند تغییر کرد.',
+      async () => {
+        await changeOperationsStaffRole(member, roleId, reason, key);
+        completeKey(actionKey);
+        setRoleReason('');
+      },
+      true,
+    );
   }
 
   function submitStatus(action: 'suspend' | 'reactivate') {
     const reason = statusReason.trim();
-    if (reason.length < 8) return;
     const actionKey = `status:${action}`;
     const fingerprint = JSON.stringify({ reason, action });
     const key = keyFor(actionKey, fingerprint);
     onSensitiveAction(
       action === 'suspend' ? 'عضویت کارمند تعلیق شد.' : 'عضویت کارمند دوباره فعال شد.',
       async () => {
-        await changeOperationsStaffStatus(member.membershipId, action, reason, key);
+        await changeOperationsStaffStatus(member.membershipId, action, reason || undefined, key);
         completeKey(actionKey);
         setStatusReason('');
       },
+      false,
     );
   }
 
@@ -166,16 +170,20 @@ export function StaffMemberCard(props: StaffMemberCardProps) {
     const key = keyFor(actionKey, JSON.stringify(input));
     setOverrideError('');
     setOverrideNotice('');
-    onSensitiveAction('استثنای دسترسی ثبت شد.', async () => {
-      await createStaffPermissionOverride(member.membershipId, input, key);
-      completeKey(actionKey);
-      setOverrideReason('');
-      setExpiresAt('');
-      setResourceType('');
-      setResourceId('');
-      await refreshOverrides();
-      setOverrideNotice('تغییر ثبت شد؛ نتیجه‌ی مجوز در درخواست بعدی و سمت سرور ارزیابی می‌شود.');
-    });
+    onSensitiveAction(
+      'استثنای دسترسی ثبت شد.',
+      async () => {
+        await createStaffPermissionOverride(member.membershipId, input, key);
+        completeKey(actionKey);
+        setOverrideReason('');
+        setExpiresAt('');
+        setResourceType('');
+        setResourceId('');
+        await refreshOverrides();
+        setOverrideNotice('تغییر ثبت شد؛ نتیجه‌ی مجوز در درخواست بعدی و سمت سرور ارزیابی می‌شود.');
+      },
+      true,
+    );
   }
 
   function revokeOverride(override: PermissionOverride) {
@@ -187,21 +195,26 @@ export function StaffMemberCard(props: StaffMemberCardProps) {
     const actionKey = `override:revoke:${override.id}`;
     const key = keyFor(actionKey, reason);
     setOverrideError('');
-    onSensitiveAction('استثنای دسترسی لغو شد.', async () => {
-      await revokeStaffPermissionOverride(member.membershipId, override.id, reason, key);
-      completeKey(actionKey);
-      setRevokeReasons((current) => ({ ...current, [override.id]: '' }));
-      await refreshOverrides();
-      setOverrideNotice('استثنا لغو شد و در بررسی‌های مجوز بعدی اعمال نمی‌شود.');
-    });
+    onSensitiveAction(
+      'استثنای دسترسی لغو شد.',
+      async () => {
+        await revokeStaffPermissionOverride(member.membershipId, override.id, reason, key);
+        completeKey(actionKey);
+        setRevokeReasons((current) => ({ ...current, [override.id]: '' }));
+        await refreshOverrides();
+        setOverrideNotice('استثنا لغو شد و در بررسی‌های مجوز بعدی اعمال نمی‌شود.');
+      },
+      true,
+    );
   }
 
   return (
     <Surface className={styles.memberCard}>
       <div className={styles.memberHeader}>
         <div className={styles.memberIdentity}>
-          <strong>{member.maskedPhone || 'کارمند · شماره پنهان'}</strong>
+          <strong>{safeMemberName(member)}</strong>
           <span>
+            {member.maskedPhone ? `${member.maskedPhone} · ` : ''}
             {member.role.name} · عضویت در سطح {scopeLabel(member.scope)}
           </span>
         </div>
@@ -282,9 +295,7 @@ export function StaffMemberCard(props: StaffMemberCardProps) {
                 <textarea
                   disabled={actionsDisabled}
                   maxLength={500}
-                  minLength={8}
                   onChange={(event) => setStatusReason(event.currentTarget.value)}
-                  required
                   rows={2}
                   value={statusReason}
                 />
@@ -292,7 +303,7 @@ export function StaffMemberCard(props: StaffMemberCardProps) {
               <div className={styles.buttonRow}>
                 {member.status === 'active' ? (
                   <Button
-                    disabled={actionsDisabled || statusReason.trim().length < 8}
+                    disabled={actionsDisabled}
                     onClick={() => submitStatus('suspend')}
                     tone="danger"
                     type="button"
@@ -301,7 +312,7 @@ export function StaffMemberCard(props: StaffMemberCardProps) {
                   </Button>
                 ) : (
                   <Button
-                    disabled={actionsDisabled || statusReason.trim().length < 8}
+                    disabled={actionsDisabled}
                     onClick={() => submitStatus('reactivate')}
                     type="button"
                   >
@@ -511,6 +522,13 @@ function statusLabel(status: OperationsStaffMember['status']): string {
     revoked: 'لغوشده',
   };
   return labels[status];
+}
+
+function safeMemberName(member: OperationsStaffMember): string {
+  const identityName =
+    member.identity?.displayName?.trim() ||
+    [member.identity?.firstName, member.identity?.lastName].filter(Boolean).join(' ').trim();
+  return identityName || member.maskedPhone || 'کارمند · شماره پنهان';
 }
 
 function scopeLabel(scope: OperationsScope): string {

@@ -19,6 +19,11 @@ export type OperationsStaffMember = {
   role: OperationsAccessRole;
   version: number;
   maskedPhone?: string | null;
+  identity?: {
+    displayName: string | null;
+    firstName: string | null;
+    lastName: string | null;
+  } | null;
 };
 
 export type OperationsStaffInvitation = {
@@ -156,7 +161,7 @@ export function inviteOperationsStaff(
     phoneE164: string;
     scope: OperationsScope;
     roleId: string;
-    reason: string;
+    reason?: string;
   },
   idempotencyKey: string,
 ): Promise<unknown> {
@@ -169,12 +174,16 @@ export function inviteOperationsStaff(
 
 export function revokeScopedStaffInvitation(
   invitationId: string,
-  reason: string,
+  reason: string | undefined,
   idempotencyKey: string,
 ): Promise<unknown> {
   return apiRequest(
     `/api/v1/operations/staff/invitations/${encodeURIComponent(invitationId)}/revoke`,
-    { method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: { reason } },
+    {
+      method: 'POST',
+      headers: { 'Idempotency-Key': idempotencyKey },
+      body: reason ? { reason } : {},
+    },
   );
 }
 
@@ -197,13 +206,13 @@ export function changeOperationsStaffRole(
 export function changeOperationsStaffStatus(
   membershipId: string,
   action: 'suspend' | 'reactivate',
-  reason: string,
+  reason: string | undefined,
   idempotencyKey: string,
 ): Promise<unknown> {
   return apiRequest(`/api/v1/operations/staff/${encodeURIComponent(membershipId)}/${action}`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
-    body: { reason },
+    body: reason ? { reason } : {},
   });
 }
 

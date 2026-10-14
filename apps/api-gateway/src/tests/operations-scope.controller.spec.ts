@@ -30,8 +30,7 @@ function session(): Session {
     mfaVerifiedAt: null,
     mfaFactorVersion: null,
     mfaMethod: null,
-    isSystemAdmin: false,
-    mfaLoginDeadlineAt: null,
+    audience: 'management',
     lastActivityAt: Date.now(),
   };
 }

@@ -15,7 +15,10 @@ import {
 import { DomainError } from '@funtino/backend-core';
 import { z } from 'zod';
 import { formDefinitionSchema } from '@funtino/forms-schema';
-import { IdentityAccessClient, type AccessScopeDto } from '../../infrastructure/identity-access/identity-access.client.js';
+import {
+  IdentityAccessClient,
+  type AccessScopeDto,
+} from '../../infrastructure/identity-access/identity-access.client.js';
 import { FormsClient } from '../../infrastructure/forms/forms.client.js';
 import { OrganizationBranchClient } from '../../infrastructure/organization-branch/organization-branch.client.js';
 import { CurrentUser, requestCorrelationId, success } from './current-user.decorator.js';
@@ -28,111 +31,176 @@ import { NoStoreInterceptor } from './no-store.interceptor.js';
 const uuid = z.string().uuid();
 const responseStatuses = ['new', 'in_review', 'followed_up', 'closed', 'spam'] as const;
 const formStatuses = ['draft', 'published', 'paused', 'archived'] as const;
-const scopeQueryBaseSchema = z.object({
-  scopeType: z.enum(['organization', 'branch']),
-  organizationId: uuid,
-  branchId: uuid.optional(),
-}).strict();
-const validateScopeQuery = (value: z.infer<typeof scopeQueryBaseSchema>, context: z.RefinementCtx) => {
+const scopeQueryBaseSchema = z
+  .object({
+    scopeType: z.enum(['organization', 'branch']),
+    organizationId: uuid,
+    branchId: uuid.optional(),
+  })
+  .strict();
+const validateScopeQuery = (
+  value: z.infer<typeof scopeQueryBaseSchema>,
+  context: z.RefinementCtx,
+) => {
   if ((value.scopeType === 'branch') !== Boolean(value.branchId)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'Form scope is invalid.' });
   }
 };
 const scopeQuerySchema = scopeQueryBaseSchema.superRefine(validateScopeQuery);
-const listSchema = scopeQueryBaseSchema.extend({
-  status: z.enum(formStatuses).optional(),
-  query: z.string().trim().max(120).optional(),
-  cursor: uuid.optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(25),
-}).strict().superRefine(validateScopeQuery);
-const responseListSchema = scopeQueryBaseSchema.extend({
-  status: z.enum(responseStatuses).optional(),
-  from: z.string().datetime({ offset: true }).optional(),
-  to: z.string().datetime({ offset: true }).optional(),
-  searchFieldId: uuid.optional(),
-  search: z.string().trim().max(100).optional(),
-  cursor: uuid.optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(25),
-}).strict().superRefine((value, context) => {
-  validateScopeQuery(value, context);
-  if (value.from && value.to && Date.parse(value.to) < Date.parse(value.from)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Response date range is invalid.' });
-  }
-});
-const exportSchema = scopeQueryBaseSchema.extend({
-  status: z.enum(responseStatuses).optional(),
-  from: z.string().datetime({ offset: true }).optional(),
-  to: z.string().datetime({ offset: true }).optional(),
-  includeSensitive: z.coerce.boolean().default(false),
-}).strict().superRefine((value, context) => {
-  validateScopeQuery(value, context);
-  if (value.from && value.to && Date.parse(value.to) < Date.parse(value.from)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Response date range is invalid.' });
-  }
-});
+const listSchema = scopeQueryBaseSchema
+  .extend({
+    status: z.enum(formStatuses).optional(),
+    query: z.string().trim().max(120).optional(),
+    cursor: uuid.optional(),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  })
+  .strict()
+  .superRefine(validateScopeQuery);
+const responseListSchema = scopeQueryBaseSchema
+  .extend({
+    status: z.enum(responseStatuses).optional(),
+    from: z.string().datetime({ offset: true }).optional(),
+    to: z.string().datetime({ offset: true }).optional(),
+    searchFieldId: uuid.optional(),
+    search: z.string().trim().max(100).optional(),
+    cursor: uuid.optional(),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    validateScopeQuery(value, context);
+    if (value.from && value.to && Date.parse(value.to) < Date.parse(value.from)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Response date range is invalid.' });
+    }
+  });
+const exportSchema = scopeQueryBaseSchema
+  .extend({
+    status: z.enum(responseStatuses).optional(),
+    from: z.string().datetime({ offset: true }).optional(),
+    to: z.string().datetime({ offset: true }).optional(),
+    includeSensitive: z.coerce.boolean().default(false),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    validateScopeQuery(value, context);
+    if (value.from && value.to && Date.parse(value.to) < Date.parse(value.from)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Response date range is invalid.' });
+    }
+  });
 const scopeBodySchema = z.object({ organizationId: uuid, branchId: uuid.optional() }).strict();
-const createSchema = scopeBodySchema.extend({
-  branchId: uuid,
-  title: z.string().trim().min(1).max(160),
-}).strict();
+const createSchema = scopeBodySchema
+  .extend({
+    branchId: uuid,
+    title: z.string().trim().min(1).max(160),
+  })
+  .strict();
 const draftSchema = scopeBodySchema.extend({ definition: formDefinitionSchema }).strict();
-const settingsSchema = scopeBodySchema.extend({
-  accessMode: z.enum(['guest', 'optional_auth', 'auth_required']),
-  linkEnabled: z.boolean(),
-  startsAt: z.string().datetime({ offset: true }).nullable().optional(),
-  endsAt: z.string().datetime({ offset: true }).nullable().optional(),
-  responseLimit: z.number().int().positive().nullable().optional(),
-}).strict();
-const reasonSchema = scopeBodySchema.extend({ reason: z.string().trim().min(8).max(500) }).strict();
-const responseStatusSchema = scopeBodySchema.extend({
-  status: z.enum(responseStatuses),
-  reason: z.string().trim().min(8).max(500),
-}).strict();
+const settingsSchema = scopeBodySchema
+  .extend({
+    accessMode: z.enum(['guest', 'optional_auth', 'auth_required']),
+    linkEnabled: z.boolean(),
+    startsAt: z.string().datetime({ offset: true }).nullable().optional(),
+    endsAt: z.string().datetime({ offset: true }).nullable().optional(),
+    responseLimit: z.number().int().positive().nullable().optional(),
+  })
+  .strict();
+const optionalReasonSchema = scopeBodySchema
+  .extend({
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
+  })
+  .strict();
+const responseStatusSchema = scopeBodySchema
+  .extend({
+    status: z.enum(responseStatuses),
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
+  })
+  .strict();
 const jsonAnswerSchema = z.union([
-  z.string().max(4000), z.number().finite(), z.boolean(), z.null(),
-  z.array(z.unknown()).max(100), z.record(z.unknown()),
+  z.string().max(4000),
+  z.number().finite(),
+  z.boolean(),
+  z.null(),
+  z.array(z.unknown()).max(100),
+  z.record(z.unknown()),
 ]);
-const responseCorrectionSchema = scopeBodySchema.extend({
-  expectedVersion: z.number().int().nonnegative(),
-  changes: z.array(z.object({ fieldId: uuid, value: jsonAnswerSchema }).strict()).min(1).max(100),
-  reason: z.string().trim().min(8).max(500),
-}).strict().superRefine((value, context) => {
-  if (new Set(value.changes.map((change) => change.fieldId)).size !== value.changes.length) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['changes'], message: 'A field may be corrected only once per request.' });
-  }
-});
+const responseCorrectionSchema = scopeBodySchema
+  .extend({
+    expectedVersion: z.number().int().nonnegative(),
+    changes: z
+      .array(z.object({ fieldId: uuid, value: jsonAnswerSchema }).strict())
+      .min(1)
+      .max(100),
+    reason: z.string().trim().min(8).max(500),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (new Set(value.changes.map((change) => change.fieldId)).size !== value.changes.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['changes'],
+        message: 'A field may be corrected only once per request.',
+      });
+    }
+  });
 const noteSchema = scopeBodySchema.extend({ body: z.string().trim().min(1).max(2000) }).strict();
-const tagsSchema = scopeBodySchema.extend({ tags: z.array(z.string().trim().min(1).max(40)).max(12) }).strict();
-const templateListSchema = z.object({
-  scopeType: z.enum(['organization', 'branch']).optional(),
-  organizationId: uuid,
-  branchId: uuid.optional(),
-  enabledOnly: z.coerce.boolean().default(false),
-}).strict().superRefine((value, context) => {
-  if (value.scopeType && (value.scopeType === 'branch') !== Boolean(value.branchId)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Template scope is invalid.' });
-  }
-});
-const templateCreateSchema = z.object({
-  scopeType: z.enum(['organization', 'branch']),
-  organizationId: uuid,
-  branchId: uuid.optional(),
-  name: z.string().trim().min(1).max(120),
-  description: z.string().trim().max(500).optional(),
-  definition: formDefinitionSchema,
-}).strict().superRefine((value, context) => {
-  if ((value.scopeType === 'branch') !== Boolean(value.branchId)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Template scope is invalid.' });
-  }
-});
-const templateUpdateSchema = z.object({
-  organizationId: uuid,
-  branchId: uuid.optional(),
-  name: z.string().trim().min(1).max(120).optional(),
-  description: z.string().trim().max(500).optional(),
-  definition: formDefinitionSchema.optional(),
-  enabled: z.boolean().optional(),
-}).strict().refine((value) => value.name !== undefined || value.description !== undefined || value.definition !== undefined || value.enabled !== undefined);
+const tagsSchema = scopeBodySchema
+  .extend({ tags: z.array(z.string().trim().min(1).max(40)).max(12) })
+  .strict();
+const templateListSchema = z
+  .object({
+    scopeType: z.enum(['organization', 'branch']).optional(),
+    organizationId: uuid,
+    branchId: uuid.optional(),
+    enabledOnly: z.coerce.boolean().default(false),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.scopeType && (value.scopeType === 'branch') !== Boolean(value.branchId)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Template scope is invalid.' });
+    }
+  });
+const templateCreateSchema = z
+  .object({
+    scopeType: z.enum(['organization', 'branch']),
+    organizationId: uuid,
+    branchId: uuid.optional(),
+    name: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(500).optional(),
+    definition: formDefinitionSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if ((value.scopeType === 'branch') !== Boolean(value.branchId)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Template scope is invalid.' });
+    }
+  });
+const templateUpdateSchema = z
+  .object({
+    organizationId: uuid,
+    branchId: uuid.optional(),
+    name: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().max(500).optional(),
+    definition: formDefinitionSchema.optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      value.name !== undefined ||
+      value.description !== undefined ||
+      value.definition !== undefined ||
+      value.enabled !== undefined,
+  );
 
 type ScopeQuery = z.infer<typeof scopeQuerySchema>;
 type ScopeBody = z.infer<typeof scopeBodySchema>;
@@ -158,7 +226,8 @@ export class OperationsFormsController {
     await this.authorize(user.id, request, 'forms.read', scope, correlationId);
     await this.assertActiveScope(query.organizationId, query.branchId);
     const page = await this.forms.request('/internal/v1/forms', {
-      query: this.withoutScopeType(query), correlationId,
+      query: this.withoutScopeType(query),
+      correlationId,
     });
     return success(page, request);
   }
@@ -171,11 +240,18 @@ export class OperationsFormsController {
     @Req() request: AuthenticatedRequest,
   ) {
     const correlationId = requestCorrelationId(request);
-    const scope: AccessScopeDto = { type: 'branch', organizationId: body.organizationId, branchId: body.branchId };
+    const scope: AccessScopeDto = {
+      type: 'branch',
+      organizationId: body.organizationId,
+      branchId: body.branchId,
+    };
     await this.authorize(user.id, request, 'forms.manage', scope, correlationId);
     await this.assertActiveScope(body.organizationId, body.branchId);
     const result = await this.forms.request('/internal/v1/forms', {
-      method: 'POST', body: { ...body, actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
+      method: 'POST',
+      body: { ...body, actorUserId: user.id, correlationId },
+      actorUserId: user.id,
+      correlationId,
     });
     return success(result, request);
   }
@@ -193,7 +269,13 @@ export class OperationsFormsController {
     await this.authorize(user.id, request, 'forms.read', scope, correlationId);
     await this.assertActiveScope(query.organizationId, query.branchId);
     const { scopeType: _scopeType, ...scopeQuery } = query;
-    return success(await this.forms.request('/internal/v1/forms/templates', { query: scopeQuery, correlationId }), request);
+    return success(
+      await this.forms.request('/internal/v1/forms/templates', {
+        query: scopeQuery,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Post('templates')
@@ -204,14 +286,21 @@ export class OperationsFormsController {
     @Req() request: AuthenticatedRequest,
   ) {
     const correlationId = requestCorrelationId(request);
-    const scope: AccessScopeDto = body.scopeType === 'branch'
-      ? { type: 'branch', organizationId: body.organizationId, branchId: body.branchId! }
-      : { type: 'organization', organizationId: body.organizationId };
+    const scope: AccessScopeDto =
+      body.scopeType === 'branch'
+        ? { type: 'branch', organizationId: body.organizationId, branchId: body.branchId! }
+        : { type: 'organization', organizationId: body.organizationId };
     await this.authorize(user.id, request, 'forms.templates.manage', scope, correlationId);
     await this.assertActiveScope(body.organizationId, body.branchId);
-    return success(await this.forms.request('/internal/v1/forms/templates', {
-      method: 'POST', body: { ...body, actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request('/internal/v1/forms/templates', {
+        method: 'POST',
+        body: { ...body, actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Get('capabilities')
@@ -224,27 +313,41 @@ export class OperationsFormsController {
     const accessScope = this.accessScope(scope);
     await this.assertActiveScope(scope.organizationId, scope.branchId);
     const permissions = [
-      'forms.read', 'forms.manage', 'forms.publish', 'forms.responses.read',
-      'forms.responses.manage', 'forms.responses.correct', 'forms.responses.pii.read', 'forms.responses.export',
+      'forms.read',
+      'forms.manage',
+      'forms.publish',
+      'forms.responses.read',
+      'forms.responses.manage',
+      'forms.responses.correct',
+      'forms.responses.pii.read',
+      'forms.responses.export',
       'forms.templates.manage',
     ] as const;
-    const decisions = await Promise.all(permissions.map(async (permission) => ({
-      permission,
-      result: await this.evaluate(user.id, request, permission, accessScope, correlationId),
-    })));
-    const values = Object.fromEntries(decisions.map(({ permission, result }) => [permission, result]));
-    return success({
-      canRead: values['forms.read'].allowed,
-      canManage: values['forms.manage'].allowed,
-      canPublish: values['forms.publish'].allowed,
-      canReadResponses: values['forms.responses.read'].allowed,
-      canManageResponses: values['forms.responses.manage'].allowed,
-      canCorrectResponses: values['forms.responses.correct'].allowed,
-      canReadSensitiveResponses: values['forms.responses.pii.read'].allowed,
-      sensitiveStepUpRequired: values['forms.responses.pii.read'].reason === 'step_up_required',
-      canExportResponses: values['forms.responses.export'].allowed,
-      canManageTemplates: values['forms.templates.manage'].allowed,
-    }, request);
+    const decisions = await Promise.all(
+      permissions.map(async (permission) => ({
+        permission,
+        result: await this.evaluate(user.id, request, permission, accessScope, correlationId),
+      })),
+    );
+    const values = Object.fromEntries(
+      decisions.map(({ permission, result }) => [permission, result]),
+    );
+    return success(
+      {
+        canRead: values['forms.read'].allowed,
+        canManage: values['forms.manage'].allowed,
+        canPublish: values['forms.publish'].allowed,
+        canReadResponses: values['forms.responses.read'].allowed,
+        canManageResponses: values['forms.responses.manage'].allowed,
+        canCorrectResponses: values['forms.responses.correct'].allowed,
+        correctionStepUpRequired: values['forms.responses.correct'].reason === 'step_up_required',
+        canReadSensitiveResponses: values['forms.responses.pii.read'].allowed,
+        canExportResponses: values['forms.responses.export'].allowed,
+        exportStepUpRequired: values['forms.responses.export'].reason === 'step_up_required',
+        canManageTemplates: values['forms.templates.manage'].allowed,
+      },
+      request,
+    );
   }
 
   @Get('responses/stats')
@@ -254,11 +357,21 @@ export class OperationsFormsController {
     @Req() request: AuthenticatedRequest,
   ) {
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.responses.read', this.accessScope(scope), correlationId);
+    await this.authorize(
+      user.id,
+      request,
+      'forms.responses.read',
+      this.accessScope(scope),
+      correlationId,
+    );
     await this.assertActiveScope(scope.organizationId, scope.branchId);
-    return success(await this.forms.request('/internal/v1/forms/responses/stats', {
-      query: this.scopeQuery(scope), correlationId,
-    }), request);
+    return success(
+      await this.forms.request('/internal/v1/forms/responses/stats', {
+        query: this.scopeQuery(scope),
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Patch('templates/:templateId')
@@ -274,11 +387,20 @@ export class OperationsFormsController {
     const scope: AccessScopeDto = body.branchId
       ? { type: 'branch', organizationId: body.organizationId, branchId: body.branchId }
       : { type: 'organization', organizationId: body.organizationId };
-    await this.authorize(user.id, request, 'forms.templates.manage', scope, correlationId, { type: 'template', id: templateId });
+    await this.authorize(user.id, request, 'forms.templates.manage', scope, correlationId, {
+      type: 'template',
+      id: templateId,
+    });
     await this.assertActiveScope(body.organizationId, body.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/templates/${templateId}`, {
-      method: 'PATCH', body: { ...body, actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/templates/${templateId}`, {
+        method: 'PATCH',
+        body: { ...body, actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Get(':formId')
@@ -290,9 +412,18 @@ export class OperationsFormsController {
   ) {
     const formId = this.parseUuid(rawFormId);
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.read', this.accessScope(scope), correlationId, { type: 'form', id: formId });
+    await this.authorize(user.id, request, 'forms.read', this.accessScope(scope), correlationId, {
+      type: 'form',
+      id: formId,
+    });
     await this.assertActiveScope(scope.organizationId, scope.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}`, { query: this.scopeQuery(scope), correlationId }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}`, {
+        query: this.scopeQuery(scope),
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Post(':formId/duplicate')
@@ -305,11 +436,20 @@ export class OperationsFormsController {
   ) {
     const formId = this.parseUuid(rawFormId);
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.manage', this.accessScope(body), correlationId, { type: 'form', id: formId });
+    await this.authorize(user.id, request, 'forms.manage', this.accessScope(body), correlationId, {
+      type: 'form',
+      id: formId,
+    });
     await this.assertActiveScope(body.organizationId, body.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/duplicate`, {
-      method: 'POST', body: { ...body, actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/duplicate`, {
+        method: 'POST',
+        body: { ...body, actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Put(':formId/draft')
@@ -322,11 +462,20 @@ export class OperationsFormsController {
   ) {
     const formId = this.parseUuid(rawFormId);
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.manage', this.accessScope(body), correlationId, { type: 'form', id: formId });
+    await this.authorize(user.id, request, 'forms.manage', this.accessScope(body), correlationId, {
+      type: 'form',
+      id: formId,
+    });
     await this.assertActiveScope(body.organizationId, body.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/draft`, {
-      method: 'PUT', body: { ...body, actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/draft`, {
+        method: 'PUT',
+        body: { ...body, actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Put(':formId/settings')
@@ -339,11 +488,20 @@ export class OperationsFormsController {
   ) {
     const formId = this.parseUuid(rawFormId);
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.manage', this.accessScope(body), correlationId, { type: 'form', id: formId });
+    await this.authorize(user.id, request, 'forms.manage', this.accessScope(body), correlationId, {
+      type: 'form',
+      id: formId,
+    });
     await this.assertActiveScope(body.organizationId, body.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/settings`, {
-      method: 'PUT', body: { ...body, actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/settings`, {
+        method: 'PUT',
+        body: { ...body, actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Post(':formId/:action')
@@ -352,17 +510,30 @@ export class OperationsFormsController {
     @CurrentUser() user: { id: string },
     @Param('formId') rawFormId: string,
     @Param('action') action: string,
-    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @Body(new ZodValidationPipe(optionalReasonSchema)) body: z.infer<typeof optionalReasonSchema>,
     @Req() request: AuthenticatedRequest,
   ) {
-    if (!['publish', 'pause', 'archive'].includes(action)) throw new BadRequestException('Unknown form action.');
+    if (!['publish', 'pause', 'archive'].includes(action))
+      throw new BadRequestException('Unknown form action.');
+    if (action === 'archive' && (!body.reason || body.reason.length < 8)) {
+      throw new BadRequestException('Archiving a form requires a reason.');
+    }
     const formId = this.parseUuid(rawFormId);
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.publish', this.accessScope(body), correlationId, { type: 'form', id: formId });
+    await this.authorize(user.id, request, 'forms.publish', this.accessScope(body), correlationId, {
+      type: 'form',
+      id: formId,
+    });
     await this.assertActiveScope(body.organizationId, body.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/${action}`, {
-      method: 'POST', body: { ...body, actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/${action}`, {
+        method: 'POST',
+        body: { ...body, actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Get(':formId/responses')
@@ -374,11 +545,22 @@ export class OperationsFormsController {
   ) {
     const formId = this.parseUuid(rawFormId);
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.responses.read', this.accessScope(query), correlationId, { type: 'form', id: formId });
+    await this.authorize(
+      user.id,
+      request,
+      'forms.responses.read',
+      this.accessScope(query),
+      correlationId,
+      { type: 'form', id: formId },
+    );
     await this.assertActiveScope(query.organizationId, query.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/responses`, {
-      query: this.withoutScopeType(query), correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/responses`, {
+        query: this.withoutScopeType(query),
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Get(':formId/responses/stats')
@@ -390,9 +572,22 @@ export class OperationsFormsController {
   ) {
     const formId = this.parseUuid(rawFormId);
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.responses.read', this.accessScope(scope), correlationId, { type: 'form', id: formId });
+    await this.authorize(
+      user.id,
+      request,
+      'forms.responses.read',
+      this.accessScope(scope),
+      correlationId,
+      { type: 'form', id: formId },
+    );
     await this.assertActiveScope(scope.organizationId, scope.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/responses/stats`, { query: this.scopeQuery(scope), correlationId }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/responses/stats`, {
+        query: this.scopeQuery(scope),
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Get(':formId/responses/export')
@@ -405,12 +600,24 @@ export class OperationsFormsController {
     const formId = this.parseUuid(rawFormId);
     const correlationId = requestCorrelationId(request);
     const scope = this.accessScope(query);
-    await this.authorize(user.id, request, 'forms.responses.export', scope, correlationId, { type: 'form', id: formId });
-    if (query.includeSensitive) await this.authorize(user.id, request, 'forms.responses.pii.read', scope, correlationId, { type: 'form', id: formId });
+    await this.authorize(user.id, request, 'forms.responses.export', scope, correlationId, {
+      type: 'form',
+      id: formId,
+    });
+    if (query.includeSensitive)
+      await this.authorize(user.id, request, 'forms.responses.pii.read', scope, correlationId, {
+        type: 'form',
+        id: formId,
+      });
     await this.assertActiveScope(query.organizationId, query.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/responses/export`, {
-      query: { ...this.withoutScopeType(query), actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/responses/export`, {
+        query: { ...this.withoutScopeType(query), actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Get(':formId/responses/:responseId')
@@ -418,20 +625,44 @@ export class OperationsFormsController {
     @CurrentUser() user: { id: string },
     @Param('formId') rawFormId: string,
     @Param('responseId') rawResponseId: string,
-    @Query(new ZodValidationPipe(scopeQueryBaseSchema.extend({ includeSensitive: z.coerce.boolean().default(false) }).strict().superRefine(validateScopeQuery))) query: ScopeQuery & { includeSensitive: boolean },
+    @Query(
+      new ZodValidationPipe(
+        scopeQueryBaseSchema
+          .extend({ includeSensitive: z.coerce.boolean().default(false) })
+          .strict()
+          .superRefine(validateScopeQuery),
+      ),
+    )
+    query: ScopeQuery & { includeSensitive: boolean },
     @Req() request: AuthenticatedRequest,
   ) {
     const formId = this.parseUuid(rawFormId);
     const responseId = this.parseUuid(rawResponseId);
     const correlationId = requestCorrelationId(request);
     const scope = this.accessScope(query);
-    await this.authorize(user.id, request, 'forms.responses.read', scope, correlationId, { type: 'form', id: formId });
-    if (query.includeSensitive) await this.authorize(user.id, request, 'forms.responses.pii.read', scope, correlationId, { type: 'form', id: formId });
+    await this.authorize(user.id, request, 'forms.responses.read', scope, correlationId, {
+      type: 'form',
+      id: formId,
+    });
+    if (query.includeSensitive)
+      await this.authorize(user.id, request, 'forms.responses.pii.read', scope, correlationId, {
+        type: 'form',
+        id: formId,
+      });
     await this.assertActiveScope(query.organizationId, query.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/responses/${responseId}`, {
-      query: { ...this.scopeQuery(query), includeSensitive: query.includeSensitive, actorUserId: user.id, correlationId },
-      actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/responses/${responseId}`, {
+        query: {
+          ...this.scopeQuery(query),
+          includeSensitive: query.includeSensitive,
+          actorUserId: user.id,
+          correlationId,
+        },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Patch(':formId/responses/:responseId/status')
@@ -446,11 +677,24 @@ export class OperationsFormsController {
     const formId = this.parseUuid(rawFormId);
     const responseId = this.parseUuid(rawResponseId);
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.responses.manage', this.accessScope(body), correlationId, { type: 'form', id: formId });
+    await this.authorize(
+      user.id,
+      request,
+      'forms.responses.manage',
+      this.accessScope(body),
+      correlationId,
+      { type: 'form', id: formId },
+    );
     await this.assertActiveScope(body.organizationId, body.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/responses/${responseId}/status`, {
-      method: 'PATCH', body: { ...body, actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/responses/${responseId}/status`, {
+        method: 'PATCH',
+        body: { ...body, actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Patch(':formId/responses/:responseId/answers')
@@ -459,33 +703,58 @@ export class OperationsFormsController {
     @CurrentUser() user: { id: string },
     @Param('formId') rawFormId: string,
     @Param('responseId') rawResponseId: string,
-    @Body(new ZodValidationPipe(responseCorrectionSchema)) body: z.infer<typeof responseCorrectionSchema>,
+    @Body(new ZodValidationPipe(responseCorrectionSchema))
+    body: z.infer<typeof responseCorrectionSchema>,
     @Req() request: AuthenticatedRequest,
   ) {
     const formId = this.parseUuid(rawFormId);
     const responseId = this.parseUuid(rawResponseId);
     const correlationId = requestCorrelationId(request);
     const scope = this.accessScope(body);
-    await this.authorize(user.id, request, 'forms.responses.correct', scope, correlationId, { type: 'form', id: formId });
-    await this.authorize(user.id, request, 'forms.responses.read', scope, correlationId, { type: 'form', id: formId });
+    await this.authorize(user.id, request, 'forms.responses.correct', scope, correlationId, {
+      type: 'form',
+      id: formId,
+    });
+    await this.authorize(user.id, request, 'forms.responses.read', scope, correlationId, {
+      type: 'form',
+      id: formId,
+    });
     await this.assertActiveScope(body.organizationId, body.branchId);
 
-    const current = await this.forms.request(`/internal/v1/forms/${formId}/responses/${responseId}`, {
-      query: { ...this.scopeQuery(body), includeSensitive: false, actorUserId: user.id, correlationId },
-      actorUserId: user.id,
-      correlationId,
-    }) as { correctionVersion: number; definition: unknown };
+    const current = (await this.forms.request(
+      `/internal/v1/forms/${formId}/responses/${responseId}`,
+      {
+        query: {
+          ...this.scopeQuery(body),
+          includeSensitive: false,
+          actorUserId: user.id,
+          correlationId,
+        },
+        actorUserId: user.id,
+        correlationId,
+      },
+    )) as { correctionVersion: number; definition: unknown };
     const definition = formDefinitionSchema.parse(current.definition);
-    const sensitiveIds = new Set(definition.pages.flatMap((page) => page.fields.filter((field) => field.sensitive).map((field) => field.id)));
+    const sensitiveIds = new Set(
+      definition.pages.flatMap((page) =>
+        page.fields.filter((field) => field.sensitive).map((field) => field.id),
+      ),
+    );
     if (body.changes.some((change) => sensitiveIds.has(change.fieldId))) {
-      await this.authorize(user.id, request, 'forms.responses.pii.read', scope, correlationId, { type: 'form', id: formId });
+      await this.authorize(user.id, request, 'forms.responses.pii.read', scope, correlationId, {
+        type: 'form',
+        id: formId,
+      });
     }
-    const result = await this.forms.request(`/internal/v1/forms/${formId}/responses/${responseId}/answers`, {
-      method: 'PATCH',
-      body: { ...body, actorUserId: user.id, correlationId },
-      actorUserId: user.id,
-      correlationId,
-    });
+    const result = await this.forms.request(
+      `/internal/v1/forms/${formId}/responses/${responseId}/answers`,
+      {
+        method: 'PATCH',
+        body: { ...body, actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      },
+    );
     return success(result, request);
   }
 
@@ -501,11 +770,24 @@ export class OperationsFormsController {
     const formId = this.parseUuid(rawFormId);
     const responseId = this.parseUuid(rawResponseId);
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.responses.manage', this.accessScope(body), correlationId, { type: 'form', id: formId });
+    await this.authorize(
+      user.id,
+      request,
+      'forms.responses.manage',
+      this.accessScope(body),
+      correlationId,
+      { type: 'form', id: formId },
+    );
     await this.assertActiveScope(body.organizationId, body.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/responses/${responseId}/notes`, {
-      method: 'POST', body: { ...body, actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/responses/${responseId}/notes`, {
+        method: 'POST',
+        body: { ...body, actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   @Put(':formId/responses/:responseId/tags')
@@ -520,20 +802,37 @@ export class OperationsFormsController {
     const formId = this.parseUuid(rawFormId);
     const responseId = this.parseUuid(rawResponseId);
     const correlationId = requestCorrelationId(request);
-    await this.authorize(user.id, request, 'forms.responses.manage', this.accessScope(body), correlationId, { type: 'form', id: formId });
+    await this.authorize(
+      user.id,
+      request,
+      'forms.responses.manage',
+      this.accessScope(body),
+      correlationId,
+      { type: 'form', id: formId },
+    );
     await this.assertActiveScope(body.organizationId, body.branchId);
-    return success(await this.forms.request(`/internal/v1/forms/${formId}/responses/${responseId}/tags`, {
-      method: 'PUT', body: { ...body, actorUserId: user.id, correlationId }, actorUserId: user.id, correlationId,
-    }), request);
+    return success(
+      await this.forms.request(`/internal/v1/forms/${formId}/responses/${responseId}/tags`, {
+        method: 'PUT',
+        body: { ...body, actorUserId: user.id, correlationId },
+        actorUserId: user.id,
+        correlationId,
+      }),
+      request,
+    );
   }
 
   private accessScope(scope: ScopeQuery | ScopeBody): AccessScopeDto {
-    if (scope.branchId) return { type: 'branch', organizationId: scope.organizationId, branchId: scope.branchId };
+    if (scope.branchId)
+      return { type: 'branch', organizationId: scope.organizationId, branchId: scope.branchId };
     return { type: 'organization', organizationId: scope.organizationId };
   }
 
   private scopeQuery(scope: ScopeQuery | ScopeBody) {
-    return { organizationId: scope.organizationId, ...(scope.branchId ? { branchId: scope.branchId } : {}) };
+    return {
+      organizationId: scope.organizationId,
+      ...(scope.branchId ? { branchId: scope.branchId } : {}),
+    };
   }
 
   private withoutScopeType<T extends { scopeType: string }>(query: T) {
@@ -551,7 +850,10 @@ export class OperationsFormsController {
   ) {
     const result = await this.evaluate(userId, request, permission, scope, correlationId, resource);
     if (!result.allowed) {
-      const reason = result.reason === 'step_up_required' ? 'MFA step-up is required for this operation.' : 'Form permission is required for this operation.';
+      const reason =
+        result.reason === 'step_up_required'
+          ? 'MFA step-up is required for this operation.'
+          : 'Form permission is required for this operation.';
       throw new DomainError('FORBIDDEN', reason);
     }
   }
@@ -575,10 +877,12 @@ export class OperationsFormsController {
 
   private async assertActiveScope(organizationId: string, branchId?: string) {
     const organization = await this.organizationBranch.getOrganization(organizationId);
-    if (organization.status !== 'active') throw new DomainError('CONFLICT', 'Organization is not active.');
+    if (organization.status !== 'active')
+      throw new DomainError('CONFLICT', 'Organization is not active.');
     if (!branchId) return;
     const branch = await this.organizationBranch.getOrganizationBranch(organizationId, branchId);
-    if (branch.organizationId.toLowerCase() !== organizationId.toLowerCase()) throw new DomainError('NOT_FOUND', 'Branch was not found in this organization.');
+    if (branch.organizationId.toLowerCase() !== organizationId.toLowerCase())
+      throw new DomainError('NOT_FOUND', 'Branch was not found in this organization.');
     if (branch.status !== 'active') throw new DomainError('CONFLICT', 'Branch is not active.');
   }
 

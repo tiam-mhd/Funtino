@@ -239,23 +239,22 @@ components:
     DeviceRegistration:
       type: object
       additionalProperties: false
-      required: [adapterKey, externalDeviceId, displayName, deviceType, reason]
+      required: [adapterKey, externalDeviceId, displayName, deviceType]
       properties:
         adapterKey:
           { type: string, minLength: 1, maxLength: 60, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]*$' }
         externalDeviceId: { type: string, minLength: 1, maxLength: 160 }
         displayName: { type: string, minLength: 1, maxLength: 120 }
         deviceType: { $ref: '#/components/schemas/DeviceType' }
-        reason: { type: string, minLength: 5, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     DeviceUpdate:
       type: object
       additionalProperties: false
-      required: [reason]
-      minProperties: 2
+      minProperties: 1
       properties:
         displayName: { type: string, minLength: 1, maxLength: 120 }
         status: { $ref: '#/components/schemas/DeviceStatus' }
-        reason: { type: string, minLength: 5, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     DeviceCommandResult:
       type: object
       additionalProperties: false

@@ -91,7 +91,6 @@ test('card inventory query uses selected branch, server status filter, and curso
             canTransfer: true,
             canUnassign: true,
             canLookupCustomer: true,
-            requiresStepUp: false,
           },
         },
         { nextCursor: null },
@@ -108,7 +107,6 @@ test('card inventory query uses selected branch, server status filter, and curso
           canTransfer: true,
           canUnassign: true,
           canLookupCustomer: true,
-          requiresStepUp: false,
         },
       });
     },

@@ -27,9 +27,18 @@ const cardIdentifier = z
   .min(1)
   .max(160)
   .refine((value) => !/[\u0000-\u001f\u007f]/u.test(value));
-const reason = z.string().trim().min(8).max(500);
-const registerSchema = z.object({ externalCardId: cardIdentifier, reason }).strict();
-const statusSchema = z.object({ status: z.enum(CARD_MANUAL_STATUS_TARGETS), reason }).strict();
+const optionalReason = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .transform((value) => value || undefined);
+const registerSchema = z
+  .object({ externalCardId: cardIdentifier, reason: optionalReason })
+  .strict();
+const statusSchema = z
+  .object({ status: z.enum(CARD_MANUAL_STATUS_TARGETS), reason: optionalReason })
+  .strict();
 const listSchema = z
   .object({
     status: z.enum(CARD_INVENTORY_STATUSES).optional(),
@@ -97,7 +106,7 @@ export class CardInventoryController {
         cardId,
         expectedVersion: parseVersion(ifMatch),
         status: parsed.data.status,
-        reason: parsed.data.reason,
+        reason: parsed.data.reason ?? null,
       },
       commandMeta(headers),
     );

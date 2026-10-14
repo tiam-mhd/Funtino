@@ -75,6 +75,8 @@ export type AuthorizationOptions = {
   now?: Date;
   /** Required to evaluate a permission marked stepUp; undefined intentionally fails closed. */
   mfaFreshnessSeconds?: number;
+  /** Allows command-level MFA for a low-risk shared permission without gating its read route. */
+  forceStepUp?: boolean;
 };
 
 function scopeType(scope: AccessScope): ScopeType {
@@ -101,6 +103,17 @@ function scopeIdsMatch(left: AccessScope, right: AccessScope): boolean {
   if (left.type === 'global' || right.type === 'global') return left.type === right.type;
   if (left.organizationId !== right.organizationId) return false;
   return left.type !== 'branch' || (right.type === 'branch' && left.branchId === right.branchId);
+}
+
+function scopeContains(container: AccessScope, target: AccessScope): boolean {
+  if (container.type === 'global') return true;
+  if (target.type === 'global' || container.organizationId !== target.organizationId) return false;
+  if (container.type === 'organization') return true;
+  return target.type === 'branch' && container.branchId === target.branchId;
+}
+
+function scopeDepth(scope: AccessScope): number {
+  return scope.type === 'global' ? 0 : scope.type === 'organization' ? 1 : 2;
 }
 
 function roleScopeContains(roleScope: AccessScope, target: AccessScope): boolean {
@@ -136,6 +149,7 @@ function overrideMatches(
   context: AuthorizationContext,
   request: AuthorizationRequest,
   now: Date,
+  inheritDenial = false,
 ): boolean {
   if (
     override.membershipId !== context.membership.id ||
@@ -168,7 +182,13 @@ function overrideMatches(
   if (override.revokedAt || override.startsAt.getTime() > now.getTime()) return false;
   if (override.expiresAt && override.expiresAt.getTime() <= now.getTime()) return false;
   if (!membershipScopeContains(context.membership.scope, override.scope)) return false;
-  if (!scopeIdsMatch(override.scope, request.scope)) return false;
+  const scopeMatches =
+    inheritDenial && override.effect === 'deny'
+      ? scopeContains(override.scope, request.scope)
+      : scopeIdsMatch(override.scope, request.scope);
+  if (!scopeMatches) {
+    return false;
+  }
   if (override.resource) {
     return (
       request.resource?.type === override.resource.type &&
@@ -218,7 +238,7 @@ export function evaluateAuthorization(
   }
 
   const activeOverrides = context.overrides.filter((override) =>
-    overrideMatches(override, context, request, now),
+    overrideMatches(override, context, request, now, true),
   );
   if (activeOverrides.some((override) => override.effect === 'deny')) {
     return decision(false, request, context, 'user_deny_override');
@@ -238,7 +258,7 @@ export function evaluateAuthorization(
     return decision(false, request, context, 'permission_not_granted');
   }
 
-  if (permission.stepUp) {
+  if (permission.stepUp || options.forceStepUp === true) {
     const maxFreshnessSeconds =
       context.membership.status === 'active' &&
       context.membership.scope.type === 'global' &&
@@ -275,8 +295,9 @@ export function evaluateAuthorization(
 }
 
 /**
- * Evaluates the union of a user's applicable memberships. A deny from any active
- * membership that covers the target scope wins over every role/allow grant.
+ * Evaluates the union of a user's applicable memberships. A scoped deny clips grants at
+ * the same or narrower scope; it cannot erase an independent grant from a broader scope.
+ * An explicit deny on a global membership remains a user-wide veto for descendant scopes.
  */
 export function evaluateAuthorizationAcrossMemberships(
   contexts: readonly AuthorizationContext[],
@@ -303,12 +324,53 @@ export function evaluateAuthorizationAcrossMemberships(
   );
   if (applicable.length === 0) return denied('membership_inactive');
 
-  const decisions = applicable.map((context) => evaluateAuthorization(context, request, options));
-  const explicitDeny = decisions.find((result) => result.reason === 'user_deny_override');
-  if (explicitDeny) return { ...explicitDeny, allowed: false, policyVersion };
+  const now = options.now ?? new Date();
+  if (!(now instanceof Date) || !Number.isFinite(now.getTime()))
+    return denied('evaluation_time_invalid');
+  const globalDeny = applicable.some(
+    (context) =>
+      context.actorUserId === context.membership.userId &&
+      context.membership.status === 'active' &&
+      context.policyVersion === policyVersion &&
+      context.membership.scope.type === 'global' &&
+      context.overrides.some(
+        (override) =>
+          override.effect === 'deny' &&
+          override.scope.type === 'global' &&
+          overrideMatches(override, context, request, now, true),
+      ),
+  );
+  if (globalDeny) return denied('user_deny_override');
 
-  const grant = decisions.find((result) => result.allowed);
-  if (grant) return { ...grant, allowed: true, policyVersion };
+  const decisions = applicable.map((context) =>
+    context.policyVersion === policyVersion
+      ? evaluateAuthorization(context, request, options)
+      : denied('policy_version_invalid'),
+  );
+  const denials = applicable.flatMap((context) =>
+    context.actorUserId === context.membership.userId &&
+    context.membership.status === 'active' &&
+    context.policyVersion === policyVersion
+      ? context.overrides
+          .filter(
+            (override) =>
+              override.effect === 'deny' && overrideMatches(override, context, request, now, true),
+          )
+          .map((override) => ({ scope: override.scope, contextScope: context.membership.scope }))
+      : [],
+  );
+  const grantIndex = decisions.findIndex((result, index) => {
+    if (!result.allowed) return false;
+    const grantScope = applicable[index]!.membership.scope;
+    return !denials.some(
+      (denial) =>
+        scopeContains(denial.scope, request.scope) &&
+        scopeDepth(denial.scope) <= scopeDepth(grantScope) &&
+        scopeContains(denial.contextScope, request.scope),
+    );
+  });
+  if (grantIndex >= 0) return { ...decisions[grantIndex]!, allowed: true, policyVersion };
+  if (denials.length > 0) return denied('user_deny_override');
 
   return { ...decisions[0]!, policyVersion };
 }
@@ -412,30 +474,37 @@ export function hasEffectivePermissionWithoutStepUp(
       context.policyVersion === policyVersion &&
       membershipScopeContains(context.membership.scope, request.scope),
   );
+  const denials = applicable.flatMap((context) =>
+    context.overrides
+      .filter(
+        (override) =>
+          override.effect === 'deny' && overrideMatches(override, context, request, now, true),
+      )
+      .map((override) => ({ scope: override.scope, contextScope: context.membership.scope })),
+  );
+  const globalDeny = denials.some(
+    (denial) => denial.contextScope.type === 'global' && denial.scope.type === 'global',
+  );
+  if (globalDeny) return false;
+
   const decisions = applicable.map((context) => {
     const overrides = context.overrides.filter((override) =>
       overrideMatches(override, context, request, now),
     );
-    const denied = overrides.some((override) => override.effect === 'deny');
     const roleGrant =
       context.role.status === 'active' &&
       context.role.permissions.includes(request.permission) &&
       roleAssignmentScopeIsValid(context.role.scope, context.membership.scope) &&
       roleScopeContains(context.role.scope, request.scope);
-    return !denied && (roleGrant || overrides.some((override) => override.effect === 'allow'));
+    const hasGrant = roleGrant || overrides.some((override) => override.effect === 'allow');
+    const suppressed = denials.some(
+      (denial) =>
+        scopeContains(denial.scope, request.scope) &&
+        scopeDepth(denial.scope) <= scopeDepth(context.membership.scope) &&
+        scopeContains(denial.contextScope, request.scope),
+    );
+    return hasGrant && !suppressed;
   });
-
-  // Explicit deny from any applicable membership wins over all grants.
-  if (
-    applicable.some((context) =>
-      context.overrides.some(
-        (override) =>
-          override.effect === 'deny' && overrideMatches(override, context, request, now),
-      ),
-    )
-  ) {
-    return false;
-  }
   return decisions.some(Boolean);
 }
 

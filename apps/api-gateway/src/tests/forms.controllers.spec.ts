@@ -21,24 +21,64 @@ const responseId = '99999999-9999-4999-8999-999999999999';
 const correctionDefinition = {
   schemaVersion: 1,
   title: 'Contact form',
-  pages: [{
-    id: pageId,
-    title: 'Contact',
-    fields: [
-      { id: nonSensitiveFieldId, type: 'short_text', label: 'Message' },
-      { id: sensitiveFieldId, type: 'email', label: 'Email', sensitive: true },
-    ],
-  }],
+  pages: [
+    {
+      id: pageId,
+      title: 'Contact',
+      fields: [
+        { id: nonSensitiveFieldId, type: 'short_text', label: 'Message' },
+        { id: sensitiveFieldId, type: 'email', label: 'Email', sensitive: true },
+      ],
+    },
+  ],
 };
 
 function request(overrides: Partial<AuthenticatedRequest> = {}): AuthenticatedRequest {
   return {
-    session: { id: 'session-id', userId, isSystemAdmin: false } as never,
+    session: { id: 'session-id', userId, audience: 'customer' } as never,
     requestId: 'request-id',
     correlationId,
     ...overrides,
   } as AuthenticatedRequest;
 }
+
+test('form capabilities separate missing MFA from the permission to read sensitive fields', async () => {
+  const controller = new OperationsFormsController(
+    {
+      evaluateAuthorization: async (
+        _userId: unknown,
+        _session: unknown,
+        input: { permission: string },
+      ) => {
+        if (
+          input.permission === 'forms.responses.correct' ||
+          input.permission === 'forms.responses.export'
+        ) {
+          return { allowed: false, reason: 'step_up_required' };
+        }
+        if (input.permission === 'forms.responses.pii.read') {
+          return { allowed: false, reason: 'permission_denied' };
+        }
+        return { allowed: true, reason: 'allowed' };
+      },
+    } as unknown as IdentityAccessClient,
+    { getOrganization: async () => ({ status: 'active' }) } as unknown as OrganizationBranchClient,
+    {} as unknown as FormsClient,
+  );
+
+  const result = await controller.capabilities(
+    { id: userId },
+    { scopeType: 'organization', organizationId },
+    request(),
+  );
+
+  assert.equal(result.data.canCorrectResponses, false);
+  assert.equal(result.data.correctionStepUpRequired, true);
+  assert.equal(result.data.canExportResponses, false);
+  assert.equal(result.data.exportStepUpRequired, true);
+  assert.equal(result.data.canReadSensitiveResponses, false);
+  assert.equal('sensitiveStepUpRequired' in result.data, false);
+});
 
 test('guest and signed-in customer submissions only link an account after explicit consent', async () => {
   const forwarded: Array<{ path: string; body: Record<string, unknown> }> = [];
@@ -50,24 +90,36 @@ test('guest and signed-in customer submissions only link an account after explic
   } as unknown as FormsClient;
   const controller = new CustomerFormsController(forms);
 
-  await controller.submit('public-form', {
-    answers: {},
-    idempotencyKey: 'guest-idempotency-key',
-    linkToAccountConsent: false,
-  }, request({ session: undefined }));
+  await controller.submit(
+    'public-form',
+    {
+      answers: {},
+      idempotencyKey: 'guest-idempotency-key',
+      linkToAccountConsent: false,
+    },
+    request({ session: undefined }),
+  );
 
-  await controller.submit('public-form', {
-    answers: {},
-    idempotencyKey: 'signed-in-no-consent-key',
-    linkToAccountConsent: false,
-  }, request({ user: { id: userId } as never }));
+  await controller.submit(
+    'public-form',
+    {
+      answers: {},
+      idempotencyKey: 'signed-in-no-consent-key',
+      linkToAccountConsent: false,
+    },
+    request({ user: { id: userId } as never }),
+  );
 
-  await controller.submit('public-form', {
-    answers: {},
-    idempotencyKey: 'signed-in-idempotency-key',
-    linkToAccountConsent: true,
-    linkParameters: { source: 'branch-card' },
-  }, request({ user: { id: userId } as never }));
+  await controller.submit(
+    'public-form',
+    {
+      answers: {},
+      idempotencyKey: 'signed-in-idempotency-key',
+      linkToAccountConsent: true,
+      linkParameters: { source: 'branch-card' },
+    },
+    request({ user: { id: userId } as never }),
+  );
 
   assert.equal(forwarded[0]?.body.isAuthenticated, false);
   assert.equal('customerId' in (forwarded[0]?.body ?? {}), false);
@@ -89,7 +141,12 @@ test('branch-scoped form list forwards the selected scope to IAM and stops befor
       },
     } as unknown as IdentityAccessClient,
     {} as OrganizationBranchClient,
-    { request: async () => { formsCalls += 1; return { items: [] }; } } as unknown as FormsClient,
+    {
+      request: async () => {
+        formsCalls += 1;
+        return { items: [] };
+      },
+    } as unknown as FormsClient,
   );
 
   await assert.rejects(
@@ -128,17 +185,28 @@ test('organization aggregate returns scoped counts without forwarding response c
     request(),
   );
 
-  assert.deepEqual(forwarded, [{ path: '/internal/v1/forms/responses/stats', query: { organizationId } }]);
-  assert.deepEqual(result.data, { total: 2, byStatus: { new: 2 }, byBranch: [{ branchId, count: 2 }] });
+  assert.deepEqual(forwarded, [
+    { path: '/internal/v1/forms/responses/stats', query: { organizationId } },
+  ]);
+  assert.deepEqual(result.data, {
+    total: 2,
+    byStatus: { new: 2 },
+    byBranch: [{ branchId, count: 2 }],
+  });
   assert.equal(JSON.stringify(result).includes('answers'), false);
 });
 
-test('response correction requires the separate MFA protected PII permission for sensitive fields', async () => {
+test('response correction requires the separate PII permission for sensitive fields', async () => {
   const calls: string[] = [];
   const controller = new OperationsFormsController(
     {
-      evaluateAuthorization: async (_userId: unknown, _session: unknown, input: { permission: string }) => {
-        if (input.permission === 'forms.responses.pii.read') return { allowed: false, reason: 'step_up_required' };
+      evaluateAuthorization: async (
+        _userId: unknown,
+        _session: unknown,
+        input: { permission: string },
+      ) => {
+        if (input.permission === 'forms.responses.pii.read')
+          return { allowed: false, reason: 'permission_denied' };
         return { allowed: true, reason: 'allowed' };
       },
     } as unknown as IdentityAccessClient,
@@ -149,7 +217,8 @@ test('response correction requires the separate MFA protected PII permission for
     {
       request: async (path: string) => {
         calls.push(path);
-        if (path.endsWith(`/${responseId}`)) return { definition: correctionDefinition, correctionVersion: 0 };
+        if (path.endsWith(`/${responseId}`))
+          return { definition: correctionDefinition, correctionVersion: 0 };
         return { correctionVersion: 1 };
       },
     } as unknown as FormsClient,
@@ -160,7 +229,13 @@ test('response correction requires the separate MFA protected PII permission for
       { id: userId },
       'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
       responseId,
-      { organizationId, branchId, expectedVersion: 0, changes: [{ fieldId: sensitiveFieldId, value: 'person@example.test' }], reason: 'Corrected contact detail' },
+      {
+        organizationId,
+        branchId,
+        expectedVersion: 0,
+        changes: [{ fieldId: sensitiveFieldId, value: 'person@example.test' }],
+        reason: 'Corrected contact detail',
+      },
       request(),
     ),
     (error: unknown) => error instanceof DomainError && error.code === 'FORBIDDEN',
@@ -170,17 +245,26 @@ test('response correction requires the separate MFA protected PII permission for
 });
 
 test('response correction forwards non-sensitive changes with the expected version and reason', async () => {
-  const calls: Array<{ path: string; options: { method?: string; body?: Record<string, unknown> } }> = [];
+  const calls: Array<{
+    path: string;
+    options: { method?: string; body?: Record<string, unknown> };
+  }> = [];
   const controller = new OperationsFormsController(
-    { evaluateAuthorization: async () => ({ allowed: true, reason: 'allowed' }) } as unknown as IdentityAccessClient,
+    {
+      evaluateAuthorization: async () => ({ allowed: true, reason: 'allowed' }),
+    } as unknown as IdentityAccessClient,
     {
       getOrganization: async () => ({ status: 'active' }),
       getOrganizationBranch: async () => ({ organizationId, status: 'active' }),
     } as unknown as OrganizationBranchClient,
     {
-      request: async (path: string, options: { method?: string; body?: Record<string, unknown> }) => {
+      request: async (
+        path: string,
+        options: { method?: string; body?: Record<string, unknown> },
+      ) => {
         calls.push({ path, options });
-        if (path.endsWith(`/${responseId}`)) return { definition: correctionDefinition, correctionVersion: 0 };
+        if (path.endsWith(`/${responseId}`))
+          return { definition: correctionDefinition, correctionVersion: 0 };
         return { id: responseId, correctionVersion: 1, changedFieldCount: 1 };
       },
     } as unknown as FormsClient,
@@ -190,7 +274,13 @@ test('response correction forwards non-sensitive changes with the expected versi
     { id: userId },
     'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     responseId,
-    { organizationId, branchId, expectedVersion: 0, changes: [{ fieldId: nonSensitiveFieldId, value: 'Updated message' }], reason: 'Corrected message' },
+    {
+      organizationId,
+      branchId,
+      expectedVersion: 0,
+      changes: [{ fieldId: nonSensitiveFieldId, value: 'Updated message' }],
+      reason: 'Corrected message',
+    },
     request(),
   );
 

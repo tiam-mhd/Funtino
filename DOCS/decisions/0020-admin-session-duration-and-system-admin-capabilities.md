@@ -3,7 +3,7 @@
 - Date: 2026-10-04
 - Status: accepted
 - Scope: Identity & Access, API Gateway, System Web, Operations Web
-- Supersedes: session duration and idle policy in ADR-0014; preserves per-login MFA and the production write gate
+- Supersedes: session duration and idle policy in ADR-0014. ADR-0025 supersedes the per-login MFA requirement; this ADR still governs management session lifetime and the production write gate.
 - System-admin permission selection and owner targeting are superseded by ADR-0021; session and write-gate decisions remain active.
 
 ## Context
@@ -16,7 +16,7 @@ The system administrator needs access to every normal system-management capabili
 - The previous exclusions for `system.access.bootstrap` and `system.access.impersonate` are superseded by ADR-0021. These keys do not create an HTTP capability unless a corresponding server-side route is implemented and authorized.
 - IAM stores `managementSessionTtlHours` in its owned `policy_state`, as an integer from 1 through 12 with a default of 12. A system administrator can change it in System Web. The setting applies to management sessions created by subsequent logins; active sessions keep their original absolute expiry.
 - A login with an active staff membership receives the configured absolute session lifetime. A customer-only login keeps the existing 30-day session lifetime. Cookies use the same expiry as the server-side session.
-- A global `system_admin` must complete MFA on every new login. For that administrator, MFA evidence is usable only until the absolute expiry of that Gateway session (at most 12 hours); the current MFA factor version, active membership, role, scope, permission, and policy are still evaluated server-side. Other staff retain the five-minute step-up policy. No idle timeout revokes an active system-admin session.
+- Historical rule, superseded by ADR-0025: a global `system_admin` completed MFA on every new login. The active rule permits management OTP login without mandatory MFA; TOTP/recovery is requested only for listed high-risk commands. Session lifetime, live membership/role/scope/permission checks, and the absence of idle timeout remain as decided here.
 - The IAM production management-write gate remains default-off. It is not enabled by this code change and must be opened explicitly during the approved rollout window.
 - Changing the session policy is a global IAM mutation protected by `system.session_policy.manage`, idempotency, expected policy version, an audit record, and the versioned policy-change Outbox event. Reads and writes flow through Gateway; System Web never connects to IAM storage directly.
 

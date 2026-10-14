@@ -6,28 +6,43 @@ import { SYSTEM_ADMIN_IDLE_TIMEOUT_MS } from '../application/auth/session-policy
 import { SessionGuard } from '../interfaces/http/session.guard.js';
 
 const now = Date.now();
-const adminSession: Session = {
+const managementSession: Session = {
   id: '11111111-1111-4111-8111-111111111111',
   userId: '22222222-2222-4222-8222-222222222222',
-  tokenHash: hashSecret('session-token'),
+  audience: 'management',
+  tokenHash: hashSecret('management-token'),
   expiresAt: now + 60_000,
   revokedAt: null,
   mfaVerifiedAt: null,
   mfaFactorVersion: null,
   mfaMethod: null,
-  isSystemAdmin: true,
-  mfaLoginDeadlineAt: now + 5 * 60_000,
   lastActivityAt: now,
 };
+const customerSession: Session = {
+  ...managementSession,
+  audience: 'customer',
+  tokenHash: hashSecret('customer-token'),
+};
 
-function context(method: string, url: string) {
-  const request = { method, url, cookies: { funtino_session: 'session-token' } };
+function context(
+  method: string,
+  url: string,
+  cookies: Record<string, string> = {
+    funtino_session: 'customer-token',
+    funtino_management_session: 'management-token',
+  },
+) {
+  const request = {
+    method,
+    url,
+    cookies,
+  };
   return { switchToHttp: () => ({ getRequest: () => request }) } as never;
 }
 
-function guardFor(session: Session | undefined, calls: string[] = []) {
+function guardFor(sessions: Session[], calls: string[] = []) {
   const store = {
-    findSession: async (hash: string) => (hash === adminSession.tokenHash ? session : undefined),
+    findSession: async (hash: string) => sessions.find((session) => session.tokenHash === hash),
     touchSessionActivity: async (id: string) => {
       calls.push(`touch:${id}`);
     },
@@ -38,32 +53,46 @@ function guardFor(session: Session | undefined, calls: string[] = []) {
   return new SessionGuard(store as never);
 }
 
-test('MFA-pending system-admin session can reach only login-MFA routes', async () => {
+test('management audience reaches operations and system without login MFA gating', async () => {
   const calls: string[] = [];
-  const guard = guardFor(adminSession, calls);
-  await assert.rejects(guard.canActivate(context('GET', '/api/v1/auth/me')));
-  assert.equal(calls.length, 0);
-
+  const guard = guardFor([managementSession], calls);
   assert.equal(await guard.canActivate(context('GET', '/api/v1/operations/mfa/status')), true);
-  assert.equal(calls[0], `touch:${adminSession.id}`);
+  assert.equal(await guard.canActivate(context('GET', '/api/v1/system/health')), true);
+  assert.deepEqual(calls, [`touch:${managementSession.id}`, `touch:${managementSession.id}`]);
 });
 
-test('expired MFA enrollment window revokes the pending admin session', async () => {
-  const calls: string[] = [];
-  const expired = { ...adminSession, mfaLoginDeadlineAt: now - 1 };
+test('customer and management cookies cannot cross API audiences', async () => {
+  const guard = guardFor([customerSession, managementSession]);
+  assert.equal(await guard.canActivate(context('GET', '/api/v1/auth/me')), true);
+  assert.equal(await guard.canActivate(context('GET', '/api/v1/customer/profile')), true);
   await assert.rejects(
-    guardFor(expired, calls).canActivate(context('GET', '/api/v1/operations/mfa/status')),
+    guard.canActivate(
+      context('GET', '/api/v1/operations/scopes', { funtino_session: 'customer-token' }),
+    ),
   );
-  assert.deepEqual(calls, [`revoke:${adminSession.tokenHash}`]);
+  await assert.rejects(
+    guard.canActivate(
+      context('GET', '/api/v1/customer/profile', {
+        funtino_management_session: 'management-token',
+      }),
+    ),
+  );
 });
 
-test('admin idle timeout revokes even a session with MFA evidence', async () => {
+test('management idle timeout revokes the expired session', async () => {
   const calls: string[] = [];
   const idle = {
-    ...adminSession,
-    mfaVerifiedAt: now - SYSTEM_ADMIN_IDLE_TIMEOUT_MS - 1,
+    ...managementSession,
     lastActivityAt: now - SYSTEM_ADMIN_IDLE_TIMEOUT_MS - 1,
   };
-  await assert.rejects(guardFor(idle, calls).canActivate(context('GET', '/api/v1/auth/me')));
-  assert.deepEqual(calls, [`revoke:${adminSession.tokenHash}`]);
+  await assert.rejects(
+    guardFor([idle], calls).canActivate(context('GET', '/api/v1/operations/scopes')),
+  );
+  assert.deepEqual(calls, [`revoke:${managementSession.tokenHash}`]);
+});
+
+test('a guarded route outside the approved audiences fails closed', async () => {
+  await assert.rejects(
+    guardFor([managementSession]).canActivate(context('GET', '/api/v1/auth/other')),
+  );
 });

@@ -97,7 +97,14 @@ const scopeSchema = z.discriminatedUnion('type', [
 ]);
 const reasonSchema = z.object({ reason: z.string().trim().min(8).max(500) }).strict();
 const optionalReasonSchema = z
-  .object({ reason: z.string().trim().min(8).max(500).optional() })
+  .object({
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
+  })
   .strict();
 const roleCreateSchema = z
   .object({
@@ -108,7 +115,7 @@ const roleCreateSchema = z
       .min(1)
       .max(100)
       .refine((items) => new Set(items).size === items.length),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z.string().trim().min(8).max(500),
   })
   .strict();
 const roleUpdateSchema = z
@@ -121,23 +128,48 @@ const roleUpdateSchema = z
       .refine((items) => new Set(items).size === items.length)
       .optional(),
     status: z.enum(['active', 'disabled']).optional(),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
   })
   .strict()
-  .refine(
-    (value) =>
-      value.name !== undefined || value.permissionKeys !== undefined || value.status !== undefined,
-  );
+  .superRefine((value, context) => {
+    if (
+      value.name === undefined &&
+      value.permissionKeys === undefined &&
+      value.status === undefined
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'At least one role field is required.',
+      });
+    }
+    if ((value.permissionKeys !== undefined || value.status !== undefined) && !value.reason) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reason'],
+        message: 'A reason is required when effective role access changes.',
+      });
+    }
+  });
 const invitationCreateSchema = z
   .object({
     phoneE164: z.string().regex(/^\+[1-9][0-9]{7,14}$/),
     scope: scopeSchema,
     roleId: uuid,
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
   })
   .strict();
 const membershipRoleSchema = z
-  .object({ roleId: uuid, reason: z.string().trim().min(8).max(500).optional() })
+  .object({ roleId: uuid, reason: z.string().trim().min(8).max(500) })
   .strict();
 const overrideCreateSchema = z
   .object({
@@ -149,7 +181,7 @@ const overrideCreateSchema = z
       .strict()
       .optional(),
     expiresAt: z.string().datetime({ offset: true }).optional(),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z.string().trim().min(8).max(500),
   })
   .strict();
 type RolesQuery = z.infer<typeof rolesQuerySchema>;
@@ -279,13 +311,32 @@ export class OperationsAccessController {
     @Query(new ZodValidationPipe(rolesQuerySchema)) query: RolesQuery,
     @Req() request: AuthenticatedRequest,
   ) {
+    const page = await this.identityAccess.listStaff(
+      user.id,
+      this.queryScope(query),
+      requestCorrelationId(request),
+      { cursor: query.cursor, pageSize: query.pageSize },
+    );
+    const identities = await this.auth.getUserIdentitySummaries(
+      page.data.map((member) => member.userId),
+    );
+    const identitiesByUserId = new Map(identities.map((identity) => [identity.userId, identity]));
     return success(
-      await this.identityAccess.listStaff(
-        user.id,
-        this.queryScope(query),
-        requestCorrelationId(request),
-        { cursor: query.cursor, pageSize: query.pageSize },
-      ),
+      {
+        ...page,
+        data: page.data.map((member) => ({
+          ...member,
+          ...(identitiesByUserId.get(member.userId)
+            ? {
+                identity: {
+                  displayName: identitiesByUserId.get(member.userId)!.displayName,
+                  firstName: identitiesByUserId.get(member.userId)!.firstName,
+                  lastName: identitiesByUserId.get(member.userId)!.lastName,
+                },
+              }
+            : { identity: null }),
+        })),
+      },
       request,
     );
   }

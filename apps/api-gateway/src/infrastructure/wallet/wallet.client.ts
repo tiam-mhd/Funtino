@@ -88,7 +88,7 @@ export class WalletClient {
   async registerCard(
     organizationId: string,
     branchId: string,
-    input: { externalCardId: string; reason: string },
+    input: { externalCardId: string; reason?: string },
     meta: WalletCommandMeta,
   ): Promise<WalletCardInventory> {
     const result = cardSchema.safeParse(
@@ -108,7 +108,7 @@ export class WalletClient {
     branchId: string,
     cardId: string,
     version: number,
-    input: { status: WalletManualCardStatus; reason: string },
+    input: { status: WalletManualCardStatus; reason?: string },
     meta: WalletCommandMeta,
   ): Promise<WalletCardInventory> {
     const result = cardSchema.safeParse(

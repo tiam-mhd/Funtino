@@ -33,6 +33,7 @@ export type UserAvatar = {
 export type OtpChallenge = {
   id: string;
   phoneE164: string;
+  purpose: 'customer_login' | 'management_login' | 'management_password';
   codeHash: string;
   attempts: number;
   expiresAt: number;
@@ -42,15 +43,36 @@ export type OtpChallenge = {
 export type Session = {
   id: string;
   userId: string;
+  audience: 'customer' | 'management';
   tokenHash: string;
   expiresAt: number;
   revokedAt: number | null;
   mfaVerifiedAt: number | null;
   mfaFactorVersion: number | null;
   mfaMethod: 'totp' | 'recovery' | null;
-  isSystemAdmin: boolean;
-  mfaLoginDeadlineAt: number | null;
   lastActivityAt: number;
+};
+
+export type ManagementLoginChallenge = {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  attempts: number;
+  expiresAt: number;
+  consumedAt: number | null;
+};
+
+export type ManagementPasswordState = {
+  passwordHash: string | null;
+  failedAttempts: number;
+  lockedUntil: number | null;
+};
+
+export type UserIdentitySummary = {
+  userId: string;
+  displayName: string | null;
+  firstName: string | null;
+  lastName: string | null;
 };
 
 export type Branch = {

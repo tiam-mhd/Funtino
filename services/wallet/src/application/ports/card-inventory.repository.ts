@@ -18,7 +18,7 @@ export type RegisterCardCommand = {
   organizationId: string;
   branchId: string;
   externalCardId: string;
-  reason: string;
+  reason: string | null;
 };
 
 export type ChangeCardStatusCommand = {
@@ -27,7 +27,7 @@ export type ChangeCardStatusCommand = {
   cardId: string;
   expectedVersion: number;
   status: CardManualStatusTarget;
-  reason: string;
+  reason: string | null;
 };
 
 export type AssignCardCommand = {

@@ -186,8 +186,7 @@ test('authorization evaluation attaches only MFA evidence read from the persiste
     mfaVerifiedAt: Date.parse('2026-09-30T10:00:00.000Z'),
     mfaFactorVersion: 3,
     mfaMethod: 'recovery',
-    isSystemAdmin: false,
-    mfaLoginDeadlineAt: null,
+    audience: 'management',
     lastActivityAt: Date.now(),
   };
   try {
@@ -239,8 +238,7 @@ test('sensitive audit reads forward fresh MFA evidence only from the persisted G
     mfaVerifiedAt: Date.parse('2026-09-30T10:00:00.000Z'),
     mfaFactorVersion: 3,
     mfaMethod: 'totp',
-    isSystemAdmin: false,
-    mfaLoginDeadlineAt: null,
+    audience: 'management',
     lastActivityAt: Date.now(),
   };
   try {

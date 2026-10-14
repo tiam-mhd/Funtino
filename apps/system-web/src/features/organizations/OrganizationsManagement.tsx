@@ -119,13 +119,15 @@ function statusTone(status: ResourceStatus): 'success' | 'warning' | 'neutral' {
   return status === 'suspended' ? 'warning' : 'neutral';
 }
 
-function requestError(error: unknown): Feedback {
+function requestError(error: unknown, mayRequireStepUp = false): Feedback {
   if (error instanceof ApiRequestError) {
     if (error.status === 403) {
       return {
         kind: 'error',
-        message: 'مجوز این عملیات وجود ندارد یا تأیید دومرحله‌ای تازه لازم است.',
-        showMfaLink: true,
+        message: mayRequireStepUp
+          ? 'مجوز این عملیات وجود ندارد؛ این فرمان ممکن است به تأیید دومرحله‌ای تازه نیاز داشته باشد.'
+          : 'مجوز یا محدوده‌ی لازم برای این عملیات وجود ندارد.',
+        ...(mayRequireStepUp ? { showMfaLink: true } : {}),
       };
     }
     if (error.status === 409) {
@@ -339,7 +341,7 @@ export function OrganizationsManagement() {
         message: 'مجموعه ایجاد شد و وضعیت آن از سرویس مالک دریافت می‌شود.',
       });
     } catch (error) {
-      setFeedback(requestError(error));
+      setFeedback(requestError(error, true));
     } finally {
       setBusyAction(null);
     }
@@ -591,7 +593,9 @@ export function OrganizationsManagement() {
             : `${resourceLabel} دوباره فعال شد.`,
       });
     } catch (error) {
-      setFeedback(requestError(error));
+      setFeedback(
+        requestError(error, statusTarget.kind === 'branch' && statusTarget.status === 'suspended'),
+      );
     } finally {
       setBusyAction(null);
     }
@@ -632,7 +636,7 @@ export function OrganizationsManagement() {
           </a>
           <a href="/fa/forms">فرم‌ها و قالب‌ها</a>
           <a href="/fa/access">کاربران و دسترسی</a>
-          <a href="/fa/mfa">تأیید دومرحله‌ای</a>
+          <a href="/fa/security/mfa">تأیید دومرحله‌ای</a>
         </nav>
       </header>
 
@@ -687,7 +691,7 @@ export function OrganizationsManagement() {
             role={feedback.kind === 'error' ? 'alert' : 'status'}
           >
             <span>{feedback.message}</span>
-            {feedback.showMfaLink && <a href="/fa/mfa">بررسی یا انجام تأیید دومرحله‌ای</a>}
+            {feedback.showMfaLink && <a href="/fa/security/mfa">بررسی یا انجام تأیید دومرحله‌ای</a>}
             {feedback.kind === 'error' &&
               (feedback.message.includes('تازه') || feedback.message.includes('تغییر کرده')) && (
                 <button type="button" onClick={reloadCurrentData}>
@@ -1207,7 +1211,6 @@ function OrganizationEditor({
             id={`${idPrefix}-reason`}
             value={draft.reason}
             onChange={(event) => onChange('reason', event.target.value)}
-            minLength={8}
             maxLength={500}
             rows={2}
           />
@@ -1381,7 +1384,6 @@ function BranchEditor({
             id={`${idPrefix}-reason`}
             value={draft.reason}
             onChange={(event) => onChange('reason', event.target.value)}
-            minLength={8}
             maxLength={500}
             rows={2}
           />
@@ -1432,7 +1434,6 @@ function StatusConfirmation({
           autoFocus
           value={reason}
           onChange={(event) => onReasonChange(event.target.value)}
-          minLength={8}
           maxLength={500}
           rows={2}
         />

@@ -64,15 +64,128 @@ paths:
               $ref: '#/components/schemas/OtpVerify'
       responses:
         '200':
-          description: Session cookie is set. Global system administrators receive an MFA-pending session and must complete TOTP/recovery or enrollment before any application data is available.
+          description: Creates or resumes the customer identity and sets only the customer session cookie. Staff memberships do not change this audience or grant customer sessions access to management routes.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OtpVerifySuccess' }
         '503':
           description: IAM could not classify the authenticated identity; no session is issued.
+  /api/v1/auth/management/otp/request:
+    post:
+      operationId: requestManagementOtp
+      security: []
+      description: Requests an OTP specifically for the management audience. The identity must already have an eligible active staff membership; customer sign-in never creates or selects one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OtpRequest' }
+      responses:
+        '200':
+          description: Management OTP challenge created with purpose bound to management login.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OtpChallengeResponse' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/v1/auth/management/otp/verify:
+    post:
+      operationId: verifyManagementOtp
+      security: []
+      description: Verifies a management-purpose OTP. Sets only the management session cookie when no management password is configured; otherwise sets a short-lived, path-restricted password challenge cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OtpVerify' }
+      responses:
+        '200':
+          description: Management session created or password challenge issued; the response reports requiresPassword and expiresAt.
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/v1/auth/management/password/verify:
+    post:
+      operationId: verifyManagementPassword
+      security: []
+      description: Completes a one-use password challenge from the management OTP flow and sets the management session cookie. A successful response clears the customer and challenge cookies.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              additionalProperties: false
+              properties:
+                password: { type: string, minLength: 1, maxLength: 128, writeOnly: true }
+      responses:
+        '200': { description: Management session created; the management cookie is set. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/v1/auth/management/me:
+    security:
+      - managementSessionCookie: []
+    get:
+      operationId: getManagementMe
+      description: Returns the current management identity using the management audience cookie.
+      responses:
+        '200': { description: Current management user profile. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+  /api/v1/auth/management/password:
+    security:
+      - managementSessionCookie: []
+    get:
+      operationId: getManagementPasswordStatus
+      description: Returns whether a management password is enabled; password material is never returned.
+      responses:
+        '200': { description: Management password status. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+    put:
+      operationId: updateManagementPassword
+      description: Enables, changes, or disables the optional management password after a management-purpose OTP challenge. Disabling or changing an existing password also requires the current password.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled, challengeId, code]
+              additionalProperties: false
+              properties:
+                enabled: { type: boolean }
+                challengeId: { type: string, format: uuid }
+                code: { type: string, pattern: '^[0-9]{6}$', writeOnly: true }
+                password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+                currentPassword: { type: string, minLength: 1, maxLength: 128, writeOnly: true }
+      responses:
+        '200': { description: Password setting updated. }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/v1/auth/management/password/otp/request:
+    security:
+      - managementSessionCookie: []
+    post:
+      operationId: requestManagementPasswordOtp
+      description: Requests a one-time confirmation code for changing the optional management password.
+      responses:
+        '200': { description: Password update OTP challenge created. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/v1/auth/management/logout:
+    security:
+      - managementSessionCookie: []
+    post:
+      operationId: managementLogout
+      description: Revokes the management session and clears the management and password challenge cookies.
+      responses:
+        '200': { description: Management session revoked. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
   /api/v1/auth/me:
     get:
       operationId: getMe
+      description: Returns the current customer identity using the customer audience cookie.
       responses:
         '200':
           description: Current user.
@@ -85,6 +198,8 @@ paths:
         '200':
           description: Session revoked and cookie cleared.
   /api/v1/operations/mfa/status:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: getCurrentStaffMfaStatus
@@ -100,6 +215,8 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
   /api/v1/operations/mfa/enrollment/start:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: startCurrentStaffMfaEnrollment
@@ -117,6 +234,8 @@ paths:
         '409':
           description: MFA is already enabled.
   /api/v1/operations/mfa/enrollment/confirm:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: confirmCurrentStaffMfaEnrollment
@@ -140,6 +259,8 @@ paths:
         '429':
           description: MFA verification is temporarily locked.
   /api/v1/operations/mfa/step-up/verify:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: verifyCurrentStaffMfaStepUp
@@ -163,6 +284,8 @@ paths:
         '429':
           description: MFA verification is temporarily locked.
   /api/v1/operations/mfa/recovery-codes/regenerate:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: regenerateCurrentStaffMfaRecoveryCodes
@@ -186,6 +309,8 @@ paths:
         '429':
           description: MFA verification is temporarily locked.
   /api/v1/operations/mfa/disable:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: disableCurrentStaffMfa
@@ -205,6 +330,8 @@ paths:
         '429':
           description: MFA verification is temporarily locked.
   /api/v1/operations/access-context:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: getOperationsAccessContext
@@ -222,6 +349,8 @@ paths:
         '503':
           description: Access policy service is unavailable; access must fail closed.
   /api/v1/operations/scopes:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listCurrentOperationsScopes
@@ -238,6 +367,8 @@ paths:
         '503':
           description: IAM or Organization & Branch could not confirm current scope state; access fails closed.
   /api/v1/operations/scope-selection:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: selectCurrentOperationsScope
@@ -268,6 +399,8 @@ paths:
         '503':
           description: IAM, owner data, or audit storage is unavailable; selection is not accepted.
   /api/v1/system/health:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: readSystemOperationalHealth
@@ -286,6 +419,8 @@ paths:
         '503':
           description: Private telemetry source is not configured or is temporarily unavailable.
   /api/v1/system/security/session-policy:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: readManagementSessionPolicy
@@ -306,7 +441,7 @@ paths:
     put:
       x-funtino-availability: implemented
       operationId: updateManagementSessionPolicy
-      description: Requires an active session, global system.session_policy.manage permission, a trusted browser origin, an idempotency key, and the current policy version. A reason is optional; IAM always audits the actor and change.
+      description: Requires an active session, global system.session_policy.manage permission, a trusted browser origin, an idempotency key, and the current policy version. MFA step-up and a reason are required only when the TTL value actually changes; a no-op update does not require either.
       parameters:
         - $ref: '#/components/parameters/SystemIdempotencyKey'
         - $ref: '#/components/parameters/IfMatchVersion'
@@ -334,6 +469,8 @@ paths:
         '503':
           description: IAM management writes are disabled or the IAM policy store is unavailable.
   /api/v1/system/organizations:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listSystemOrganizations
@@ -384,6 +521,8 @@ paths:
         '503':
           description: Identity & Access or the Organization & Branch owner is unavailable.
   /api/v1/system/organizations/{organizationId}:
+    security:
+      - managementSessionCookie: []
     parameters:
       - $ref: '#/components/parameters/SystemOrganizationId'
     get:
@@ -407,7 +546,7 @@ paths:
     patch:
       x-funtino-availability: implemented
       operationId: updateSystemOrganization
-      description: Requires organization.update at this organization scope, fresh MFA step-up and optimistic concurrency. A reason is optional.
+      description: Requires organization.update at this organization scope and optimistic concurrency. This ordinary organization edit does not require MFA step-up; a reason is optional.
       parameters:
         - $ref: '#/components/parameters/IfMatchVersion'
         - $ref: '#/components/parameters/SystemIdempotencyKey'
@@ -437,12 +576,14 @@ paths:
         '503':
           description: Identity & Access or the Organization & Branch owner is unavailable.
   /api/v1/system/organizations/{organizationId}/status:
+    security:
+      - managementSessionCookie: []
     parameters:
       - $ref: '#/components/parameters/SystemOrganizationId'
     post:
       x-funtino-availability: implemented
       operationId: changeSystemOrganizationStatus
-      description: This management surface supports reversible active/suspended transitions only. Archiving is terminal and is not offered here. Requires organization.update and fresh MFA step-up; a reason is optional.
+      description: This management surface supports reversible active/suspended transitions only. Archiving is terminal and is not offered here. Requires organization.update; no MFA step-up or reason is required for these reversible transitions.
       parameters:
         - $ref: '#/components/parameters/IfMatchVersion'
         - $ref: '#/components/parameters/SystemIdempotencyKey'
@@ -472,6 +613,8 @@ paths:
         '503':
           description: Identity & Access or the Organization & Branch owner is unavailable.
   /api/v1/system/organizations/{organizationId}/branches:
+    security:
+      - managementSessionCookie: []
     parameters:
       - $ref: '#/components/parameters/SystemOrganizationId'
     get:
@@ -499,7 +642,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: createSystemOrganizationBranch
-      description: Requires branch.create at the organization scope, fresh MFA step-up and trusted browser origin. A reason is optional.
+      description: Requires branch.create at the organization scope and a trusted browser origin. Ordinary branch creation does not require MFA step-up; a reason is optional.
       parameters:
         - $ref: '#/components/parameters/SystemIdempotencyKey'
       requestBody:
@@ -528,6 +671,8 @@ paths:
         '503':
           description: Identity & Access or the Organization & Branch owner is unavailable.
   /api/v1/system/organizations/{organizationId}/branches/{branchId}:
+    security:
+      - managementSessionCookie: []
     parameters:
       - $ref: '#/components/parameters/SystemOrganizationId'
       - $ref: '#/components/parameters/SystemBranchId'
@@ -552,7 +697,7 @@ paths:
     patch:
       x-funtino-availability: implemented
       operationId: updateSystemOrganizationBranch
-      description: Requires branch.update at this branch scope, fresh MFA step-up and optimistic concurrency. A reason is optional.
+      description: Requires branch.update at this branch scope and optimistic concurrency. Ordinary branch edits do not require MFA step-up; a reason is optional.
       parameters:
         - $ref: '#/components/parameters/IfMatchVersion'
         - $ref: '#/components/parameters/SystemIdempotencyKey'
@@ -582,13 +727,15 @@ paths:
         '503':
           description: Identity & Access or the Organization & Branch owner is unavailable.
   /api/v1/system/organizations/{organizationId}/branches/{branchId}/status:
+    security:
+      - managementSessionCookie: []
     parameters:
       - $ref: '#/components/parameters/SystemOrganizationId'
       - $ref: '#/components/parameters/SystemBranchId'
     post:
       x-funtino-availability: implemented
       operationId: changeSystemOrganizationBranchStatus
-      description: Supports reversible active/suspended transitions only. Suspension requires branch.deactivate; reactivation requires branch.update. Both require fresh MFA step-up; a reason is optional.
+      description: Supports reversible active/suspended transitions only. Suspension requires branch.deactivate and fresh MFA step-up; reactivation requires branch.update without step-up. A reason is optional for either transition.
       parameters:
         - $ref: '#/components/parameters/IfMatchVersion'
         - $ref: '#/components/parameters/SystemIdempotencyKey'
@@ -1074,6 +1221,8 @@ paths:
         '404': { description: Invitation is unavailable. }
         '409': { description: Invitation state changed concurrently. }
   /api/v1/operations/customer-family/lookup:
+    security:
+      - managementSessionCookie: []
     post:
       operationId: lookupOperationsCustomerFamily
       summary: Read family details for an exact phone in a selected authorized branch
@@ -1092,7 +1241,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CustomerFamilySupportLookupSuccess' }
         '401': { description: A valid operations session is required. }
-        '403': { description: customer.family.read scope or fresh step-up is missing. }
+        '403': { description: customer.family.read scope is missing. }
         '404': { description: The selected branch is unavailable. }
         '429': { description: The actor and branch lookup quota is exhausted. }
         '503':
@@ -1102,6 +1251,8 @@ paths:
             Customer & Household or Wallet is unavailable.,
           }
   /api/v1/system/customer-family/lookup:
+    security:
+      - managementSessionCookie: []
     post:
       operationId: lookupSystemCustomerFamily
       summary: Read family details after selecting an organization and branch with global support permission
@@ -1120,7 +1271,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CustomerFamilySupportLookupSuccess' }
         '401': { description: A valid system session is required. }
-        '403': { description: Global customer.family.read permission or fresh step-up is missing. }
+        '403': { description: Global customer.family.read permission is missing. }
         '404': { description: The selected branch is unavailable. }
         '429': { description: The actor and branch lookup quota is exhausted. }
         '503':
@@ -1156,6 +1307,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/CustomerCardSuccess'
   /api/v1/operations/permissions:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listOperationsPermissions
@@ -1173,6 +1326,8 @@ paths:
         '503':
           description: Access policy service is unavailable; access must fail closed.
   /api/v1/operations/roles:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listOperationsRoles
@@ -1222,6 +1377,8 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/roles/templates:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listOperationsRoleTemplates
@@ -1243,6 +1400,8 @@ paths:
         '503':
           description: Access policy service is unavailable; access must fail closed.
   /api/v1/operations/roles/{roleId}:
+    security:
+      - managementSessionCookie: []
     patch:
       x-funtino-availability: implemented
       operationId: updateOperationsRole
@@ -1274,6 +1433,8 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/devices:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listOperationsDevices
@@ -1310,6 +1471,8 @@ paths:
         '503':
           { description: IAM, owner, or Device Integration is unavailable; access fails closed. }
   /api/v1/operations/reports:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: getOperationsReport
@@ -1358,6 +1521,8 @@ paths:
             Organization & Branch or Analytics Read Model is unavailable; access fails closed.,
           }
   /api/v1/operations/reports/export:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: exportOperationsReport
@@ -1387,6 +1552,8 @@ paths:
             Analytics Read Model or export audit is unavailable; no file data is returned.,
           }
   /api/v1/operations/organizations/{organizationId}/branches:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listOperationsDeviceBranches
@@ -1406,6 +1573,8 @@ paths:
         '409': { description: The organization is no longer active. }
         '503': { description: IAM or Organization & Branch is unavailable; access fails closed. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/devices:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: registerOperationsDevice
@@ -1434,6 +1603,8 @@ paths:
         '503':
           { description: IAM, owner, or Device Integration is unavailable; write fails closed. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/devices/{deviceId}:
+    security:
+      - managementSessionCookie: []
     patch:
       x-funtino-availability: implemented
       operationId: updateOperationsDevice
@@ -1466,6 +1637,8 @@ paths:
         '503':
           { description: IAM, owner, or Device Integration is unavailable; write fails closed. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/cards:
+    security:
+      - managementSessionCookie: []
     parameters:
       - $ref: '#/components/parameters/SystemOrganizationId'
       - $ref: '#/components/parameters/SystemBranchId'
@@ -1503,7 +1676,7 @@ paths:
     post:
       x-funtino-availability: implemented
       operationId: registerOperationsBranchCard
-      description: Registers a physical card in Wallet inventory. Requires card.inventory.manage, a fresh MFA step-up, a reason, and an idempotency key. The physical identifier is write-only and is never returned.
+      description: Registers a physical card in Wallet inventory. Requires card.inventory.manage and an idempotency key; MFA step-up and a reason are not required. The physical identifier is write-only and is never returned.
       parameters:
         - $ref: '#/components/parameters/SystemIdempotencyKey'
       requestBody:
@@ -1517,14 +1690,16 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OperationsCardCommandSuccess' }
-        '400': { description: Invalid card identifier, reason, or idempotency key. }
+        '400': { description: Invalid card identifier or idempotency key. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { description: Missing card.inventory.manage permission or fresh MFA step-up. }
+        '403': { description: Missing card.inventory.manage permission. }
         '404': { description: Organization or branch not found. }
         '409': { description: Inactive branch, duplicate identifier, or idempotency conflict. }
         '503':
           { description: IAM, Organization & Branch, or Wallet is unavailable; write fails closed. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/cards/{cardId}:
+    security:
+      - managementSessionCookie: []
     parameters:
       - $ref: '#/components/parameters/SystemOrganizationId'
       - $ref: '#/components/parameters/SystemBranchId'
@@ -1535,7 +1710,7 @@ paths:
     patch:
       x-funtino-availability: implemented
       operationId: changeOperationsBranchCardStatus
-      description: Changes only the Wallet inventory lifecycle status using optimistic concurrency. Requires card.inventory.manage, a fresh MFA step-up, a reason, and an idempotency key. Retired cards are terminal.
+      description: Changes only the Wallet inventory lifecycle status using optimistic concurrency. Requires card.inventory.manage and an idempotency key; MFA step-up and a reason are not required. Retired cards are terminal.
       parameters:
         - $ref: '#/components/parameters/IfMatchVersion'
         - $ref: '#/components/parameters/SystemIdempotencyKey'
@@ -1550,14 +1725,16 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OperationsCardCommandSuccess' }
-        '400': { description: Invalid status, reason, idempotency key, or If-Match version. }
+        '400': { description: Invalid status, idempotency key, or If-Match version. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { description: Missing card.inventory.manage permission or fresh MFA step-up. }
+        '403': { description: Missing card.inventory.manage permission. }
         '404': { description: Card not found in the requested branch. }
         '409': { description: Version conflict or invalid inventory lifecycle transition. }
         '503':
           { description: IAM, Organization & Branch, or Wallet is unavailable; write fails closed. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/customer-households/lookup:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: lookupOperationsHouseholdsByVerifiedPhone
@@ -1589,6 +1766,8 @@ paths:
             identity store or Customer & Household owner is unavailable; access fails closed.,
           }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/card-assignments:
+    security:
+      - managementSessionCookie: []
     parameters:
       - $ref: '#/components/parameters/SystemOrganizationId'
       - $ref: '#/components/parameters/SystemBranchId'
@@ -1612,10 +1791,12 @@ paths:
         '409': { description: Organization or branch is not active. }
         '503': { description: IAM, owner or Wallet is unavailable; access fails closed. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/cards/{cardId}/assignments:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: assignOperationsCardToHousehold
-      description: Requires card.assign, fresh MFA, exact active branch, an active household selected from an audited exact-phone lookup, reason and idempotency key.
+      description: Requires card.assign, an exact active branch, an active household selected from an audited exact-phone lookup, reason and idempotency key. Assignment does not require MFA step-up.
       parameters:
         - $ref: '#/components/parameters/SystemOrganizationId'
         - $ref: '#/components/parameters/SystemBranchId'
@@ -1637,7 +1818,7 @@ paths:
               schema: { $ref: '#/components/schemas/OperationsCardAssignmentCommandSuccess' }
         '400': { description: Invalid identifiers, reason or idempotency key. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { description: Missing card.assign permission or fresh MFA step-up. }
+        '403': { description: Missing card.assign permission. }
         '404': { description: Card or household not found. }
         '409':
           {
@@ -1652,10 +1833,12 @@ paths:
             Wallet or Customer & Household is unavailable; write fails closed.,
           }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/card-assignments/{assignmentId}/transfer:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: transferOperationsCardAssignment
-      description: Transfers only between households in the same fixed branch. Requires card.transfer, fresh MFA, reason and idempotency key.
+      description: Transfers only between households in the same fixed branch. Requires card.transfer, reason and idempotency key. Transfer does not require MFA step-up.
       parameters:
         - $ref: '#/components/parameters/SystemOrganizationId'
         - $ref: '#/components/parameters/SystemBranchId'
@@ -1676,7 +1859,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OperationsCardAssignmentCommandSuccess' }
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { description: Missing card.transfer permission or fresh MFA step-up. }
+        '403': { description: Missing card.transfer permission. }
         '404': { description: Active assignment or target household not found. }
         '409':
           {
@@ -1685,6 +1868,8 @@ paths:
         '503':
           { description: IAM, Wallet or Customer & Household is unavailable; write fails closed. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/card-assignments/{assignmentId}/cancel:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: cancelOperationsCardAssignment
@@ -1710,11 +1895,13 @@ paths:
       responses:
         '200': { description: Assignment cancelled and immutable history recorded. }
         '401': { $ref: '#/components/responses/Unauthenticated' }
-        '403': { description: Missing card.unassign permission or fresh MFA step-up. }
+        '403': { description: Missing card.unassign permission. }
         '404': { description: Active assignment not found. }
         '409': { description: Assignment changed or card remains unavailable. }
         '503': { description: IAM or Wallet is unavailable; write fails closed. }
   /api/v1/operations/staff:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listOperationsStaff
@@ -1738,6 +1925,8 @@ paths:
         '503':
           description: Access policy service is unavailable; access must fail closed.
   /api/v1/operations/staff/invitations:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listOperationsStaffInvitations
@@ -1785,6 +1974,8 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/staff/invitations/pending:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listMyPendingStaffInvitations
@@ -1801,6 +1992,8 @@ paths:
         '503':
           description: Identity & Access or authenticated identity lookup is unavailable. Owner lookup failures are returned per invitation as scopeStatus unavailable, never as stale labels.
   /api/v1/operations/staff/invitations/{invitationId}/accept:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: acceptOperationsStaffInvitation
@@ -1823,9 +2016,12 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/staff/invitations/{invitationId}/revoke:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: revokeOperationsStaffInvitation
+      description: Revokes a pending invitation. A reason is optional and no MFA step-up is required.
       parameters:
         - $ref: '#/components/parameters/InvitationId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1853,9 +2049,12 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/staff/{membershipId}/suspend:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: suspendOperationsStaff
+      description: Suspends the membership after scope and invariant checks. A reason is optional and no MFA step-up is required.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1883,9 +2082,12 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/staff/{membershipId}:
+    security:
+      - managementSessionCookie: []
     patch:
       x-funtino-availability: implemented
       operationId: updateOperationsStaffMembership
+      description: Changes the active membership role. Requires access.role.manage, fresh MFA step-up, and a reason.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - $ref: '#/components/parameters/IfMatchVersion'
@@ -1914,9 +2116,12 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/staff/{membershipId}/reactivate:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: reactivateOperationsStaff
+      description: Reactivates the suspended membership after scope and policy validation. A reason is optional and no MFA step-up is required.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1944,10 +2149,12 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/staff/{membershipId}/revoke:
+    security:
+      - managementSessionCookie: []
     post:
       x-funtino-availability: implemented
       operationId: revokeOperationsStaffMembership
-      description: Revokes an active staff membership and immediately removes access. A reason is required and the System Management UI confirms this destructive action.
+      description: Permanently revokes an active staff membership and immediately removes access. Requires fresh MFA step-up and a reason; the System Management UI confirms this destructive action.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1975,6 +2182,8 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/staff/{membershipId}/permission-overrides:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listStaffPermissionOverrides
@@ -1994,6 +2203,7 @@ paths:
     put:
       x-funtino-availability: implemented
       operationId: setStaffPermissionOverride
+      description: Creates a membership-scoped permission override. Requires access.permission.delegate, fresh MFA step-up, and a reason.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -2019,10 +2229,12 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/staff/{membershipId}/permission-overrides/{overrideId}:
+    security:
+      - managementSessionCookie: []
     delete:
       x-funtino-availability: implemented
       operationId: revokeStaffPermissionOverride
-      description: Revokes a permission override immediately. A reason is required and the System Management UI confirms this destructive action.
+      description: Revokes a permission override immediately. Requires access.permission.delegate, fresh MFA step-up, and a reason.
       parameters:
         - $ref: '#/components/parameters/MembershipId'
         - name: overrideId
@@ -2054,10 +2266,12 @@ paths:
         '503':
           description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.
   /api/v1/operations/audit:
+    security:
+      - managementSessionCookie: []
     get:
       x-funtino-availability: implemented
       operationId: listOperationsAccessAudit
-      description: Requires a valid role and fresh server-side MFA step-up evidence (maximum age five minutes).
+      description: Reads authorized audit history with the required role and scope. Reading audit data does not require MFA step-up.
       parameters:
         - $ref: '#/components/parameters/ScopeType'
         - $ref: '#/components/parameters/OrganizationId'
@@ -2131,6 +2345,12 @@ components:
       type: apiKey
       in: cookie
       name: funtino_session
+      description: Customer audience session cookie. It cannot authorize operations or system endpoints.
+    managementSessionCookie:
+      type: apiKey
+      in: cookie
+      name: funtino_management_session
+      description: Management audience session cookie shared by Operations and System applications.
   parameters:
     SystemOrganizationId:
       name: organizationId
@@ -2762,7 +2982,7 @@ components:
       required: [managementSessionTtlHours]
       properties:
         managementSessionTtlHours: { type: integer, minimum: 1, maximum: 12 }
-        reason: { type: string, minLength: 8, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     SystemResourceStatus:
       type: string
       enum: [active, suspended, archived]
@@ -2818,7 +3038,7 @@ components:
             maxLength: 64,
             description: Valid IANA timezone identifier.,
           }
-        reason: { type: string, minLength: 8, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     SystemOrganizationUpdate:
       type: object
       additionalProperties: false
@@ -2837,7 +3057,7 @@ components:
             maxLength: 64,
             description: Valid IANA timezone identifier.,
           }
-        reason: { type: string, minLength: 8, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     SystemResourceStatusChange:
       type: object
       additionalProperties: false
@@ -2847,7 +3067,7 @@ components:
           type: string
           enum: [active, suspended]
           description: Archive is intentionally excluded because it is terminal and irreversible.
-        reason: { type: string, minLength: 8, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     SystemOpeningHours:
       type: object
       additionalProperties:
@@ -2940,7 +3160,7 @@ components:
             description: Valid IANA timezone identifier.,
           }
         openingHours: { $ref: '#/components/schemas/SystemOpeningHours' }
-        reason: { type: string, minLength: 8, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     SystemBranchUpdate:
       type: object
       additionalProperties: false
@@ -2965,7 +3185,7 @@ components:
             description: Valid IANA timezone identifier.,
           }
         openingHours: { $ref: '#/components/schemas/SystemOpeningHours' }
-        reason: { type: string, minLength: 8, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     OtpRequest:
       type: object
       required: [phone]
@@ -2992,13 +3212,10 @@ components:
         status: { type: string, const: success }
         data:
           type: object
-          required: [user, expiresAt, mfaRequired]
+          required: [user, expiresAt]
           properties:
             user: { type: object, description: Public profile for the authenticated identity. }
             expiresAt: { type: string, format: date-time }
-            mfaRequired:
-              type: boolean
-              description: True for an active global system administrator; the session remains restricted until MFA is completed.
         meta: { $ref: '#/components/schemas/ResponseMeta' }
     OtpChallengeResponse:
       type: object
@@ -3433,7 +3650,7 @@ components:
     RoleCreate:
       type: object
       additionalProperties: false
-      required: [name, scope, permissionKeys]
+      required: [name, scope, permissionKeys, reason]
       properties:
         name:
           type: string
@@ -3455,6 +3672,13 @@ components:
       type: object
       additionalProperties: false
       minProperties: 1
+      allOf:
+        - if:
+            anyOf:
+              - required: [permissionKeys]
+              - required: [status]
+          then:
+            required: [reason]
       anyOf:
         - required: [name]
         - required: [permissionKeys]
@@ -3475,7 +3699,6 @@ components:
           enum: [active, disabled]
         reason:
           type: string
-          minLength: 8
           maxLength: 500
     RoleListSuccess:
       type: object
@@ -3865,23 +4088,22 @@ components:
     DeviceRegistrationRequest:
       type: object
       additionalProperties: false
-      required: [adapterKey, externalDeviceId, displayName, deviceType, reason]
+      required: [adapterKey, externalDeviceId, displayName, deviceType]
       properties:
         adapterKey:
           { type: string, minLength: 1, maxLength: 60, pattern: '^[a-zA-Z0-9][a-zA-Z0-9._-]*$' }
         externalDeviceId: { type: string, minLength: 1, maxLength: 160 }
         displayName: { type: string, minLength: 1, maxLength: 120 }
         deviceType: { $ref: '#/components/schemas/DeviceType' }
-        reason: { type: string, minLength: 8, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     DeviceUpdateRequest:
       type: object
       additionalProperties: false
-      minProperties: 2
-      required: [reason]
+      minProperties: 1
       properties:
         displayName: { type: string, minLength: 1, maxLength: 120 }
         status: { $ref: '#/components/schemas/DeviceLifecycleStatus' }
-        reason: { type: string, minLength: 8, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     DeviceCommandSuccess:
       type: object
       required: [status, data, meta]
@@ -3945,17 +4167,13 @@ components:
             capabilities:
               type: object
               additionalProperties: false
-              required:
-                [canManage, canAssign, canTransfer, canUnassign, canLookupCustomer, requiresStepUp]
+              required: [canManage, canAssign, canTransfer, canUnassign, canLookupCustomer]
               properties:
                 canManage: { type: boolean }
                 canAssign: { type: boolean }
                 canTransfer: { type: boolean }
                 canUnassign: { type: boolean }
                 canLookupCustomer: { type: boolean }
-                requiresStepUp:
-                  type: boolean
-                  description: True when at least one otherwise evaluated branch capability is blocked only by a missing or expired MFA step-up.
         nextCursor: { type: [string, 'null'], format: uuid }
         meta: { $ref: '#/components/schemas/ResponseMeta' }
     OperationsCardCommandSuccess:
@@ -3968,7 +4186,7 @@ components:
     OperationsCardRegistrationRequest:
       type: object
       additionalProperties: false
-      required: [externalCardId, reason]
+      required: [externalCardId]
       properties:
         externalCardId:
           type: string
@@ -3976,14 +4194,14 @@ components:
           maxLength: 160
           writeOnly: true
           description: Physical identifier is sent only to Wallet and is never returned in a response or rendered in logs.
-        reason: { type: string, minLength: 8, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     OperationsCardStatusChangeRequest:
       type: object
       additionalProperties: false
-      required: [status, reason]
+      required: [status]
       properties:
         status: { $ref: '#/components/schemas/OperationsCardManualStatus' }
-        reason: { type: string, minLength: 8, maxLength: 500 }
+        reason: { type: string, maxLength: 500 }
     OperationsHouseholdLookupRequest:
       type: object
       additionalProperties: false
@@ -4094,7 +4312,7 @@ components:
     StaffMembershipUpdate:
       type: object
       additionalProperties: false
-      required: [roleId]
+      required: [roleId, reason]
       properties:
         roleId:
           type: string
@@ -4292,7 +4510,6 @@ components:
           format: uuid
         reason:
           type: string
-          minLength: 8
           maxLength: 500
     StaffInvitationSummary:
       type: object
@@ -4484,7 +4701,7 @@ components:
     PermissionOverrideCreate:
       type: object
       additionalProperties: false
-      required: [permission, effect, scope]
+      required: [permission, effect, scope, reason]
       properties:
         permission:
           type: string
@@ -4713,7 +4930,6 @@ components:
       properties:
         reason:
           type: string
-          minLength: 8
           maxLength: 500
     Error:
       type: object
@@ -4734,6 +4950,12 @@ components:
               type: object
               additionalProperties: true
   responses:
+    Error:
+      description: The request was rejected by a domain or validation rule.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     Unauthenticated:
       description: Authentication is required.
       content:

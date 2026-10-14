@@ -76,7 +76,7 @@ export class DeviceIntegrationClient {
       externalDeviceId: string;
       displayName: string;
       deviceType: DeviceView['deviceType'];
-      reason: string;
+      reason?: string;
     },
     meta: DeviceCommandMeta,
   ): Promise<DeviceCommandResult> {
@@ -95,7 +95,7 @@ export class DeviceIntegrationClient {
     branchId: string,
     deviceId: string,
     version: number,
-    input: { displayName?: string; status?: DeviceView['status']; reason: string },
+    input: { displayName?: string; status?: DeviceView['status']; reason?: string },
     meta: DeviceCommandMeta,
   ): Promise<DeviceCommandResult> {
     const result = commandResultSchema.safeParse(

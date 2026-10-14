@@ -114,7 +114,7 @@ model CardInventoryHistory {
   actorUserId   String              @map("actor_user_id") @db.Uuid
   callerService String              @map("caller_service") @db.VarChar(80)
   correlationId String              @map("correlation_id") @db.Uuid
-  reason        String              @db.VarChar(500)
+  reason        String?             @db.VarChar(500)
   before        Json?
   after         Json
   createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)

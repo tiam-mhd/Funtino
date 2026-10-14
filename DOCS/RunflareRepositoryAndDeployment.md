@@ -70,6 +70,19 @@ Migrationهای خارج از این پنج Worker با job/فرمان نسخه�
 
 تغییر سیاست نشست، migration افزایشی `identity_access.policy_state.management_session_ttl_hours` را به Worker ‏Identity & Access اضافه می‌کند؛ طبق ADR-0015 هنگام startup همان Worker اعمال می‌شود. API Gateway و System Web باید با هم از snapshotهای backend و frontend منتشر شوند. پس از انتشار، role مدیر فعلی با CLI یک‌باره و TOTP به permission جدید مجهز می‌شود و `IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED=true` فقط در پنجره‌ی rollout مجاز، روی process مربوط به IAM در item بک‌اند تنظیم می‌شود؛ این گیت در image یا source باز نمی‌شود.
 
+ADR-0025، هر الزام per-login MFA را supersede می‌کند و customer/management session را با audience و cookie جدا تعریف می‌کند. migration Gateway برای audience، رمز اختیاری و challengeهای مدیریت فقط با job نسخه‌دار Gateway اجرا می‌شود؛ startup migration جدید به هیچ Worker افزوده نمی‌شود. migration Gateway پیش از DDL، PostgreSQL 11+ را لازم می‌داند، روی انتظار lock پنج ثانیه و هر statement حداکثر ۱۲۰ ثانیه limit می‌گذارد و هیچ UPDATE سراسری نشست‌ها ندارد. پیش از job این مقدار را از اتصال مالک بخوان: `SELECT current_setting('server_version_num')::integer;`. نسخه‌ی پایین‌تر از 110000 باید پیش از rollout ارتقا یابد.
+
+فرمان‌های مالکانه از snapshot backend:
+
+```sh
+pnpm --filter @funtino/api-gateway prisma:migrate
+pnpm --filter @funtino/device-integration prisma:migrate
+```
+
+هر دو job باید URL/credential migration مستقل همان مالک را داشته باشند؛ Gateway از `DATABASE_MIGRATION_URL` و Device از `DEVICE_INTEGRATION_MIGRATION_DATABASE_URL` استفاده می‌کند. چون Prisma schema هر دو datasource URL را تعریف می‌کند، job باید هر دو متغیر URL را مقداردهی کند و آن‌ها را به همان database/schema مالک اشاره دهد؛ URL مستقیم migration با مجوز DDL استفاده می‌شود. این secretها فقط در محیط همان job قرار می‌گیرند و به process دائمی API Gateway یا Device Integration داده نمی‌شوند. اگر job شکست خورد یا timeout شد، rollout متوقف بماند؛ وضعیت Prisma و lockهای PostgreSQL بررسی شود و migration history خودکار resolve یا پاک نشود.
+
+Wallet در فهرست پنج Worker از قبل مجازشده در ADR-0015 است؛ startup runner خودش migration نسخه‌دار Wallet را با `WALLET_MIGRATION_DATABASE_URL` و fail-closed اجرا می‌کند. برای این تغییر Worker جدیدی به runner اضافه نشود. schema audit reason در Forms از قبل nullable است و در این تغییر migration تازه‌ای ندارد. nullable-reason migrationهای Wallet و Device هر کدام حد انتظار lock پنج ثانیه و زمان statement برابر ۱۲۰ ثانیه دارند. تغییر auth/session در API Gateway و تمام OpenAPI/UIهای مصرف‌کننده هر دو snapshot backend و frontend را اثر می‌دهد؛ هیچ secret رمز یا hash به Docker build arg، image یا repository نمی‌رود.
+
 Bootstrap مالک مقید به شماره طبق ADR-0021 است و migration تازه‌ای ندارد. تغییر CLI، Gateway endpoint داخلی و allow-listها فقط Backend bundle را اثر می‌دهد. در Runflare Backend، شماره‌ی مالک را در `SYSTEM_ADMIN_OWNER_PHONE_E164`، secret lookup را در `SYSTEM_ADMIN_BOOTSTRAP_LOOKUP_TOKEN` و برای mutationهای عادی IAM، `IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED=true` را تنظیم کن؛ دستور نهایی user UUID نمی‌پذیرد و مقصد را از Gateway روی loopback می‌گیرد.
 
 ## اثر تغییر و انتشار
@@ -111,5 +124,5 @@ Bootstrap مالک مقید به شماره طبق ADR-0021 است و migration 
 - `services/forms` یک process داخلی از `funtino-backend-runtime` و port آن `4090` است؛ snapshot باید manifest، supervisor، healthcheck، Dockerfile، `.dockerignore` و build check را همگام نگه دارد.
 - `FORMS_DATABASE_URL` فقط به process Forms و `FORMS_API_GATEWAY_TOKEN` به Forms و API Gateway allow-list می‌شود. Gateway با `FORMS_URL` داخلی به سرویس متصل می‌شود. secretها runtime-only هستند.
 - رابط مدیریت فرم برای ساخت پیوند عمومی از `NEXT_PUBLIC_CUSTOMER_WEB_URL` در build استفاده می‌کند؛ مقدار production برابر `https://app.funtino.ir` است و این تنظیم public است، نه secret.
-- migrationهای Forms با job/فرمان نسخه‌دار و credential migration مستقل اجرا می‌شوند؛ startup migration برای Forms ممنوع است.
+- migrationهای schema در Forms، هرگاه لازم شوند، با job/فرمان نسخه‌دار و credential migration مستقل اجرا می‌شوند؛ startup migration برای Forms ممنوع است. تغییر فعلی در Forms migration دیتابیس ندارد؛ ستون audit reason از قبل nullable است و reason اصلاح پاسخ همچنان الزامی می‌ماند.
 - هر تغییر API Gateway، Forms، `event-contracts` یا backend shared package روی Backend اثر دارد. تغییر `forms-schema`, `forms-renderer` یا UI روی Frontend هم اثر دارد؛ تغییر مشترک پیش از انتشار هر دو bundle را همگام می‌کند.

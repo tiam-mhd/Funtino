@@ -20,20 +20,13 @@ import { CustomerPageHeader } from './customer-page-header';
 import {
   avatarSource,
   CustomerApiError,
-  confirmOperationsAdminMfaEnrollment,
-  getOperationsAdminMfaStatus,
   getProfile,
   logout,
   requestOtp,
-  startOperationsAdminMfaEnrollment,
   updateProfile,
   uploadAvatar,
-  verifyOperationsAdminMfaStepUp,
   verifyOtp,
   type AvatarPreset,
-  type AdminMfaEnrollment,
-  type AdminMfaRecovery,
-  type AdminMfaStatus,
   type CustomerUser,
 } from '../lib/customer-api';
 import { CustomerIcon, type CustomerIconName } from './customer-icons';
@@ -158,7 +151,6 @@ function AuthPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [adminMfaRequired, setAdminMfaRequired] = useState(false);
 
   useEffect(() => {
     if (!cooldown) return undefined;
@@ -198,25 +190,17 @@ function AuthPanel({
     setError('');
     setBusy(true);
     try {
-      const result = await verifyOtp({
+      await verifyOtp({
         challengeId,
         phone: toEnglishDigits(phone),
         code: toEnglishDigits(code),
       });
-      if (result.mfaRequired) {
-        setAdminMfaRequired(true);
-        return;
-      }
       await onAuthenticated();
     } catch (verifyError) {
       setError(readError(verifyError));
     } finally {
       setBusy(false);
     }
-  }
-
-  if (adminMfaRequired) {
-    return <CustomerAdminMfaPanel onComplete={onAuthenticated} />;
   }
 
   return (
@@ -354,273 +338,6 @@ function AuthPanel({
         {(error || bootError) && (
           <p className="customer-auth-error" role="alert">
             {error || bootError}
-          </p>
-        )}
-      </section>
-    </main>
-  );
-}
-
-function CustomerAdminMfaPanel({ onComplete }: { onComplete: () => Promise<void> }) {
-  const [status, setStatus] = useState<AdminMfaStatus | null>(null);
-  const [enrollment, setEnrollment] = useState<AdminMfaEnrollment | null>(null);
-  const [recovery, setRecovery] = useState<AdminMfaRecovery | null>(null);
-  const [method, setMethod] = useState<'totp' | 'recovery'>('totp');
-  const [code, setCode] = useState('');
-  const [codesSaved, setCodesSaved] = useState(false);
-  const [copyNotice, setCopyNotice] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-    void getOperationsAdminMfaStatus().then(
-      (next) => {
-        if (!cancelled) setStatus(next);
-      },
-      (failure: unknown) => {
-        if (!cancelled)
-          setError(failure instanceof Error ? failure.message : 'وضعیت MFA دریافت نشد.');
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function retryStatus() {
-    setBusy(true);
-    setError('');
-    try {
-      setStatus(await getOperationsAdminMfaStatus());
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'وضعیت MFA دریافت نشد.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function copyRecoveryCodes() {
-    if (!recovery) return;
-    setCopyNotice('');
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error('clipboard_unavailable');
-      await navigator.clipboard.writeText(recovery.recoveryCodes.join('\n'));
-      setCopyNotice('کدها در کلیپ‌بورد کپی شدند.');
-    } catch {
-      setCopyNotice('کپی خودکار در دسترس نیست؛ کدها را از متن بالا به‌صورت دستی ذخیره کنید.');
-    }
-  }
-
-  async function beginEnrollment() {
-    setBusy(true);
-    setError('');
-    try {
-      setEnrollment(await startOperationsAdminMfaEnrollment());
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'شروع ثبت MFA انجام نشد.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function confirmEnrollment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const normalized = toEnglishDigits(code).replace(/\D/g, '');
-    if (!/^\d{6}$/.test(normalized)) {
-      setError('کد برنامه‌ی رمزساز باید ۶ رقم باشد.');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    try {
-      setRecovery(await confirmOperationsAdminMfaEnrollment(normalized));
-      setCodesSaved(false);
-      setCode('');
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'تأیید ثبت MFA انجام نشد.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verifyExistingFactor(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const normalized =
-      method === 'totp'
-        ? toEnglishDigits(code).replace(/\D/g, '')
-        : toEnglishDigits(code).trim().toUpperCase();
-    if (
-      method === 'totp'
-        ? !/^\d{6}$/.test(normalized)
-        : !/^[0-9A-F]{8}(?:-[0-9A-F]{8}){3}$/.test(normalized)
-    ) {
-      setError(
-        method === 'totp' ? 'کد برنامه‌ی رمزساز باید ۶ رقم باشد.' : 'قالب کد بازیابی معتبر نیست.',
-      );
-      return;
-    }
-    setBusy(true);
-    setError('');
-    try {
-      await verifyOperationsAdminMfaStepUp({ method, code: normalized });
-      await onComplete();
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'تأیید MFA انجام نشد.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <main className="customer-auth-page">
-      <section
-        className="customer-auth-card customer-admin-mfa-card"
-        aria-labelledby="customer-admin-mfa-title"
-      >
-        <span className="customer-auth-card__secure">
-          <CustomerIcon name="shield" size={14} /> ورود مدیر سامانه
-        </span>
-        <h1 id="customer-admin-mfa-title">تأیید دومرحله‌ای الزامی است</h1>
-        <p className="customer-auth-card__hint">
-          پیش از بازشدن حساب یا اطلاعات مدیریتی، MFA باید در همین نشست تأیید شود.
-        </p>
-
-        {!status && !error && (
-          <p role="status" aria-live="polite">
-            در حال دریافت وضعیت MFA…
-          </p>
-        )}
-        {!status && error && (
-          <button
-            className="customer-secondary-button"
-            type="button"
-            disabled={busy}
-            onClick={() => void retryStatus()}
-          >
-            {busy ? 'در حال بررسی…' : 'تلاش دوباره برای دریافت وضعیت'}
-          </button>
-        )}
-        {status?.enabled && !recovery && (
-          <form
-            className="customer-auth-form"
-            onSubmit={(event) => void verifyExistingFactor(event)}
-          >
-            <label className="customer-field" htmlFor="customer-admin-mfa-method">
-              روش تأیید
-              <select
-                id="customer-admin-mfa-method"
-                value={method}
-                onChange={(event) => setMethod(event.currentTarget.value as 'totp' | 'recovery')}
-              >
-                <option value="totp">برنامه‌ی رمزساز</option>
-                <option value="recovery">کد بازیابی</option>
-              </select>
-            </label>
-            <label className="customer-field" htmlFor="customer-admin-mfa-code">
-              {method === 'totp' ? 'کد ۶ رقمی' : 'کد بازیابی'}
-              <input
-                id="customer-admin-mfa-code"
-                autoComplete="one-time-code"
-                dir="ltr"
-                inputMode={method === 'totp' ? 'numeric' : 'text'}
-                value={code}
-                onChange={(event) => setCode(event.currentTarget.value)}
-                required
-              />
-            </label>
-            <button className="customer-primary-button" type="submit" disabled={busy}>
-              {busy ? 'در حال بررسی…' : 'تأیید و ادامه'}
-            </button>
-          </form>
-        )}
-
-        {status && !status.enabled && !enrollment && !recovery && (
-          <div className="customer-auth-form">
-            <p className="customer-auth-card__hint">
-              برای این مدیر هنوز عامل MFA ثبت نشده است. ابتدا برنامه‌ی سازگار با TOTP را متصل کنید.
-            </p>
-            <button
-              className="customer-primary-button"
-              type="button"
-              onClick={() => void beginEnrollment()}
-              disabled={busy}
-            >
-              {busy ? 'در حال آماده‌سازی…' : 'شروع ثبت برنامه‌ی رمزساز'}
-            </button>
-          </div>
-        )}
-
-        {enrollment && !recovery && (
-          <form className="customer-auth-form" onSubmit={(event) => void confirmEnrollment(event)}>
-            <a href={enrollment.otpauthUri} className="customer-primary-button">
-              افزودن به برنامه‌ی رمزساز
-            </a>
-            <p className="customer-auth-card__hint">
-              اگر اسکن QR ممکن نیست، کلید زیر را در برنامه وارد کنید:
-            </p>
-            <code dir="ltr">{enrollment.secret}</code>
-            <label className="customer-field" htmlFor="customer-admin-mfa-enrollment-code">
-              کد ۶ رقمی برنامه
-              <input
-                id="customer-admin-mfa-enrollment-code"
-                autoComplete="one-time-code"
-                dir="ltr"
-                inputMode="numeric"
-                value={code}
-                onChange={(event) => setCode(event.currentTarget.value)}
-                required
-              />
-            </label>
-            <button className="customer-primary-button" type="submit" disabled={busy}>
-              {busy ? 'در حال بررسی…' : 'تأیید برنامه'}
-            </button>
-          </form>
-        )}
-
-        {recovery && (
-          <div className="customer-auth-form">
-            <p className="customer-auth-card__hint">
-              کدهای بازیابی فقط همین یک‌بار نمایش داده می‌شوند؛ پیش از ادامه آن‌ها را در محل امن
-              ذخیره کنید.
-            </p>
-            <pre dir="ltr" className="customer-admin-recovery-codes">
-              {recovery.recoveryCodes.join('\n')}
-            </pre>
-            <button
-              className="customer-secondary-button"
-              type="button"
-              onClick={() => void copyRecoveryCodes()}
-            >
-              کپی کدها
-            </button>
-            {copyNotice && (
-              <p role="status" aria-live="polite">
-                {copyNotice}
-              </p>
-            )}
-            <label className="customer-field customer-admin-recovery-confirm">
-              <input
-                type="checkbox"
-                checked={codesSaved}
-                onChange={(event) => setCodesSaved(event.currentTarget.checked)}
-              />
-              کدهای بازیابی را در محل امن ذخیره کردم.
-            </label>
-            <button
-              className="customer-primary-button"
-              type="button"
-              disabled={!codesSaved || busy}
-              onClick={() => void onComplete()}
-            >
-              ادامه به حساب
-            </button>
-          </div>
-        )}
-
-        {error && (
-          <p className="customer-auth-error" role="alert">
-            {error}
           </p>
         )}
       </section>

@@ -12,7 +12,7 @@ This document records the executable customer authentication/profile slice. It s
 2. `POST /api/v1/auth/otp/request` normalizes the number to E.164, applies the request cooldown, generates a six-digit code through the configured `OtpSender`, stores only a hash, and returns a challenge.
 3. `ParsGreenOtpSender` sends the code through Parsgreen REST at `https://sms.parsgreen.ir/Apiv2/Message/SendOtp`, using `Authorization: basic apikey:<token>` and the provider JSON contract. `PARSGREEN_API_TOKEN` is deliberately blank in source and belongs in Runflare secrets.
    If the provider times out after the send attempt, the API persists the challenge and returns `deliveryStatus: "unknown"`; the customer continues to OTP verification and automatic resend is forbidden because the provider outcome is ambiguous.
-4. `POST /api/v1/auth/otp/verify` validates phone, expiry, attempt limit and hash, consumes the challenge, creates/reuses the user, and sets the `funtino_session` HttpOnly cookie.
+4. `POST /api/v1/auth/otp/verify` validates phone, expiry, attempt limit and hash, consumes the customer-login challenge, creates/reuses the User without overwriting its profile, and sets the customer-only `funtino_session` HttpOnly cookie. It never creates a management session, even for a user who also has management memberships.
 5. The customer must complete first name, last name, birth date, gender, city and an uploaded profile image or an already stored avatar before the main navigation is exposed. Preset-avatar selection is intentionally hidden in the current UI and remains commented in the customer code until the final avatar catalogue/design is approved.
 6. The customer can later open a dedicated profile page from the account page and edit each profile field separately. Every newly selected image opens a client-side crop step constrained to a square `1:1` viewport; the confirmed result is normalized to a square JPEG before upload.
 
@@ -30,7 +30,7 @@ Adding an adult by phone performs exact lookup only in Gateway. Registered users
 
 Members can update their own displayed information. Owners and guardians can manage dependent records. A relationship change involving another linked adult is rejected until that adult's consent is available. Archiving a dependent or leaving as a non-owner member revokes the related household access and open invitations while keeping audit rows and the household's Wallet assignment. The household owner must transfer ownership before leaving.
 
-Operations and System family support requires `customer.family.read`, fresh step-up, exact-phone lookup and the selected organization/branch. The Gateway checks current Wallet assignments before asking the owner for a maximum of 25 audit action names and timestamps. These views do not expose phone, birth date, actor IDs or audit payloads and cannot mutate family data. Configuration is documented in `DOCS/RunflareRepositoryAndDeployment.md`.
+Operations and System family support requires `customer.family.read`, exact-phone lookup and the selected organization/branch. It does not require MFA step-up. The Gateway checks current Wallet assignments before asking the owner for a maximum of 25 audit action names and timestamps. These views do not expose phone, birth date, actor IDs or audit payloads and cannot mutate family data. Configuration is documented in `DOCS/RunflareRepositoryAndDeployment.md`.
 
 ## API surface
 

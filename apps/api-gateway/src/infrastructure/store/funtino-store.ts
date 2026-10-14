@@ -11,21 +11,51 @@ import type {
   LedgerEntry,
   Mission,
   MissionProgress,
+  ManagementLoginChallenge,
+  ManagementPasswordState,
   OtpChallenge,
   Session,
   User,
   UserAvatar,
+  UserIdentitySummary,
   UserProfileUpdate,
   WalletAccount,
 } from '../../domain/models.js';
 
 export const FUNTINO_STORE = Symbol('FUNTINO_STORE');
 export type StoreResult<T> = T | Promise<T>;
+export type OtpPurpose = 'customer_login' | 'management_login' | 'management_password';
+export type OtpVerificationResult =
+  | { status: 'verified'; challenge: OtpChallenge }
+  | {
+      status:
+        | 'not_found'
+        | 'phone_mismatch'
+        | 'purpose_mismatch'
+        | 'expired'
+        | 'consumed'
+        | 'rate_limited'
+        | 'invalid_code';
+    };
 
 export interface FuntinoStorePort {
   createUser(phoneE164: string): StoreResult<User>;
   getUser(userId: string): StoreResult<User>;
   getUserByPhone(phoneE164: string): StoreResult<User | undefined>;
+  listUserIdentitySummaries(userIds: readonly string[]): StoreResult<UserIdentitySummary[]>;
+  getManagementPasswordState(userId: string): StoreResult<ManagementPasswordState>;
+  recordManagementPasswordFailure(
+    userId: string,
+    now: number,
+    maxAttempts: number,
+    lockoutMs: number,
+  ): StoreResult<ManagementPasswordState>;
+  clearManagementPasswordFailures(userId: string): StoreResult<void>;
+  setManagementPassword(
+    userId: string,
+    passwordHash: string | null,
+    keepSessionId: string,
+  ): StoreResult<void>;
   updateUserProfile(userId: string, input: UserProfileUpdate): StoreResult<User>;
   getUserAvatar(userId: string): StoreResult<UserAvatar | undefined>;
   saveUserAvatar(input: { userId: string; mimeType: string; data: Buffer }): StoreResult<User>;
@@ -33,7 +63,16 @@ export interface FuntinoStorePort {
     phoneE164: string;
     code: string;
     ttlMs: number;
+    purpose?: OtpPurpose;
   }): StoreResult<OtpChallenge>;
+  consumeOtpRequestCooldown(key: string, now: number, cooldownMs: number): StoreResult<boolean>;
+  consumeOtpChallengeIfValid(input: {
+    challengeId: string;
+    phoneE164: string;
+    purpose: OtpPurpose;
+    codeHash: string;
+    now: number;
+  }): StoreResult<OtpVerificationResult>;
   getOtpChallenge(challengeId: string): StoreResult<OtpChallenge>;
   incrementOtpAttempt(challengeId: string): StoreResult<number>;
   consumeOtpChallenge(challengeId: string): StoreResult<void>;
@@ -41,8 +80,22 @@ export interface FuntinoStorePort {
     userId: string,
     tokenHash: string,
     ttlMs: number,
-    policy?: { isSystemAdmin: boolean; mfaLoginDeadlineAt: number | null },
+    policy?: { audience: 'customer' | 'management' },
   ): StoreResult<Session>;
+  saveManagementLoginChallenge(
+    userId: string,
+    tokenHash: string,
+    ttlMs: number,
+  ): StoreResult<ManagementLoginChallenge>;
+  findManagementLoginChallenge(
+    tokenHash: string,
+  ): StoreResult<ManagementLoginChallenge | undefined>;
+  incrementManagementLoginChallengeAttempt(
+    tokenHash: string,
+    now: number,
+    maxAttempts: number,
+  ): StoreResult<boolean>;
+  consumeManagementLoginChallenge(tokenHash: string, now: number): StoreResult<boolean>;
   findSession(tokenHash: string): StoreResult<Session | undefined>;
   touchSessionActivity(sessionId: string, at: number): StoreResult<void>;
   updateSessionMfa(
@@ -138,6 +191,8 @@ export class InMemoryFuntinoStore implements FuntinoStorePort {
   readonly users = new Map<string, User>();
   readonly usersByPhone = new Map<string, string>();
   readonly otpChallenges = new Map<string, OtpChallenge>();
+  readonly managementLoginChallenges = new Map<string, ManagementLoginChallenge>();
+  readonly managementCredentials = new Map<string, ManagementPasswordState>();
   readonly sessions = new Map<string, Session>();
   readonly households = new Map<string, Household>();
   readonly householdMembers = new Map<string, HouseholdMember>();
@@ -154,6 +209,7 @@ export class InMemoryFuntinoStore implements FuntinoStorePort {
     string,
     { windowStartedAt: number; count: number }
   >();
+  private readonly otpRequestThrottles = new Map<string, number>();
 
   constructor() {
     this.seed();
@@ -228,6 +284,71 @@ export class InMemoryFuntinoStore implements FuntinoStorePort {
     return id ? this.users.get(id) : undefined;
   }
 
+  listUserIdentitySummaries(userIds: readonly string[]): UserIdentitySummary[] {
+    return [...new Set(userIds)].flatMap((userId) => {
+      const user = this.users.get(userId);
+      return user
+        ? [
+            {
+              userId,
+              displayName: user.displayName,
+              firstName: user.firstName,
+              lastName: user.lastName,
+            },
+          ]
+        : [];
+    });
+  }
+
+  getManagementPasswordState(userId: string): ManagementPasswordState {
+    const state = this.managementCredentials.get(userId);
+    return state ? { ...state } : { passwordHash: null, failedAttempts: 0, lockedUntil: null };
+  }
+
+  recordManagementPasswordFailure(
+    userId: string,
+    now: number,
+    maxAttempts: number,
+    lockoutMs: number,
+  ): ManagementPasswordState {
+    const state = this.getManagementPasswordState(userId);
+    if (state.lockedUntil !== null && state.lockedUntil > now) return state;
+    if (state.lockedUntil !== null) {
+      state.failedAttempts = 0;
+      state.lockedUntil = null;
+    }
+    state.failedAttempts += 1;
+    if (state.failedAttempts >= maxAttempts) state.lockedUntil = now + lockoutMs;
+    this.managementCredentials.set(userId, state);
+    return { ...state };
+  }
+
+  clearManagementPasswordFailures(userId: string): void {
+    const state = this.getManagementPasswordState(userId);
+    state.failedAttempts = 0;
+    state.lockedUntil = null;
+    this.managementCredentials.set(userId, state);
+  }
+
+  setManagementPassword(userId: string, passwordHash: string | null, keepSessionId: string): void {
+    if (!this.users.has(userId)) throw new DomainError('NOT_FOUND', 'حساب کاربری پیدا نشد.');
+    this.managementCredentials.set(userId, {
+      passwordHash,
+      failedAttempts: 0,
+      lockedUntil: null,
+    });
+    for (const session of this.sessions.values()) {
+      if (
+        session.userId === userId &&
+        session.audience === 'management' &&
+        session.id !== keepSessionId &&
+        session.revokedAt === null
+      ) {
+        session.revokedAt = Date.now();
+      }
+    }
+  }
+
   updateUserProfile(userId: string, input: UserProfileUpdate): User {
     const user = this.getUser(userId);
     if (input.firstName !== undefined) user.firstName = cleanOptional(input.firstName, 60);
@@ -268,10 +389,16 @@ export class InMemoryFuntinoStore implements FuntinoStorePort {
     return user;
   }
 
-  saveOtpChallenge(input: { phoneE164: string; code: string; ttlMs: number }): OtpChallenge {
+  saveOtpChallenge(input: {
+    phoneE164: string;
+    code: string;
+    ttlMs: number;
+    purpose?: OtpPurpose;
+  }): OtpChallenge {
     const challenge: OtpChallenge = {
       id: randomUUID(),
       phoneE164: input.phoneE164,
+      purpose: input.purpose ?? 'customer_login',
       codeHash: hashSecret(input.code),
       attempts: 0,
       expiresAt: Date.now() + input.ttlMs,
@@ -279,6 +406,35 @@ export class InMemoryFuntinoStore implements FuntinoStorePort {
     };
     this.otpChallenges.set(challenge.id, challenge);
     return challenge;
+  }
+
+  consumeOtpRequestCooldown(key: string, now: number, cooldownMs: number): boolean {
+    const nextAllowedAt = this.otpRequestThrottles.get(key) ?? 0;
+    if (nextAllowedAt > now) return false;
+    this.otpRequestThrottles.set(key, now + cooldownMs);
+    return true;
+  }
+
+  consumeOtpChallengeIfValid(input: {
+    challengeId: string;
+    phoneE164: string;
+    purpose: OtpPurpose;
+    codeHash: string;
+    now: number;
+  }): OtpVerificationResult {
+    const challenge = this.otpChallenges.get(input.challengeId);
+    if (!challenge) return { status: 'not_found' };
+    if (challenge.phoneE164 !== input.phoneE164) return { status: 'phone_mismatch' };
+    if (challenge.purpose !== input.purpose) return { status: 'purpose_mismatch' };
+    if (challenge.consumedAt !== null) return { status: 'consumed' };
+    if (challenge.expiresAt <= input.now) return { status: 'expired' };
+    if (challenge.attempts >= 5) return { status: 'rate_limited' };
+    if (challenge.codeHash !== input.codeHash) {
+      challenge.attempts += 1;
+      return { status: challenge.attempts >= 5 ? 'rate_limited' : 'invalid_code' };
+    }
+    challenge.consumedAt = input.now;
+    return { status: 'verified', challenge };
   }
 
   getOtpChallenge(challengeId: string): OtpChallenge {
@@ -302,27 +458,80 @@ export class InMemoryFuntinoStore implements FuntinoStorePort {
     userId: string,
     tokenHash: string,
     ttlMs: number,
-    policy: { isSystemAdmin: boolean; mfaLoginDeadlineAt: number | null } = {
-      isSystemAdmin: false,
-      mfaLoginDeadlineAt: null,
+    policy: { audience: 'customer' | 'management' } = {
+      audience: 'customer',
     },
   ): Session {
     const now = Date.now();
     const session: Session = {
       id: randomUUID(),
       userId,
+      audience: policy.audience,
       tokenHash,
       expiresAt: now + ttlMs,
       revokedAt: null,
       mfaVerifiedAt: null,
       mfaFactorVersion: null,
       mfaMethod: null,
-      isSystemAdmin: policy.isSystemAdmin,
-      mfaLoginDeadlineAt: policy.mfaLoginDeadlineAt,
       lastActivityAt: now,
     };
     this.sessions.set(session.id, session);
     return session;
+  }
+
+  saveManagementLoginChallenge(
+    userId: string,
+    tokenHash: string,
+    ttlMs: number,
+  ): ManagementLoginChallenge {
+    const challenge: ManagementLoginChallenge = {
+      id: randomUUID(),
+      userId,
+      tokenHash,
+      attempts: 0,
+      expiresAt: Date.now() + ttlMs,
+      consumedAt: null,
+    };
+    this.managementLoginChallenges.set(tokenHash, challenge);
+    return { ...challenge };
+  }
+
+  findManagementLoginChallenge(tokenHash: string): ManagementLoginChallenge | undefined {
+    const challenge = this.managementLoginChallenges.get(tokenHash);
+    return challenge ? { ...challenge } : undefined;
+  }
+
+  incrementManagementLoginChallengeAttempt(
+    tokenHash: string,
+    now: number,
+    maxAttempts: number,
+  ): boolean {
+    const challenge = this.managementLoginChallenges.get(tokenHash);
+    if (
+      !challenge ||
+      challenge.consumedAt !== null ||
+      challenge.expiresAt <= now ||
+      challenge.attempts >= maxAttempts
+    ) {
+      return false;
+    }
+    challenge.attempts += 1;
+    if (challenge.attempts >= maxAttempts) challenge.consumedAt = now;
+    return true;
+  }
+
+  consumeManagementLoginChallenge(tokenHash: string, now: number): boolean {
+    const challenge = this.managementLoginChallenges.get(tokenHash);
+    if (
+      !challenge ||
+      challenge.consumedAt !== null ||
+      challenge.expiresAt <= now ||
+      challenge.attempts >= 5
+    ) {
+      return false;
+    }
+    challenge.consumedAt = now;
+    return true;
   }
 
   touchSessionActivity(sessionId: string, at: number): void {

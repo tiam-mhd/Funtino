@@ -35,7 +35,12 @@ const adapterKey = z
 const externalId = z.string().trim().min(1).max(160);
 const deviceType = z.enum(['rfid_reader', 'terminal', 'access_gate', 'other']);
 const deviceStatus = z.enum(['active', 'suspended', 'retired']);
-const reason = z.string().trim().min(5).max(500);
+const optionalReason = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .transform((value) => value || undefined);
 
 const registerSchema = z
   .object({
@@ -43,14 +48,14 @@ const registerSchema = z
     externalDeviceId: externalId,
     displayName: z.string().trim().min(1).max(120),
     deviceType,
-    reason,
+    reason: optionalReason,
   })
   .strict();
 const updateSchema = z
   .object({
     displayName: z.string().trim().min(1).max(120).optional(),
     status: deviceStatus.optional(),
-    reason,
+    reason: optionalReason,
   })
   .strict();
 const listQuerySchema = z

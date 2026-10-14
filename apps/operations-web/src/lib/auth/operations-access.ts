@@ -38,7 +38,7 @@ export function normalizePhone(value: string): string {
 }
 
 export function requestOperationsOtp(phone: string): Promise<OtpChallenge> {
-  return apiRequest('/api/v1/auth/otp/request', {
+  return apiRequest('/api/v1/auth/management/otp/request', {
     method: 'POST',
     body: { phone },
   });
@@ -48,12 +48,19 @@ export async function verifyOperationsOtp(input: {
   challengeId: string;
   phone: string;
   code: string;
-}): Promise<{ mfaRequired: boolean }> {
-  return apiRequest('/api/v1/auth/otp/verify', { method: 'POST', body: input });
+}): Promise<{ requiresPassword: boolean; expiresAt: string }> {
+  return apiRequest('/api/v1/auth/management/otp/verify', { method: 'POST', body: input });
+}
+
+export async function verifyOperationsPassword(password: string): Promise<{ expiresAt: string }> {
+  return apiRequest('/api/v1/auth/management/password/verify', {
+    method: 'POST',
+    body: { password },
+  });
 }
 
 export function getOperationsUser(): Promise<OperationsUser> {
-  return apiRequest('/api/v1/auth/me');
+  return apiRequest('/api/v1/auth/management/me');
 }
 
 export function getOperationsScopes(): Promise<{
@@ -73,7 +80,7 @@ export function selectOperationsScope(
 }
 
 export async function logoutOperations(): Promise<void> {
-  await apiRequest('/api/v1/auth/logout', { method: 'POST' });
+  await apiRequest('/api/v1/auth/management/logout', { method: 'POST' });
 }
 
 export function scopeKey(scope: OperationsScope): string {

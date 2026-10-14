@@ -27,8 +27,7 @@ function session(): Session {
     mfaVerifiedAt: Date.now(),
     mfaFactorVersion: 1,
     mfaMethod: 'totp',
-    isSystemAdmin: false,
-    mfaLoginDeadlineAt: null,
+    audience: 'management',
     lastActivityAt: Date.now(),
   };
 }
@@ -109,7 +108,6 @@ test('card listing requires exact branch permission and returns owner data with 
     canTransfer: false,
     canUnassign: false,
     canLookupCustomer: false,
-    requiresStepUp: false,
   });
   assert.equal(result.nextCursor, null);
   assert.deepEqual(permissions, [
@@ -122,7 +120,7 @@ test('card listing requires exact branch permission and returns owner data with 
   ]);
 });
 
-test('card capabilities distinguish a missing permission from an MFA step-up requirement', async () => {
+test('card capabilities expose permission state without presenting card commands as MFA step-up actions', async () => {
   const result = await controller(
     {
       evaluateAuthorization: async (_user, _session, input) => ({
@@ -137,7 +135,7 @@ test('card capabilities distinguish a missing permission from an MFA step-up req
   ).listCards({ id: userId }, organizationId, branchId, { pageSize: 25 }, request());
 
   assert.equal(result.data.capabilities.canAssign, false);
-  assert.equal(result.data.capabilities.requiresStepUp, true);
+  assert.equal('requiresStepUp' in result.data.capabilities, false);
 });
 
 test('denied inventory read stops before owner and Wallet calls', async () => {

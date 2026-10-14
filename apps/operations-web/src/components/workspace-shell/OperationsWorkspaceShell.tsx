@@ -437,6 +437,12 @@ export function OperationsWorkspaceShell({
                   {activeScope.scope.type === 'organization' ? 'دسترسی مجموعه' : 'دسترسی شعبه'}
                 </small>
               </span>
+              <a
+                className={styles.accountSecurityLink}
+                href="/account/security/management-password"
+              >
+                امنیت حساب
+              </a>
               <Button
                 className={styles.logoutButton}
                 disabled={logoutBusy}

@@ -42,8 +42,7 @@ function session(): Session {
     mfaVerifiedAt: Date.now(),
     mfaFactorVersion: 1,
     mfaMethod: 'totp',
-    isSystemAdmin: false,
-    mfaLoginDeadlineAt: null,
+    audience: 'management',
     lastActivityAt: Date.now(),
   };
 }

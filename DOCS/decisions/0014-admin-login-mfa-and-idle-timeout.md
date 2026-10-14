@@ -1,7 +1,7 @@
 # ADR-0014: MFA در هر ورود مدیر سامانه و پایان نشست بیکار
 
 - تاریخ: 2026-10-01
-- وضعیت: accepted
+- وضعیت: superseded by ADR-0020 for session duration/idle policy and ADR-0025 for per-login MFA
 - تصمیم‌گیر: مالک محصول
 - دامنه: Identity & Access، API Gateway، Operations Web و System Web
 

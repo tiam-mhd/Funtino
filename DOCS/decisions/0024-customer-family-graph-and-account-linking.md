@@ -35,7 +35,7 @@ The current Customer & Household owner stores household members with a free-text
 - Mutations use the owner service transaction, an audit row, idempotency, optimistic version checks, and an Outbox event. `customer.household-member-updated.v1` carries household/member IDs, status, and version only. Other versioned event payloads likewise contain opaque IDs and state, not names, birth dates, phone hashes, invitation tokens, or free text.
 - Gateway exposes authenticated customer APIs and validates verified-phone ownership before accepting a phone-hash invitation. The invitation token is submitted in a POST body.
 - Operations and System family support reads use a dedicated `customer.family.read` permission, exact-phone lookup, selected organization/branch scope, no-store response, quota, and audit. Only households with a current Wallet assignment at that selected branch are returned. These views are read-only, do not export, and do not change card ownership or assignment. Their bounded history contains at most 25 action names and timestamps, with no actor IDs or audit payloads.
-- `customer.family.read` is added only to the read-only `system_support`, `organization_crm_manager`, and `branch_crm_manager` templates. It is not added to cashier, operator, or general management templates. The permission definition requires fresh step-up and enforces scope on the server.
+- `customer.family.read` is added only to the read-only `system_support`, `organization_crm_manager`, and `branch_crm_manager` templates. It is not added to cashier, operator, or general management templates. Server-side scope remains mandatory; under ADR-0025 this ordinary read is audited and does not require MFA step-up.
 
 ### Migration and release
 

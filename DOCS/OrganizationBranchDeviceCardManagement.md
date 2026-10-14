@@ -3,11 +3,13 @@
 تاریخ بررسی: 2026-09-28
 وضعیت: طرح تأییدشده بر اساس ADR-0005؛ پیاده‌سازی مرحله‌ای است. sync واقعی RFID و مانده‌ی مالی همچنان به قراردادهای بیرونی نیاز دارند.
 
+سیاست هویت و دسترسی در 2026-10-14 با [ADR-0025](decisions/0025-management-audience-optional-password-and-risk-policy.md) به‌روز شد: user مرکزی می‌تواند چند membership داشته باشد؛ union مجوزها با deny محدود به scope و استثنای deny سراسری ارزیابی می‌شود. نشست مدیریتی از customer جداست، MFA فقط برای commandهای پرریسک است، و عملیات عادی موجودی کارت نه MFA و نه reason اجباری می‌خواهد.
+
 وضعیت تکمیلی 2026-10-01: BFF نشست‌محور Gateway و صفحه‌ی System Web برای مدیریت مجموعه/شعبه در source پیاده شده‌اند. فهرست، ایجاد، ویرایش نسخه‌محور، تعلیق/فعال‌سازی برگشت‌پذیر و نمایش status واقعی از سرویس مالک فراهم است؛ دسترسی در هر درخواست server-side بررسی می‌شود. این تغییر به معنی اجرای migration/backfill، اتصال deployment repository یا انتشار production نیست؛ validator در IAM و gateهای cutover/restore/deployment همچنان بازند.
 
 وضعیت تکمیلی 2026-10-01 — دستگاه‌ها: BFF عمومی و بخش مدیریت/پایش دستگاه در Operations Web پیاده و به Device Integration واقعی متصل شده‌اند. مسیرهای `GET /api/v1/operations/devices`, `GET /api/v1/operations/organizations/{organizationId}/branches`, `POST /api/v1/operations/organizations/{organizationId}/branches/{branchId}/devices` و `PATCH .../{deviceId}` نشست‌محورند؛ IAM scope/resource، وضعیت زنده‌ی owner، Trusted Origin، idempotency و optimistic concurrency در Gateway بررسی می‌شوند. UI ثبت دستگاه، pagination، فیلتر lifecycle و فیلترهای محلی روی صفحات بارگذاری‌شده، health/freshness معتبر، جداسازی unknown/stale و پیگیری degraded/offline را ارائه می‌دهد. سلامت فقط از مشاهده‌ی امضاشده‌ی مالک می‌آید و مدیریت رخداد/تعمیرات مستقل یا اتصال سخت‌افزار در این برش ادعا نمی‌شود. migration/restore واقعی، provider و deployment همچنان بازند.
 
-وضعیت تکمیلی 2026-10-01 — Wallet owner و inventory Operations: `services/wallet` مرجع موجودی فیزیکی کارت است و API داخلی آن از Gateway فراخوانی می‌شود. Gateway BFF و Operations Web اکنون فهرست/ثبت/تغییر وضعیت کارت را با IAM scope/resource، وضعیت زنده‌ی organization/branch، MFA step-up، Trusted Origin، idempotency و optimistic concurrency ارائه می‌کنند؛ شناسه فقط mask می‌شود و ورودی دستی تا تأیید provider `unknown` است. این برش هیچ تخصیص مشتری نمی‌سازد: Customer & Household owner/API برای اعتبارسنجی household/member در repository موجود نیست. customer read path هنوز legacy است؛ backfill، assignment/transfer/unassign، ledger/مانده‌ی مالی، migration روی PostgreSQL واقعی و deployment مستقل همچنان gateهای بازند.
+وضعیت تکمیلی 2026-10-01 — Wallet owner و inventory Operations (سیاست MFA/reason بعداً با ADR-0025 اصلاح شد): `services/wallet` مرجع موجودی فیزیکی کارت است و API داخلی آن از Gateway فراخوانی می‌شود. Gateway BFF و Operations Web فهرست/ثبت/تغییر وضعیت کارت را با IAM scope/resource، وضعیت زنده‌ی organization/branch، Trusted Origin، idempotency و optimistic concurrency ارائه می‌کنند؛ inventory command به MFA یا reason اجباری نیاز ندارد و دلیل اختیاری ثبت می‌شود. شناسه فقط mask می‌شود و ورودی دستی تا تأیید provider `unknown` است. این برش هیچ تخصیص مشتری نمی‌سازد: Customer & Household owner/API برای اعتبارسنجی household/member در repository موجود نیست. customer read path هنوز legacy است؛ backfill، assignment/transfer/unassign، ledger/مانده‌ی مالی، migration روی PostgreSQL واقعی و deployment مستقل همچنان gateهای بازند.
 
 ## هدف و دامنه
 
@@ -40,7 +42,7 @@ Gateway فقط هویت نشست، کنترل ورودی و ترکیب APIها �
 
 ## جریان‌های کاری هدف
 
-1. مدیر سامانه با MFA وارد می‌شود؛ bootstrap اولیه‌ی او با رویه‌ی یک‌باره، خارج از endpoint عمومی و قابل audit انجام می‌گیرد.
+1. مدیر سامانه با OTP مدیریتی وارد می‌شود؛ MFA فقط برای فرمان‌های پرریسک step-up می‌شود. bootstrap اولیه با رویه‌ی یک‌باره، خارج از endpoint عمومی و قابل audit انجام می‌گیرد و MFA تازه می‌خواهد.
 2. مدیر مجاز سازمان را ایجاد می‌کند و سپس شعبه را با نشانی، شهر، timezone و ساعت کاری می‌سازد یا غیرفعال می‌کند.
 3. مدیر، کارمند را با شماره‌ی موبایل دعوت و نقش و محدوده‌ی سازمان/شعبه را تعیین می‌کند. دعوت تا اتصال امن به User وضعیت pending دارد؛ کارمند تعلیق‌شده فوراً از APIهای عملیاتی منع می‌شود.
 4. مدیر شعبه دستگاه را ثبت می‌کند و شناسه/نوع/جایگاه آن را می‌بیند. وضعیت «دیده‌شده»، «قدیمی»، «در حال نگه‌داری» و «نامشخص» از timestamp معتبر به‌دست می‌آید؛ نبود قرارداد provider با داده‌ی ساختگی پوشانده نمی‌شود.
@@ -64,18 +66,18 @@ Gateway فقط هویت نشست، کنترل ورودی و ترکیب APIها �
 | `support`              | scope پشتیبانی مصوب | فقط خواندنی         | فقط خواندنی                            | فقط خواندنی             | فقط خواندنی و audit               | فقط خواندنی                                 |
 | `customer`             | household خودش      | بدون دسترسی مدیریتی | —                                      | —                       | فقط مشاهده‌ی کارت‌های مجاز خود    | —                                           |
 
-نقش bootstrapشده‌ی `system_admin` همه‌ی permissionهای قابل‌واگذاری کاتالوگ و `organization.create` غیرقابل‌واگذاری را در scope سراسری دارد. `system.access.bootstrap` و `system.access.impersonate` جزو نقش دائمی نیستند؛ ارتقای مجوز قدیمی فقط با CLI bootstrap و MFA ثبت‌شده انجام می‌شود (ADR-0019).
+نقش bootstrapشده‌ی `system_admin` همه‌ی permissionهای catalog جاری را در scope سراسری دارد؛ MFA برای ورود او اجباری نیست و فرمان‌های پرریسک طبق catalog step-up می‌خواهند. bootstrap یک‌باره همچنان به MFA تازه نیاز دارد (ADR-0021/0025).
 
-در همه‌ی نقش‌ها، بررسی role، membership فعال، resource scope و rule دامنه روی سرور انجام می‌شود. عضویت سازمانی به‌تنهایی به معنی دسترسی به شعبه‌ی دیگر نیست. عملیات حساس actor، reason، قبل/بعد و نتیجه را audit می‌کند. MFA برای دسترسی مدیریتی و عملیات حساس لازم است.
+در همه‌ی نقش‌ها، بررسی role، membership فعال، resource scope و rule دامنه روی سرور انجام می‌شود. عضویت سازمانی به‌تنهایی به معنی دسترسی به شعبه‌ی دیگر نیست. عملیات actor، scope، before/after و outcome را audit می‌کند؛ reason فقط برای commandهای فهرست‌شده اجباری است و برای بعضی عملیات عادی اختیاری می‌ماند. MFA فقط برای commandهای پرریسک catalog لازم است؛ ورود مدیریتی MFA اجباری ندارد.
 
 ### مدل محاسبه و تغییر permission
 
 - کاتالوگ permission مرکزی، ریزدانه و نسخه‌دار است؛ نمونه‌ها: `organization.read`, `organization.update`, `branch.create`, `branch.update`, `staff.invite`, `staff.suspend`, `access.role.manage`, `access.permission.delegate`, `device.register`, `device.maintenance.manage`, `device.health.read`, `card.inventory.manage`, `card.assign`, `card.transfer`, `customer.lookup.limited`, `report.read`, `report.export`, `audit.read`.
 - کلیدهای permission توسط محصول/versioned contract عرضه می‌شوند؛ مدیر tenant فقط می‌تواند role را با subset مجاز کاتالوگ بسازد/ویرایش کند. نقش‌های پایه نیز قابل تنظیم‌اند ولی آخرین مسیر مدیر مجاز و system/break-glass محافظت می‌شود.
 - Role دارای scope مشخص است: global فقط برای عملیات سیستمی، organization برای tenant، branch برای شعبه. هیچ assignmentای از scope والد به فرزند به‌صورت ضمنی دسترسی ایجاد نمی‌کند.
-- استثنای فردی روی `membershipId` همان tenant اعمال می‌شود، نه شناسه‌ی User سراسری. override می‌تواند allow یا deny، محدود به resource/زمان و دارای reason باشد؛ deny همیشه مقدم است.
+- استثنای فردی روی `membershipId` همان tenant اعمال می‌شود، نه شناسه‌ی User سراسری. override می‌تواند allow یا deny و محدود به resource/زمان باشد؛ دامنه‌ی deny طبق ADR-0025 ارزیابی می‌شود.
 - مجوز مؤثر: membership فعال + permissionهای role + allowهای معتبر − denyهای معتبر، سپس محدودسازی به scope و invariant دامنه. actor فقط permissionهایی را واگذار می‌کند که delegation authority آن را دارد؛ تنزل/تعلیق باید در درخواست بعدی نافذ باشد.
-- هر mutation دسترسی دارای MFA/reauth متناسب، reason، before/after، policy version، actor و audit است. تغییرات هم‌زمان با version/ETag محافظت می‌شوند. cache permission باید با versioning و invalidation قطعی و revocation فوری کار کند؛ در خطای policy سرویس، fail-closed.
+- mutation دسترسی before/after، policy version، actor و audit دارد؛ reason و MFA فقط برای commandهایی اجباری‌اند که ADR-0025 فهرست کرده است. تغییرات هم‌زمان با version/ETag محافظت می‌شوند. cache permission باید با versioning و invalidation قطعی و revocation فوری کار کند؛ در خطای policy سرویس، fail-closed.
 - در فاز اول inheritance بین roleها وجود ندارد؛ composition صریح permissionها، تست و auditپذیرتر است. قابلیت‌های آینده مانند approval chain، separation-of-duties، زمان‌بندی و policyهای context-aware باید بدون تغییر API مصرف‌کننده، از نسخه‌ی policy گسترش یابند.
 
 ## API و قراردادها

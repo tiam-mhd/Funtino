@@ -533,7 +533,7 @@ paths:
     put:
       x-funtino-availability: implemented
       operationId: updateManagementSessionPolicy
-      description: Changes the absolute lifetime for future management logins. Requires global system.session_policy.manage, an idempotency key, current If-Match policy version, MFA evidence from the trusted Gateway session, audit, and Outbox.
+      description: Changes the absolute lifetime for future management logins. Requires global system.session_policy.manage, an idempotency key, current If-Match policy version, audit, and Outbox. Fresh MFA evidence and a reason are required only when the value actually changes; no-op updates do not require step-up.
       parameters:
         - $ref: '#/components/parameters/ActorUserId'
         - $ref: '#/components/parameters/CorrelationId'
@@ -1293,7 +1293,7 @@ components:
     RoleCreate:
       type: object
       additionalProperties: false
-      required: [name, scope, permissionKeys]
+      required: [name, scope, permissionKeys, reason]
       properties:
         name:
           type: string
@@ -1315,6 +1315,13 @@ components:
       type: object
       additionalProperties: false
       minProperties: 1
+      allOf:
+        - if:
+            anyOf:
+              - required: [permissionKeys]
+              - required: [status]
+          then:
+            required: [reason]
       anyOf:
         - required: [name]
         - required: [permissionKeys]
@@ -1335,7 +1342,6 @@ components:
           enum: [active, disabled]
         reason:
           type: string
-          minLength: 8
           maxLength: 500
     StaffInvitationCreate:
       type: object
@@ -1353,7 +1359,6 @@ components:
           format: uuid
         reason:
           type: string
-          minLength: 8
           maxLength: 500
     VerifiedPhone:
       type: object
@@ -1486,7 +1491,7 @@ components:
     PermissionOverrideCreate:
       type: object
       additionalProperties: false
-      required: [permission, effect, scope]
+      required: [permission, effect, scope, reason]
       properties:
         permission:
           type: string
@@ -1543,7 +1548,7 @@ components:
     StaffMembershipUpdate:
       type: object
       additionalProperties: false
-      required: [roleId]
+      required: [roleId, reason]
       properties:
         roleId:
           type: string
@@ -1581,7 +1586,6 @@ components:
           maximum: 12
         reason:
           type: string
-          minLength: 8
           maxLength: 500
     ManagementSessionPolicyResponse:
       type: object
@@ -1706,7 +1710,6 @@ components:
       properties:
         reason:
           type: string
-          minLength: 8
           maxLength: 500
     PermissionOverrideSummary:
       type: object

@@ -40,6 +40,12 @@ import { ZodValidationPipe } from './zod-validation.pipe.js';
 
 const uuid = z.string().uuid();
 const reason = z.string().trim().min(8).max(500);
+const optionalReason = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .transform((value) => value || undefined);
 const cardIdentifier = z
   .string()
   .trim()
@@ -53,9 +59,11 @@ const pageSchema = z
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
   })
   .strict();
-const registrationSchema = z.object({ externalCardId: cardIdentifier, reason }).strict();
+const registrationSchema = z
+  .object({ externalCardId: cardIdentifier, reason: optionalReason })
+  .strict();
 const statusSchema = z
-  .object({ status: z.enum(['in_stock', 'blocked', 'retired']), reason })
+  .object({ status: z.enum(['in_stock', 'blocked', 'retired']), reason: optionalReason })
   .strict();
 const phoneSchema = z.string().trim().min(8).max(20);
 const householdLookupSchema = z.object({ phone: phoneSchema }).strict();
@@ -107,39 +115,32 @@ export class OperationsCardsController {
     );
     await this.assertActiveScope(organizationId, branchId);
 
-    const [
-      page,
-      manageDecision,
-      assignDecision,
-      transferDecision,
-      unassignDecision,
-      lookupDecision,
-    ] = await Promise.all([
-      this.wallet.listCards({ organizationId, branchId, ...query }),
-      this.capability(user.id, request, 'card.inventory.manage', scope, undefined, correlationId),
-      this.capability(user.id, request, 'card.assign', scope, undefined, correlationId),
-      this.capability(user.id, request, 'card.transfer', scope, undefined, correlationId),
-      this.capability(user.id, request, 'card.unassign', scope, undefined, correlationId),
-      this.capability(user.id, request, 'customer.lookup.limited', scope, undefined, correlationId),
-    ]);
-    const requiresStepUp = [
-      manageDecision,
-      assignDecision,
-      transferDecision,
-      unassignDecision,
-      lookupDecision,
-    ].some((decision) => decision.requiresStepUp);
+    const [page, canManage, canAssign, canTransfer, canUnassign, canLookupCustomer] =
+      await Promise.all([
+        this.wallet.listCards({ organizationId, branchId, ...query }),
+        this.capability(user.id, request, 'card.inventory.manage', scope, undefined, correlationId),
+        this.capability(user.id, request, 'card.assign', scope, undefined, correlationId),
+        this.capability(user.id, request, 'card.transfer', scope, undefined, correlationId),
+        this.capability(user.id, request, 'card.unassign', scope, undefined, correlationId),
+        this.capability(
+          user.id,
+          request,
+          'customer.lookup.limited',
+          scope,
+          undefined,
+          correlationId,
+        ),
+      ]);
     return {
       ...success(
         {
           items: page.items,
           capabilities: {
-            canManage: manageDecision.allowed,
-            canAssign: assignDecision.allowed,
-            canTransfer: transferDecision.allowed,
-            canUnassign: unassignDecision.allowed,
-            canLookupCustomer: lookupDecision.allowed,
-            requiresStepUp,
+            canManage,
+            canAssign,
+            canTransfer,
+            canUnassign,
+            canLookupCustomer,
           },
         },
         request,
@@ -558,18 +559,15 @@ export class OperationsCardsController {
     scope: AccessScopeDto,
     resource: { type: string; id: string } | undefined,
     correlationId: string,
-  ) {
-    if (!request.session) return { allowed: false, requiresStepUp: false };
+  ): Promise<boolean> {
+    if (!request.session) return false;
     const result = await this.identityAccess.evaluateAuthorization(
       userId,
       request.session,
       { permission, scope, ...(resource ? { resource } : {}) },
       correlationId,
     );
-    return {
-      allowed: result.allowed,
-      requiresStepUp: !result.allowed && result.reason === 'step_up_required',
-    };
+    return result.allowed;
   }
 
   private commandMeta(

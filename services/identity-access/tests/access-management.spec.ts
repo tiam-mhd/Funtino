@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ConflictException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { AccessManagementCryptoService } from '../src/application/access-management-crypto.service.js';
 import { AccessManagementService } from '../src/application/access-management.service.js';
 import type { AccessMutationJournalService } from '../src/application/access-mutation-journal.service.js';
@@ -305,32 +310,33 @@ test('role creation is idempotent and rejects reuse of its key for a different b
   }
 });
 
-test('role creation without a reason still commits through the audit journal', async () => {
+test('role creation with effective permissions requires a reason before audit or mutation', async () => {
   const restore = configuredCryptoEnv();
   try {
     const fixture = makeService();
-    const result = await fixture.service.createRole(
-      actorUserId,
-      {
-        name: 'Support without note',
-        scope: { type: 'global' },
-        permissionKeys: ['access.role.read'],
-      },
-      {
-        correlationId,
-        idempotencyKey: 'create-role-no-reason-01',
-        stepUp: {
-          sessionId,
-          verifiedAt: new Date().toISOString(),
-          factorVersion: 4,
-          method: 'totp',
+    await assert.rejects(
+      fixture.service.createRole(
+        actorUserId,
+        {
+          name: 'Support without note',
+          scope: { type: 'global' },
+          permissionKeys: ['access.role.read'],
         },
-      },
+        {
+          correlationId,
+          idempotencyKey: 'create-role-no-reason-01',
+          stepUp: {
+            sessionId,
+            verifiedAt: new Date().toISOString(),
+            factorVersion: 4,
+            method: 'totp',
+          },
+        },
+      ),
+      (error: unknown) => error instanceof BadRequestException,
     );
-
-    assert.equal('data' in result, true);
-    assert.equal(fixture.createdRoles.length, 1);
-    assert.equal(fixture.journalWrites, 1);
+    assert.equal(fixture.createdRoles.length, 0);
+    assert.equal(fixture.journalWrites, 0);
   } finally {
     restore();
   }

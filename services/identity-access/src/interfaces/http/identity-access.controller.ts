@@ -115,13 +115,17 @@ const auditQuerySchema = z
       });
   });
 const reasonSchema = z.object({ reason: z.string().trim().min(8).max(500) }).strict();
-const optionalReasonSchema = z
-  .object({ reason: z.string().trim().min(8).max(500).optional() })
-  .strict();
+const optionalReason = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .transform((value) => value || undefined);
+const optionalReasonSchema = z.object({ reason: optionalReason }).strict();
 const managementSessionPolicySchema = z
   .object({
     managementSessionTtlHours: z.number().int().min(1).max(12),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: optionalReason,
   })
   .strict();
 const roleCreateSchema = z
@@ -133,7 +137,7 @@ const roleCreateSchema = z
       .min(1)
       .max(100)
       .refine((items) => new Set(items).size === items.length),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z.string().trim().min(8).max(500),
   })
   .strict();
 const roleUpdateSchema = z
@@ -146,7 +150,7 @@ const roleUpdateSchema = z
       .refine((items) => new Set(items).size === items.length)
       .optional(),
     status: z.enum(['active', 'disabled']).optional(),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: optionalReason,
   })
   .strict()
   .refine(
@@ -158,12 +162,12 @@ const invitationCreateSchema = z
     phoneE164: z.string().regex(/^\+[1-9][0-9]{7,14}$/),
     scope: accessScopeSchema,
     roleId: uuid,
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: optionalReason,
   })
   .strict();
 const phoneOnlySchema = z.object({ phoneE164: z.string().regex(/^\+[1-9][0-9]{7,14}$/) }).strict();
 const membershipRoleSchema = z
-  .object({ roleId: uuid, reason: z.string().trim().min(8).max(500).optional() })
+  .object({ roleId: uuid, reason: z.string().trim().min(8).max(500) })
   .strict();
 const overrideCreateSchema = z
   .object({
@@ -175,7 +179,7 @@ const overrideCreateSchema = z
       .strict()
       .optional(),
     expiresAt: z.string().datetime({ offset: true }).optional(),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z.string().trim().min(8).max(500),
   })
   .strict();
 type AuthorizationRequestDto = z.infer<typeof authorizationRequestSchema>;

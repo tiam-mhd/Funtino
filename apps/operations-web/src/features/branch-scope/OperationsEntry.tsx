@@ -8,8 +8,6 @@ import { StaffAccessManager } from '../staff-access/StaffAccessManager';
 import { StaffInvitationInbox } from '../staff-access/StaffInvitationInbox';
 import { DeviceManagement } from '../devices/DeviceManagement';
 import { CardInventoryManagement } from '../cashier/CardInventoryManagement';
-import { OperationsMfaStepUpPanel } from '../../components/forms/OperationsMfaStepUpPanel';
-import { getOperationsMfaStatus } from '../../lib/api/operations-staff';
 import { OperationsReports } from '../reports/OperationsReports';
 import { OperationsForms } from '../forms/OperationsForms';
 import { OperationsOverview } from '../reports/OperationsOverview';
@@ -29,6 +27,7 @@ import {
   scopeKey,
   selectOperationsScope,
   verifyOperationsOtp,
+  verifyOperationsPassword,
   type OperationsScope,
   type OperationsScopeOption,
   type OperationsUser,
@@ -38,7 +37,7 @@ import styles from './OperationsEntry.module.css';
 type View =
   | 'loading'
   | 'sign-in'
-  | 'mfa-required'
+  | 'password-required'
   | 'scope-picker'
   | 'active'
   | 'no-access'
@@ -54,6 +53,7 @@ export function OperationsEntry() {
   const [phone, setPhone] = useState('');
   const [loginPhone, setLoginPhone] = useState('');
   const [code, setCode] = useState('');
+  const [managementPassword, setManagementPassword] = useState('');
   const [challenge, setChallenge] = useState<{
     challengeId: string;
     expiresAt: string;
@@ -70,6 +70,7 @@ export function OperationsEntry() {
     setMfaStepUpUntil(null);
     setChallenge(null);
     setCode('');
+    setManagementPassword('');
     setError('');
     setView('sign-in');
   }, []);
@@ -92,16 +93,8 @@ export function OperationsEntry() {
         return;
       }
       if (failure instanceof ApiRequestError && failure.status === 403) {
-        void getOperationsMfaStatus().then(
-          () => {
-            setError('');
-            setView('mfa-required');
-          },
-          () => {
-            setError(errorMessage(failure));
-            setView('unavailable');
-          },
-        );
+        setError(errorMessage(failure));
+        setView('unavailable');
         return;
       }
       setError(errorMessage(failure));
@@ -166,8 +159,9 @@ export function OperationsEntry() {
         phone: loginPhone,
         code: normalizedCode,
       });
-      if (result.mfaRequired) {
-        setView('mfa-required');
+      if (result.requiresPassword) {
+        setManagementPassword('');
+        setView('password-required');
         return;
       }
       await hydrate();
@@ -178,6 +172,21 @@ export function OperationsEntry() {
         setError(errorMessage(failure));
         setView('unavailable');
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitManagementPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await verifyOperationsPassword(managementPassword);
+      setManagementPassword('');
+      await hydrate();
+    } catch (failure) {
+      setError(errorMessage(failure));
     } finally {
       setBusy(false);
     }
@@ -299,37 +308,13 @@ export function OperationsEntry() {
           </Surface>
         )}
 
-        {view === 'mfa-required' && (
-          <Surface className={styles.authCard} aria-labelledby="system-admin-login-mfa-title">
-            <div className={styles.eyebrow}>احراز هویت مدیر سامانه</div>
-            <h1 id="system-admin-login-mfa-title">تأیید دومرحله‌ای الزامی است</h1>
-            <p className={styles.intro}>
-              تا تکمیل MFA هیچ scope یا داده‌ی مدیریتی بارگذاری نمی‌شود.
-            </p>
-            <OperationsMfaStepUpPanel
-              idPrefix="system-admin-login"
-              mfaStepUpUntil={null}
-              onSessionExpired={resetToSignIn}
-              onMfaStepUp={(validUntil) => {
-                setMfaStepUpUntil(validUntil);
-                void hydrate().catch(handleHydrationFailure);
-              }}
-            />
-            {error && (
-              <p className={styles.error} role="alert">
-                {error}
-              </p>
-            )}
-          </Surface>
-        )}
-
         {view === 'sign-in' && (
           <Surface className={styles.authCard}>
             <div className={styles.eyebrow}>دسترسی امن کارکنان</div>
             <h1>ورود به پنل عملیات</h1>
             <p className={styles.intro}>
-              با شماره‌ی همراه تأییدشده وارد شوید. دسترسی مجموعه و شعبه پس از ورود از سرور بررسی
-              می‌شود.
+              با شماره‌ی همراه تأییدشده وارد شوید. اگر رمز مدیریت برای این حساب فعال باشد، پس از کد
+              پیامکی آن را هم می‌پرسیم؛ scope و دسترسی بعد از ورود در سرور بررسی می‌شود.
             </p>
 
             {!challenge ? (
@@ -399,8 +384,56 @@ export function OperationsEntry() {
               </p>
             )}
             <p className={styles.securityNote}>
-              کد ورود فقط برای ایجاد نشست است و جایگزین تأیید دومرحله‌ای مدیریتی نیست.
+              TOTP فقط برای فرمان‌های پرریسک درخواست می‌شود و برای ورود عادی لازم نیست.
             </p>
+          </Surface>
+        )}
+
+        {view === 'password-required' && (
+          <Surface className={styles.authCard} aria-labelledby="management-password-title">
+            <div className={styles.eyebrow}>مرحله‌ی دوم ورود مدیریت</div>
+            <h1 id="management-password-title">رمز مدیریت را وارد کنید</h1>
+            <p className={styles.intro}>
+              کد پیامکی تأیید شد. نشست مدیریتی پس از تأیید رمز ساخته می‌شود.
+            </p>
+            <form className={styles.form} onSubmit={submitManagementPassword}>
+              <label htmlFor="operations-management-password">رمز مدیریت</label>
+              <input
+                autoComplete="current-password"
+                dir="ltr"
+                id="operations-management-password"
+                maxLength={128}
+                onChange={(event) => setManagementPassword(event.currentTarget.value)}
+                required
+                type="password"
+                value={managementPassword}
+              />
+              <Button
+                className={styles.submitButton}
+                disabled={busy || managementPassword.length === 0}
+                type="submit"
+              >
+                {busy ? 'در حال بررسی…' : 'تأیید و ورود'}
+              </Button>
+              <button
+                className={styles.textButton}
+                onClick={() => {
+                  setChallenge(null);
+                  setCode('');
+                  setManagementPassword('');
+                  setError('');
+                  setView('sign-in');
+                }}
+                type="button"
+              >
+                بازگشت به ورود پیامکی
+              </button>
+            </form>
+            {error && (
+              <p className={styles.error} role="alert">
+                {error}
+              </p>
+            )}
           </Surface>
         )}
 
@@ -474,8 +507,6 @@ export function OperationsEntry() {
             ) : workspaceTab === 'devices' ? (
               <DeviceManagement
                 key={scopeKey(activeScope.scope)}
-                mfaStepUpUntil={mfaStepUpUntil}
-                onMfaStepUp={setMfaStepUpUntil}
                 onSessionExpired={resetToSignIn}
                 scope={activeScope.scope}
                 scopeOption={activeScope}
@@ -483,8 +514,6 @@ export function OperationsEntry() {
             ) : workspaceTab === 'cards' ? (
               <CardInventoryManagement
                 key={scopeKey(activeScope.scope)}
-                mfaStepUpUntil={mfaStepUpUntil}
-                onMfaStepUp={setMfaStepUpUntil}
                 onSessionExpired={resetToSignIn}
                 scope={activeScope.scope}
                 scopeOption={activeScope}

@@ -12,7 +12,7 @@ type EnrollmentStart = { secret: string; otpauthUri: string; expiresAt: string }
 type MfaProof = { method: 'totp' | 'recovery'; code: string };
 type StepUpResponse = { validUntil: string };
 type RecoveryResponse = { recoveryCodes: string[]; validUntil: string };
-type LoginPhase = 'phone' | 'otp' | 'ready' | 'forbidden';
+type LoginPhase = 'loading' | 'ready' | 'forbidden';
 
 function formatIsoTime(value: string | null): string {
   if (!value) return '';
@@ -21,15 +21,11 @@ function formatIsoTime(value: string | null): string {
 }
 
 export function MfaManagement() {
-  const [phase, setPhase] = useState<LoginPhase>('phone');
+  const [phase, setPhase] = useState<LoginPhase>('loading');
   const [status, setStatus] = useState<MfaStatus | null>(null);
   const [enrollment, setEnrollment] = useState<EnrollmentStart | null>(null);
   const [visibleCodes, setVisibleCodes] = useState<string[] | null>(null);
   const [verifiedUntil, setVerifiedUntil] = useState<string | null>(null);
-  const [phone, setPhone] = useState('');
-  const [challengeId, setChallengeId] = useState('');
-  const [otp, setOtp] = useState('');
-  const [devCode, setDevCode] = useState<string | null>(null);
   const [totpCode, setTotpCode] = useState('');
   const [proofMethod, setProofMethod] = useState<MfaProof['method']>('totp');
   const [proofCode, setProofCode] = useState('');
@@ -48,14 +44,14 @@ export function MfaManagement() {
     } catch (cause) {
       if (cause instanceof ApiRequestError && cause.status === 401) {
         setStatus(null);
-        setPhase('phone');
-        setMessage('برای ادامه، با شماره‌ی ثبت‌شده‌ی حساب کارکنان وارد شوید.');
-        setError('');
+        setPhase('forbidden');
+        setMessage('نشست مدیریت پایان یافته است.');
+        setError('برای ادامه، دوباره وارد نشست مدیریت شوید.');
       } else if (cause instanceof ApiRequestError && cause.status === 403) {
         setPhase('forbidden');
-        setError('این حساب عضویت فعال کارکنان ندارد؛ تنظیم MFA پنل مدیریتی برای آن مجاز نیست.');
+        setError('نشست مدیریت معتبر نیست یا مجوز تنظیم امنیت این حساب فعال نیست.');
       } else {
-        setPhase('phone');
+        setPhase('forbidden');
         setError(cause instanceof Error ? cause.message : 'وضعیت امنیت قابل دریافت نیست.');
       }
     }
@@ -75,38 +71,6 @@ export function MfaManagement() {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function requestOtp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await run(async () => {
-      const result = await apiRequest<{
-        challengeId: string;
-        deliveryStatus: 'confirmed' | 'unknown';
-        devCode?: string;
-      }>('/api/v1/auth/otp/request', { method: 'POST', body: { phone } });
-      setChallengeId(result.challengeId);
-      setDevCode(result.devCode ?? null);
-      setPhase('otp');
-      setMessage(
-        result.deliveryStatus === 'unknown'
-          ? 'ارسال پیامک تأیید نشده است؛ اگر پیامک رسید، کد را وارد کنید.'
-          : 'کد ورود برای شماره‌ی ثبت‌شده ارسال شد.',
-      );
-    });
-  }
-
-  async function verifyOtp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await run(async () => {
-      await apiRequest('/api/v1/auth/otp/verify', {
-        method: 'POST',
-        body: { challengeId, phone, code: otp },
-      });
-      setOtp('');
-      setDevCode(null);
-      await refresh();
-    });
   }
 
   async function startEnrollment() {
@@ -151,7 +115,7 @@ export function MfaManagement() {
       });
       setVerifiedUntil(result.validUntil);
       setProofCode('');
-      setMessage('تأیید مجدد این نشست تا پنج دقیقه معتبر است.');
+      setMessage('تأیید ثبت شد؛ اعتبار آن طبق policy زنده‌ی IAM تعیین می‌شود.');
     });
   }
 
@@ -223,8 +187,8 @@ export function MfaManagement() {
           <span className="mfa-eyebrow">هویت مدیریتی · S0</span>
           <h1 id="mfa-title">تأیید دومرحله‌ای</h1>
           <p>
-            ورود پیامکی به‌تنهایی برای عملیات حساس کافی نیست. یک برنامه‌ی رمزساز را به حساب کارکنان
-            متصل کنید.
+            ثبت عامل MFA برای ورود عادی لازم نیست. فرمان‌های پرریسک طبق مجوز و سیاست زنده‌ی سرور
+            درخواست step-up می‌کنند.
           </p>
         </div>
 
@@ -238,73 +202,15 @@ export function MfaManagement() {
             {error}
           </p>
         )}
-
-        {phase === 'phone' && (
-          <form className="mfa-card mfa-form" onSubmit={requestOtp}>
-            <h2>ورود به حساب کارکنان</h2>
-            <label htmlFor="mfa-phone">شماره‌ی موبایل ثبت‌شده</label>
-            <input
-              id="mfa-phone"
-              autoComplete="tel"
-              inputMode="tel"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              placeholder="۰۹۱۲۱۲۳۴۵۶۷"
-              required
-              minLength={8}
-              maxLength={20}
-              dir="ltr"
-            />
-            <button className="mfa-button mfa-button--primary" disabled={busy}>
-              {busy ? 'در حال ارسال…' : 'ارسال کد ورود'}
-            </button>
-          </form>
-        )}
-
-        {phase === 'otp' && (
-          <form className="mfa-card mfa-form" onSubmit={verifyOtp}>
-            <h2>کد ورود</h2>
-            <p>کد یک‌بارمصرف پیامک‌شده را وارد کنید.</p>
-            <label htmlFor="mfa-login-code">کد ۶ رقمی</label>
-            <input
-              id="mfa-login-code"
-              autoComplete="one-time-code"
-              inputMode="numeric"
-              pattern="[0-9]{6}"
-              value={otp}
-              onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-              required
-              dir="ltr"
-            />
-            {devCode && (
-              <p className="mfa-dev-code">
-                کد محیط توسعه: <bdi>{devCode}</bdi>
-              </p>
-            )}
-            <button className="mfa-button mfa-button--primary" disabled={busy || otp.length !== 6}>
-              {busy ? 'در حال بررسی…' : 'ورود امن'}
-            </button>
-            <button
-              className="mfa-button mfa-button--quiet"
-              type="button"
-              onClick={() => setPhase('phone')}
-            >
-              تغییر شماره
-            </button>
-          </form>
-        )}
-
+        {phase === 'loading' && <p role="status">در حال دریافت وضعیت امنیت…</p>}
         {phase === 'forbidden' && (
-          <section className="mfa-card mfa-empty" aria-live="polite">
-            <span className="mfa-status-icon" aria-hidden="true">
-              !
-            </span>
-            <h2>حساب کارکنان فعال نیست</h2>
-            <p>{error}</p>
-            <button className="mfa-button mfa-button--quiet" onClick={() => setPhase('phone')}>
-              ورود با حساب دیگر
-            </button>
-          </section>
+          <button
+            className="mfa-button mfa-button--primary"
+            onClick={() => window.location.reload()}
+            type="button"
+          >
+            تلاش دوباره برای بررسی نشست
+          </button>
         )}
 
         {phase === 'ready' && status && (
@@ -322,7 +228,7 @@ export function MfaManagement() {
                 <p>
                   {status.enabled
                     ? `${status.recoveryCodesRemaining} کد بازیابیِ استفاده‌نشده باقی مانده است.`
-                    : 'فعال‌سازی برای انجام عملیات حساس مدیریتی ضروری است.'}
+                    : 'برای ورود معمولی لازم نیست؛ فرمان‌های پرریسک بدون عامل معتبر step-up نمی‌گیرند.'}
                 </p>
               </div>
               {status.enabled && <span className="mfa-status-pill">فعال</span>}

@@ -61,9 +61,13 @@ model User {
   city               String?
   avatarPreset       String?           @map("avatar_preset")
   profileCompletedAt DateTime?         @map("profile_completed_at")
+  managementPasswordHash String?        @map("management_password_hash") @db.VarChar(200)
+  managementPasswordFailedAttempts Int  @default(0) @map("management_password_failed_attempts")
+  managementPasswordLockedUntil DateTime? @map("management_password_locked_until") @db.Timestamptz(6)
   createdAt          DateTime          @default(now()) @map("created_at")
   updatedAt          DateTime          @updatedAt @map("updated_at")
   sessions           Session[]
+  managementLoginChallenges ManagementLoginChallenge[]
   memberships        Membership[]
   householdsOwned    Household[]       @relation("household_owner")
   householdMembers   HouseholdMember[]
@@ -87,6 +91,7 @@ model UserAvatar {
 model OtpChallenge {
   id         String    @id @default(uuid()) @db.Uuid
   phoneE164  String    @map("phone_e164")
+  purpose    String    @default("customer_login") @db.VarChar(32)
   codeHash   String    @map("code_hash")
   attempts   Int       @default(0)
   expiresAt  DateTime  @map("expires_at")
@@ -95,6 +100,28 @@ model OtpChallenge {
 
   @@index([phoneE164, createdAt])
   @@map("otp_challenges")
+}
+
+model OtpRequestThrottle {
+  key            String   @id @db.Char(64)
+  nextAllowedAt  DateTime @map("next_allowed_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("otp_request_throttles")
+}
+
+model ManagementLoginChallenge {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.Char(64)
+  attempts   Int       @default(0)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("management_login_challenges")
 }
 
 model Session {
@@ -108,6 +135,7 @@ model Session {
   mfaMethod        String?   @map("mfa_method") @db.VarChar(16)
   isSystemAdmin    Boolean   @default(false) @map("is_system_admin")
   mfaLoginDeadlineAt DateTime? @map("mfa_login_deadline_at") @db.Timestamptz(6)
+  audience         String    @default("customer") @db.VarChar(16)
   lastActivityAt   DateTime  @default(now()) @map("last_activity_at") @db.Timestamptz(6)
   createdAt        DateTime  @default(now()) @map("created_at")
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -1,6 +1,18 @@
 # وضعیت اجرای پیاده‌سازی فانتینو
 
-آخرین به‌روزرسانی: 2026-10-13
+آخرین به‌روزرسانی: 2026-10-14
+
+## تصمیم هویت و دسترسی مدیریت — 2026-10-14
+
+- ADR-0025 درخواست تغییر هویت و مجوز را ثبت کرده است: user مرکزی در Gateway، چند role/scope روی همان `userId`، audience مستقل customer/management، OTP مدیریتی با رمز اختیاری، MFA فقط برای command پرریسک و reason بر اساس ریسک operation.
+- این ADR سیاست per-login MFA در ADR-0014 و ADR-0020 را supersede می‌کند، اما عمر نشست، customer TTL، write gate، owner-bound bootstrap و fresh MFA یک‌باره‌ی ADR-0021 را حفظ می‌کند.
+- Gateway همان user و پروفایل تأییدشده را برای ورود مشتری و دعوت کارکنان به کار می‌برد؛ پاسخ roster فقط پس از محدودسازی scope و permission، نام نمایشی امن را برای همان شناسه‌ها اضافه می‌کند. IAM مجوزهای عضویت‌های فعال را union می‌کند، deny محلی را به زنجیره‌ی scope خودش محدود می‌کند و deny سراسری را روی scopeهای فرزند اعمال می‌کند.
+- cookie و audience نشست customer و management جداست. Operations و System با OTP مدیریتی وارد می‌شوند؛ رمز مدیریت اختیاری است و برای حساب‌های دارای رمز پس از OTP نیز تأیید می‌شود. صفحه‌های تنظیم رمز در هر دو پنل و تنظیمات MFA فقط برای فرمان‌های پرریسک فراهم‌اند؛ ورود عادی TOTP اجباری ندارد.
+- catalog، IAM، Gateway، UI و OpenAPI برای step-up و reason بر اساس command همسو شدند. خواندن PII فرم step-up نمی‌خواهد؛ correction و export فرم، ساخت سازمان، تعلیق شعبه، تغییر role/override، revoke دائمی عضویت و تغییر واقعی سیاست نشست همچنان حفاظت متناسب دارند. reason فقط برای عملیات فهرست‌شده در ADR-0025 اجباری است.
+- migrationهای افزایشی در source قرار دارند: Gateway `0007_management_audience_and_password`، Wallet `0003_optional_inventory_reason` و Device Integration `0002_optional_audit_reason`. قید non-empty موجودی Wallet حفظ شده؛ migration Gateway PostgreSQL 11+ را پیش‌شرط می‌داند، timeout محدود دارد و نشست‌ها را با UPDATE سراسری backfill نمی‌کند. Forms migration تازه ندارد چون audit reason از قبل nullable است. Prisma generate و `prisma validate` برای سه schema موفق شدند؛ validate با URLهای ساختگی اجرا شد و به دیتابیس وصل نشد. migration واقعی اجرا نشده است.
+- تست‌های مستقیم workspace موفق شدند: API Gateway 99، Identity & Access 92، Organization & Branch 19، Wallet 23، Device Integration 26، Forms 2، Operations Web API 16 و System Web 4. typecheck بسته‌های اثرپذیرفته و اعتبارسنجی قراردادها (۱۰ OpenAPI، ۲۵ event schema و ۱ AsyncAPI) نیز موفق‌اند؛ آزمون TSX با shim موقت runner ویندوز اجرا شد.
+- GitNexus MCP tool/resource در این محیط در دسترس نبود. CLI از runner محلی و cache موقت npm اجرا شد و index گراف تازه است؛ مسیر `pnpm dlx` نیز اجرا شد ولی index آن به‌دلیل هویت runtime جداگانه stale گزارش شد. impact مسیر union authorization را `CRITICAL` و `SessionGuard` را `HIGH` نشان داد؛ `detect_changes --scope all`، ۹۶ فایل، ۶۰۶ symbol و ۴۳۳ flow اثرپذیرفته گزارش کرد. flow graph به‌علت سقف analyzer ناقص است و FTS در cache موقت به‌دلیل نبود دسترسی شبکه در دسترس نبود؛ این دو مورد را all-clear حساب نکردم. فایل محرمانه با ignore در GitNexus خارج از تحلیل ماند.
+- source دارای `origin` است ولی pipeline انتشار آماده نیست؛ این release از مسیر controlled snapshot انجام می‌شود. migrationها فقط در job/runner نسخه‌دار مالک اجرا می‌شوند؛ دیتابیس واقعی و وضعیت Runflare از این محیط قابل‌دسترسی/اعتبارسنجی نبود.
 
 ## نمودار خانواده و اتصال حساب اعضا — 2026-10-13
 

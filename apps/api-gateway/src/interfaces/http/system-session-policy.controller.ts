@@ -21,7 +21,12 @@ import { ZodValidationPipe } from './zod-validation.pipe.js';
 const updatePolicySchema = z
   .object({
     managementSessionTtlHours: z.number().int().min(1).max(12),
-    reason: z.string().trim().min(8).max(500).optional(),
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((value) => value || undefined),
   })
   .strict();
 

@@ -46,7 +46,7 @@
 
 `services/customer-household` مالک household، member و دسترسی خانوادگی است؛ Gateway و Wallet فقط با API خصوصی این سرویس اعتبارسنجی می‌کنند و هیچ جدول مشترکی نمی‌خوانند. Wallet برای هر `(householdId, branchId)` حداکثر یک کارت فعال و برای هر کارت حداکثر یک تخصیص فعال نگه می‌دارد. کارت نسخه‌ی اول مشترک خانواده است، نه عضو؛ انتقال household فقط در همان شعبه مجاز است و انتقال کارت بین شعبه‌ها workflow مستقل و فعلاً خارج از API است. تا زمانی که قرارداد مالی/واحد پول یا پیوند معتبر رویداد دستگاه آماده نشده، گزارش مبلغ شارژ/مصرف یا انتساب دستگاه به خانواده تولید نمی‌شود.
 
-سیاست عمر نشست مدیریتی مالک Identity & Access است و فقط از BFF در API Gateway به سه وب‌اپ می‌رسد. IAM مدت مطلق ۱ تا ۱۲ ساعت برای نشست‌های مدیریتی جدید را در `policy_state` نگه می‌دارد؛ cookie و رکورد session در Gateway یک expiry دارند. نشست مشتری بدون membership مدیریتی مستقل و ۳۰روزه می‌ماند. مدیر سراسری در هر ورود MFA می‌کند و proof به همان session و نسخه‌ی عامل فعال بسته است؛ تغییر session policy از API دارای مجوز، idempotency، audit و Outbox انجام می‌شود. [ADR-0020](decisions/0020-admin-session-duration-and-system-admin-capabilities.md) جزئیات را تعیین می‌کند.
+سیاست عمر نشست مدیریتی مالک Identity & Access است و فقط از BFF در API Gateway به سه وب‌اپ می‌رسد. IAM مدت مطلق ۱ تا ۱۲ ساعت برای نشست‌های مدیریتی جدید را در `policy_state` نگه می‌دارد؛ cookie و رکورد session در Gateway یک expiry دارند. customer و management session audience و cookie جدا دارند. ورود مدیریتی OTP و در صورت فعال‌بودن رمز مدیریت را تأیید می‌کند؛ MFA در ورود اجباری نیست و TOTP/recovery فقط برای command پرریسک step-up می‌شود. proof به همان management session و نسخه‌ی عامل بسته است؛ تغییر session policy از API دارای مجوز، idempotency، audit و Outbox انجام می‌شود. [ADR-0025](decisions/0025-management-audience-optional-password-and-risk-policy.md) بر بخش per-login MFA در ADR-0020 اولویت دارد و عمر نشست را حفظ می‌کند.
 
 برای bootstrap مدیر سراسری، API Gateway شماره‌ی owner تنظیم‌شده در runtime را به شناسه‌ی opaque موجود resolve می‌کند؛ IAM فقط شناسه را از endpoint داخلیِ loopback و توکن مجزا می‌گیرد و هرگز جدول حساب Gateway را نمی‌خواند. این lookup فقط برای bootstrap CLI است و جایگزین authorization معمول درخواست‌ها نیست. [ADR-0021](decisions/0021-runflare-bound-system-admin-owner.md) جزئیات را تعیین می‌کند.
 
@@ -119,7 +119,7 @@ Commandها در سرویس مالک و تراکنش اصلی اجرا می‌ش
 
 قوانین قابل‌تغییر کمپین، eligibility، سن، شعبه، تخفیف و ترتیب مصرف اعتبار در Policy/Strategy قرار گیرند. عددهای تجاری در کد رابط ثابت نشوند. Policy باید قابل تست و دارای نسخه یا تاریخ اعتبار باشد.
 
-برای دسترسی سازمانی، permission keyها granular، پایدار و نسخه‌دارند؛ roleها داده‌ی قابل‌مدیریت‌اند و فقط مجموعه‌ای از permissionهای کاتالوگ را در scope صریح نگه می‌دارند. override به membership همان tenant وابسته است و می‌تواند allow یا deny محدود به resource و زمان باشد؛ deny مقدم است. محاسبه‌ی دسترسی باید scope عضویت، وضعیت resource، rule دامنه و اختیار واگذاری actor را نیز اعمال کند. Role inheritance در فاز نخست استفاده نمی‌شود تا چرخه و ابهام حل permission ایجاد نشود. Permission catalog قابل توسعه با migration و سازگاری نسخه‌ای است، نه قابل تعریف آزاد توسط tenant.
+برای دسترسی سازمانی، permission keyها granular، پایدار و نسخه‌دارند؛ roleها داده‌ی قابل‌مدیریت‌اند و فقط مجموعه‌ای از permissionهای کاتالوگ را در scope صریح نگه می‌دارند. override به membership همان tenant وابسته است و می‌تواند allow یا deny محدود به resource و زمان باشد. deny محلی فقط grantهای هم‌سطح یا پایین‌تر در زنجیره‌ی scope را می‌بندد؛ grant مستقل با scope بالاتر/tenant دیگر محفوظ است و deny global همچنان بر همه‌ی scopeهای پایین‌تر مقدم است. محاسبه‌ی دسترسی باید scope عضویت، وضعیت resource، rule دامنه و اختیار واگذاری actor را نیز اعمال کند. Role inheritance در فاز نخست استفاده نمی‌شود تا چرخه و ابهام حل permission ایجاد نشود. Permission catalog قابل توسعه با migration و سازگاری نسخه‌ای است، نه قابل تعریف آزاد توسط tenant. جزئیات [ADR-0025](decisions/0025-management-audience-optional-password-and-risk-policy.md) است.
 
 ### ۵.۸ Repository و Unit of Work
 
@@ -131,7 +131,7 @@ Repository فقط abstraction دسترسی مالک داده است و query ر�
 
 ### ۵.۱۰ Audit Trail
 
-برای هر عملیات حساس actor، نقش، سازمان، شعبه، هدف، زمان، correlation id و نتیجه ثبت شود؛ دلیل مطابق policy دامنه دریافت و در صورت ثبت نگهداری می‌شود. در پنل System دلیل تغییرات عادی اختیاری است و فقط برای لغو عضویت فعال یا لغو override فعال اجباری است. Audit تغییرناپذیر است و با log فنی یکی تلقی نمی‌شود. جزئیات در [ADR-0023](decisions/0023-system-admin-audit-reason-policy.md) است.
+برای هر عملیات حساس actor، نقش، سازمان، شعبه، هدف، زمان، correlation id و نتیجه ثبت شود؛ reason مطابق دسته‌بندی ریسک دریافت و در صورت ثبت نگهداری می‌شود. تغییرهای عادی reason اختیاری دارند؛ reasonهای اجباری و step-upهای command-level در [ADR-0025](decisions/0025-management-audience-optional-password-and-risk-policy.md) فهرست شده‌اند. Audit تغییرناپذیر است و با log فنی یکی تلقی نمی‌شود.
 
 ## ۶. الگوهای رابط کاربری
 
@@ -213,9 +213,9 @@ Controller یا consumer فقط ورودی را parse و use case را اجرا 
 
 مجوز فقط با نقش کافی نیست؛ ترکیب user، membership، organization، branch، household و resource باید بررسی شود.
 
-برای IAM tenant mutation، Identity & Access تنها مرجع مجوز actor است. IAM پس از احراز permission/delegation/MFA، وجود و active state scope و رابطه‌ی parent/child را از API داخلی Organization & Branch اعتبارسنجی می‌کند. Owner حق محاسبه یا کپی permission، role یا membership را ندارد؛ دسترسی validator با credential مستقل و route allow-list محدود می‌شود و در خطا fail-closed است. جزئیات اجرایی در ADR-0010 است.
+برای IAM tenant mutation، Identity & Access تنها مرجع مجوز actor است. IAM پس از احراز permission/delegation و step-up در صورت نیاز command، وجود و active state scope و رابطه‌ی parent/child را از API داخلی Organization & Branch اعتبارسنجی می‌کند. Owner حق محاسبه یا کپی permission، role یا membership را ندارد؛ دسترسی validator با credential مستقل و route allow-list محدود می‌شود و در خطا fail-closed است. جزئیات اجرایی در ADR-0010 و دسته‌بندی ریسک در ADR-0025 است.
 
-سیاست سازمانی از membership فعال و permissionهای role + overrideهای همان membership ارزیابی می‌شود؛ ابتدا denyهای مؤثر اعمال می‌شوند، سپس allowها، و در پایان نتیجه با scope و invariantهای دامنه محدود می‌شود. Delegation ceiling مانع واگذاری اختیار بالاتر از actor است. تغییر policy نسخه‌ی آن را افزایش می‌دهد، audit می‌شود و باید cacheهای مجوز را invalidate کند؛ مسیر حساس هنگام نامشخص بودن نسخه fail-closed است.
+permissionهای مجاز از اجتماع grantهای membershipهای فعال در scopeهای معتبر به‌دست می‌آیند. deny محدود به همان membership و زنجیره‌ی scope آن است: deny محلی grant هم‌سطح یا پایین‌تر همان زنجیره را می‌بندد و grant مستقل از membership یا tenant دیگر را حذف نمی‌کند؛ deny صریح global از membership سراسری، درخواست‌های scope پایین‌تر را هم رد می‌کند. پس از این ارزیابی، scope منبع، وضعیت resource، invariant دامنه و delegation ceiling همچنان اعمال می‌شوند. تغییر policy نسخه‌ی آن را افزایش می‌دهد، audit می‌شود و باید cacheهای مجوز را invalidate کند؛ مسیر حساس هنگام نامشخص بودن نسخه fail-closed است.
 
 ## ۱۰. مرز منبع حقیقت
 

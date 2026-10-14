@@ -125,7 +125,7 @@ test('database-backed evaluator grants a role permission only within its organiz
   assert.equal(allowed.policyVersion, 7);
 });
 
-test('an explicit membership deny overrides a role grant across applicable memberships', async () => {
+test('a branch membership deny does not suppress an independent organization grant', async () => {
   const service = makeService([
     makeMembership({ id: 'membership-org', organizationId, permissionKeys: ['staff.read'] }),
     makeMembership({
@@ -156,16 +156,20 @@ test('an explicit membership deny overrides a role grant across applicable membe
     permission: 'staff.read',
     scope: { type: 'branch', organizationId, branchId },
   });
-  assert.equal(result.allowed, false);
+  assert.equal(result.allowed, true);
 });
 
 test('step-up permissions remain denied without fresh session MFA evidence', async () => {
   const service = makeService([
-    makeMembership({ id: 'membership-a', organizationId, permissionKeys: ['card.assign'] }),
+    makeMembership({
+      id: 'membership-a',
+      organizationId,
+      permissionKeys: ['forms.responses.correct'],
+    }),
   ]);
 
   const result = await service.evaluate(userId, {
-    permission: 'card.assign',
+    permission: 'forms.responses.correct',
     scope: { type: 'organization', organizationId },
   });
   assert.equal(result.allowed, false);
@@ -176,7 +180,7 @@ test('fresh session evidence grants a step-up permission only for the current ac
   const membership = makeMembership({
     id: 'membership-step-up',
     organizationId,
-    permissionKeys: ['card.assign'],
+    permissionKeys: ['forms.responses.correct'],
   });
   const evidence = {
     verifiedAt: new Date(),
@@ -184,7 +188,7 @@ test('fresh session evidence grants a step-up permission only for the current ac
     method: 'totp' as const,
   };
   const request = {
-    permission: 'card.assign',
+    permission: 'forms.responses.correct',
     scope: { type: 'organization' as const, organizationId },
   };
 
@@ -200,13 +204,19 @@ test('fresh session evidence grants a step-up permission only for the current ac
 
 test('MFA step-up expires after five minutes even when its factor version is current', async () => {
   const service = makeService(
-    [makeMembership({ id: 'membership-expired', organizationId, permissionKeys: ['card.assign'] })],
+    [
+      makeMembership({
+        id: 'membership-expired',
+        organizationId,
+        permissionKeys: ['forms.responses.correct'],
+      }),
+    ],
     [],
     { status: 'active', version: 2 },
   );
   const result = await service.evaluate(
     userId,
-    { permission: 'card.assign', scope: { type: 'organization', organizationId } },
+    { permission: 'forms.responses.correct', scope: { type: 'organization', organizationId } },
     { verifiedAt: new Date(Date.now() - 300_001), factorVersion: 2, method: 'recovery' },
   );
   assert.equal(result.allowed, false);

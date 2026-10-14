@@ -84,7 +84,7 @@ export class PrismaDeviceRegistryRepository implements DeviceRegistryRepository 
         'device.registered',
         null,
         auditSnapshot(row),
-        command.reason,
+        command.reason ?? null,
       );
       await this.writeOutbox(tx, envelope);
       return result;
@@ -152,7 +152,7 @@ export class PrismaDeviceRegistryRepository implements DeviceRegistryRepository 
         'device.updated',
         auditSnapshot(before),
         auditSnapshot(after),
-        command.reason,
+        command.reason ?? null,
       );
       await this.writeOutbox(tx, envelope);
       return result;
@@ -480,7 +480,7 @@ export class PrismaDeviceRegistryRepository implements DeviceRegistryRepository 
     action: string,
     before: object | null,
     after: object,
-    reason: string,
+    reason: string | null,
   ): Promise<void> {
     await tx.deviceAuditLog.create({
       data: {

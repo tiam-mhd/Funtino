@@ -145,6 +145,7 @@ export function AccessManagement() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [showStepUpLink, setShowStepUpLink] = useState(false);
   const [auditError, setAuditError] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [roleName, setRoleName] = useState('');
@@ -307,7 +308,7 @@ export function AccessManagement() {
     } else {
       setAuditError(
         auditResult.reason instanceof ApiRequestError && auditResult.reason.status === 403
-          ? 'برای مشاهده‌ی ممیزی، تأیید مجدد MFA در همین نشست لازم است.'
+          ? 'مجوز audit.read یا محدوده‌ی لازم برای مشاهده‌ی ممیزی در دسترس نیست.'
           : messageFor(auditResult.reason),
       );
     }
@@ -341,15 +342,19 @@ export function AccessManagement() {
     setRolePermissions([...template.permissionKeys]);
   }, [selectedTemplate, templates]);
 
-  async function perform(label: string, work: () => Promise<unknown>) {
+  async function perform(label: string, work: () => Promise<unknown>, mayRequireStepUp = false) {
     setError('');
     setNotice('');
+    setShowStepUpLink(false);
     try {
       await work();
       await loadData();
       setNotice(label);
     } catch (caught) {
       setError(messageFor(caught));
+      setShowStepUpLink(
+        mayRequireStepUp && caught instanceof ApiRequestError && caught.status === 403,
+      );
     }
   }
 
@@ -360,22 +365,30 @@ export function AccessManagement() {
       setError('ابتدا یک محدوده‌ی فعال را از فهرست انتخاب کنید.');
       return;
     }
-    await perform('نقش با موفقیت ثبت شد.', async () => {
-      await apiRequest('/api/v1/operations/roles', {
-        method: 'POST',
-        headers: { 'Idempotency-Key': freshIdempotencyKey() },
-        body: {
-          name: roleName,
-          scope: targetScope,
-          permissionKeys: rolePermissions,
-          ...optionalReason(roleReason),
-        },
-      });
-      setRoleName('');
-      setRolePermissions([]);
-      setRoleReason('');
-      setSelectedTemplate('');
-    });
+    if (roleReason.trim().length < 8) {
+      setError('برای ساخت نقش و اعطای مجوز، دلیل حداقل ۸ نویسه‌ای الزامی است.');
+      return;
+    }
+    await perform(
+      'نقش با موفقیت ثبت شد.',
+      async () => {
+        await apiRequest('/api/v1/operations/roles', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': freshIdempotencyKey() },
+          body: {
+            name: roleName,
+            scope: targetScope,
+            permissionKeys: rolePermissions,
+            reason: roleReason.trim(),
+          },
+        });
+        setRoleName('');
+        setRolePermissions([]);
+        setRoleReason('');
+        setSelectedTemplate('');
+      },
+      true,
+    );
   }
 
   async function saveRole(role: Role) {
@@ -384,19 +397,40 @@ export function AccessManagement() {
       setError('ابتدا تغییرات نقش را مشخص کنید.');
       return;
     }
-    await perform('تغییرات نقش ذخیره شد.', async () => {
-      await apiRequest(`/api/v1/operations/roles/${role.id}`, {
-        method: 'PATCH',
-        headers: { 'Idempotency-Key': freshIdempotencyKey(), 'If-Match': `"${role.version}"` },
-        body: { ...edit, ...optionalReason(reason) },
-      });
-      setRoleEdits((current) => {
-        const next = { ...current };
-        delete next[role.id];
-        return next;
-      });
-      setReason('');
-    });
+    const changedPermissionKeys =
+      [...edit.permissionKeys].sort().join('\u0000') !==
+      [...role.permissionKeys].sort().join('\u0000');
+    const changedStatus = edit.status !== role.status;
+    const changes = {
+      ...(edit.name !== role.name ? { name: edit.name } : {}),
+      ...(changedStatus ? { status: edit.status } : {}),
+      ...(changedPermissionKeys ? { permissionKeys: edit.permissionKeys } : {}),
+    };
+    if (Object.keys(changes).length === 0) {
+      setError('تغییری برای ذخیره وجود ندارد.');
+      return;
+    }
+    if ((changedStatus || changedPermissionKeys) && reason.trim().length < 8) {
+      setError('برای تغییر دسترسی‌های نقش، دلیل حداقل ۸ نویسه‌ای الزامی است.');
+      return;
+    }
+    await perform(
+      'تغییرات نقش ذخیره شد.',
+      async () => {
+        await apiRequest(`/api/v1/operations/roles/${role.id}`, {
+          method: 'PATCH',
+          headers: { 'Idempotency-Key': freshIdempotencyKey(), 'If-Match': `"${role.version}"` },
+          body: { ...changes, ...optionalReason(reason) },
+        });
+        setRoleEdits((current) => {
+          const next = { ...current };
+          delete next[role.id];
+          return next;
+        });
+        setReason('');
+      },
+      true,
+    );
   }
 
   async function inviteStaff(event: FormEvent<HTMLFormElement>) {
@@ -450,14 +484,18 @@ export function AccessManagement() {
       reactivate: 'عضویت دوباره فعال شد.',
       revoke: 'عضویت لغو شد.',
     };
-    await perform(labels[action], async () => {
-      await apiRequest(`/api/v1/operations/staff/${member.membershipId}/${action}`, {
-        method: 'POST',
-        headers: { 'Idempotency-Key': freshIdempotencyKey() },
-        body: optionalReason(reason),
-      });
-      setReason('');
-    });
+    await perform(
+      labels[action],
+      async () => {
+        await apiRequest(`/api/v1/operations/staff/${member.membershipId}/${action}`, {
+          method: 'POST',
+          headers: { 'Idempotency-Key': freshIdempotencyKey() },
+          body: optionalReason(reason),
+        });
+        setReason('');
+      },
+      action === 'revoke',
+    );
   }
 
   async function changeStaffRole(member: Staff) {
@@ -466,19 +504,27 @@ export function AccessManagement() {
       setError('نقش جدید را مشخص کنید.');
       return;
     }
-    await perform('نقش کارمند تغییر کرد.', async () => {
-      await apiRequest(`/api/v1/operations/staff/${member.membershipId}`, {
-        method: 'PATCH',
-        headers: { 'Idempotency-Key': freshIdempotencyKey(), 'If-Match': `"${member.version}"` },
-        body: { roleId, ...optionalReason(reason) },
-      });
-      setStaffRoleEdits((current) => {
-        const next = { ...current };
-        delete next[member.membershipId];
-        return next;
-      });
-      setReason('');
-    });
+    if (reason.trim().length < 8) {
+      setError('برای تغییر نقش عضویت فعال، دلیل حداقل ۸ نویسه‌ای الزامی است.');
+      return;
+    }
+    await perform(
+      'نقش کارمند تغییر کرد.',
+      async () => {
+        await apiRequest(`/api/v1/operations/staff/${member.membershipId}`, {
+          method: 'PATCH',
+          headers: { 'Idempotency-Key': freshIdempotencyKey(), 'If-Match': `"${member.version}"` },
+          body: { roleId, ...optionalReason(reason) },
+        });
+        setStaffRoleEdits((current) => {
+          const next = { ...current };
+          delete next[member.membershipId];
+          return next;
+        });
+        setReason('');
+      },
+      true,
+    );
   }
 
   async function openOverrides(member: Staff) {
@@ -498,26 +544,34 @@ export function AccessManagement() {
       setError('مجوز و محدوده‌ی override را تکمیل کنید.');
       return;
     }
-    await perform('override دسترسی ثبت شد.', async () => {
-      await apiRequest(`/api/v1/operations/staff/${member.membershipId}/permission-overrides`, {
-        method: 'PUT',
-        headers: { 'Idempotency-Key': freshIdempotencyKey() },
-        body: {
-          permission: overridePermission,
-          effect: overrideEffect,
-          scope,
-          ...(overrideExpiry ? { expiresAt: new Date(overrideExpiry).toISOString() } : {}),
-          ...optionalReason(reason),
-        },
-      });
-      setReason('');
-      setOverridePermission('');
-      setOverrideExpiry('');
-      const result = await apiRequest<OverridePage>(
-        `/api/v1/operations/staff/${member.membershipId}/permission-overrides`,
-      );
-      setOverrides((current) => ({ ...current, [member.membershipId]: result.data }));
-    });
+    if (reason.trim().length < 8) {
+      setError('برای ایجاد override دسترسی، دلیل حداقل ۸ نویسه‌ای الزامی است.');
+      return;
+    }
+    await perform(
+      'override دسترسی ثبت شد.',
+      async () => {
+        await apiRequest(`/api/v1/operations/staff/${member.membershipId}/permission-overrides`, {
+          method: 'PUT',
+          headers: { 'Idempotency-Key': freshIdempotencyKey() },
+          body: {
+            permission: overridePermission,
+            effect: overrideEffect,
+            scope,
+            ...(overrideExpiry ? { expiresAt: new Date(overrideExpiry).toISOString() } : {}),
+            ...optionalReason(reason),
+          },
+        });
+        setReason('');
+        setOverridePermission('');
+        setOverrideExpiry('');
+        const result = await apiRequest<OverridePage>(
+          `/api/v1/operations/staff/${member.membershipId}/permission-overrides`,
+        );
+        setOverrides((current) => ({ ...current, [member.membershipId]: result.data }));
+      },
+      true,
+    );
   }
 
   async function revokeOverride(member: Staff, override: Override) {
@@ -526,21 +580,25 @@ export function AccessManagement() {
       return;
     }
     if (!window.confirm('این مجوز اختصاصی فوراً لغو می‌شود. ادامه می‌دهید؟')) return;
-    await perform('override لغو شد.', async () => {
-      await apiRequest(
-        `/api/v1/operations/staff/${member.membershipId}/permission-overrides/${override.id}`,
-        {
-          method: 'DELETE',
-          headers: { 'Idempotency-Key': freshIdempotencyKey() },
-          body: { reason },
-        },
-      );
-      setReason('');
-      const result = await apiRequest<OverridePage>(
-        `/api/v1/operations/staff/${member.membershipId}/permission-overrides`,
-      );
-      setOverrides((current) => ({ ...current, [member.membershipId]: result.data }));
-    });
+    await perform(
+      'override لغو شد.',
+      async () => {
+        await apiRequest(
+          `/api/v1/operations/staff/${member.membershipId}/permission-overrides/${override.id}`,
+          {
+            method: 'DELETE',
+            headers: { 'Idempotency-Key': freshIdempotencyKey() },
+            body: { reason },
+          },
+        );
+        setReason('');
+        const result = await apiRequest<OverridePage>(
+          `/api/v1/operations/staff/${member.membershipId}/permission-overrides`,
+        );
+        setOverrides((current) => ({ ...current, [member.membershipId]: result.data }));
+      },
+      true,
+    );
   }
 
   async function acceptInvitation(invitation: Invitation) {
@@ -578,12 +636,12 @@ export function AccessManagement() {
           <p className={styles.eyebrow}>کنترل مرکزی · امنیت و دسترسی</p>
           <h1>مدیریت نقش‌ها و کارکنان</h1>
           <p className={styles.lead}>
-            مجوزها در سرور ارزیابی می‌شوند؛ احراز هویت و ثبت actor برای همه‌ی تغییرها انجام می‌شود و
-            دلیل فقط برای لغو دسترسی فعال الزامی است.
+            مجوز و محدوده در سرور ارزیابی می‌شوند. ساخت یا تغییر role، تغییر نقش عضویت و override به
+            MFA تازه نیاز دارند؛ برای تغییر مؤثر دسترسی و لغو عضویت یا override نیز دلیل ثبت می‌شود.
           </p>
         </div>
         <div className={styles.headerLinks}>
-          <a className={styles.mfaLink} href="/fa/mfa">
+          <a className={styles.mfaLink} href="/fa/security/mfa">
             تنظیم تأیید دومرحله‌ای
           </a>
           <a className={styles.mfaLink} href="/fa/security/session-policy">
@@ -731,9 +789,15 @@ export function AccessManagement() {
       )}
 
       {error && (
-        <p className={styles.error} role="alert">
-          {error}
-        </p>
+        <div className={styles.error} role="alert">
+          <p>{error}</p>
+          {showStepUpLink && (
+            <a href="/fa/security/mfa">
+              اگر مجوز این فرمان را دارید، MFA تازه را در همین نشست تأیید کنید و سپس فرمان را دوباره
+              اجرا کنید.
+            </a>
+          )}
+        </div>
       )}
       {notice && (
         <p className={styles.notice} role="status">
@@ -896,13 +960,14 @@ export function AccessManagement() {
               ))}
             </fieldset>
             <label>
-              دلیل ثبت نقش (اختیاری)
+              دلیل ساخت نقش (الزامی؛ حداقل ۸ نویسه)
               <textarea
                 value={roleReason}
                 onChange={(event) => setRoleReason(event.target.value)}
                 minLength={8}
                 maxLength={500}
                 rows={2}
+                required
               />
             </label>
             <button
@@ -1077,7 +1142,6 @@ export function AccessManagement() {
               <textarea
                 value={inviteReason}
                 onChange={(event) => setInviteReason(event.target.value)}
-                minLength={8}
                 maxLength={500}
                 rows={2}
               />
@@ -1087,14 +1151,14 @@ export function AccessManagement() {
             </button>
           </form>
           <label className={styles.reasonField}>
-            دلیل عملیات کارکنان / override (اختیاری؛ برای لغو دسترسی فعال الزامی)
+            دلیل (برای تغییر دسترسی role، تغییر نقش عضویت، ایجاد/لغو override و لغو دائمی عضویت
+            اجباری)
             <textarea
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              minLength={8}
               maxLength={500}
               rows={2}
-              placeholder="در صورت نیاز دلیل را ثبت کنید؛ لغو عضویت فعال یا override به دلیل نیاز دارد."
+              placeholder="برای عملیات عادی اختیاری است؛ برای فرمان‌های پرریسک دلیل حداقل ۸ نویسه‌ای وارد کنید."
             />
           </label>
           <div className={styles.list}>
@@ -1257,12 +1321,14 @@ export function AccessManagement() {
           <div>
             <p className={styles.eyebrow}>ثبت تغییرناپذیر · {audit.length} رویداد اخیر</p>
             <h2 id="audit-heading">گزارش ممیزی دسترسی</h2>
-            <small>خواندن این گزارش به مجوز audit.read و MFA تازه نیاز دارد.</small>
+            <small>
+              خواندن این گزارش نیازمند audit.read در محدوده‌ی مجاز است؛ MFA step-up لازم نیست.
+            </small>
           </div>
         </div>
         {auditError && (
           <p className={styles.warning} role="status">
-            {auditError} <a href="/fa/mfa">رفتن به تأیید دومرحله‌ای</a>
+            {auditError}
           </p>
         )}
         <div className={styles.auditList}>
@@ -1292,8 +1358,9 @@ export function AccessManagement() {
       </section>
 
       <p className={styles.footerNote}>
-        نشست ورود فعلی حداکثر ۳۰ روزه است؛ عملیات حساس به MFA تأییدشده در همان نشست و حداکثر ۵ دقیقه
-        قبل نیاز دارد. غیرفعال‌سازی عامل یا تغییر نسخه‌ی آن، اثبات‌های قبلی را بی‌اعتبار می‌کند.
+        نشست مدیریتی از سیاست IAM حداکثر ۱۲ ساعت اعتبار دارد. MFA در ورود اجباری نیست و فقط
+        فرمان‌های پرریسک درخواست step-up می‌کنند؛ تغییر عامل، عضویت یا مجوز همچنان در سرور بررسی
+        می‌شود.
       </p>
     </main>
   );

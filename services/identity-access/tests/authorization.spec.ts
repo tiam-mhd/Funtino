@@ -5,6 +5,7 @@ import {
   evaluateAuthorization,
   evaluateAuthorizationAcrossMemberships,
   evaluateDelegation,
+  hasEffectivePermissionWithoutStepUp,
   type AccessScope,
   type AuthorizationContext,
   type PermissionOverride,
@@ -38,10 +39,10 @@ test('system telemetry permission is global-only and included in the read-only s
   );
 });
 
-test('family support is independently scoped, step-up protected, and limited to CRM/read-only support templates', () => {
+test('family support is independently scoped and limited to CRM/read-only support templates', () => {
   const family = getPermissionDefinition('customer.family.read');
   assert.deepEqual(family?.scopes, ['branch', 'organization', 'global']);
-  assert.equal(family?.stepUp, true);
+  assert.equal(family?.stepUp, false);
   assert.equal(family?.delegable, true);
   for (const key of ['system_support', 'organization_crm_manager', 'branch_crm_manager']) {
     assert.ok(
@@ -67,11 +68,11 @@ test('family support is independently scoped, step-up protected, and limited to 
   }
 });
 
-test('Forms PII access is a separate step-up permission and is absent from default tenant roles', () => {
+test('Forms PII access is a separate read permission and is absent from default tenant roles', () => {
   const pii = getPermissionDefinition('forms.responses.pii.read');
   assert.deepEqual(pii?.scopes, ['branch', 'organization']);
   assert.equal(pii?.delegable, true);
-  assert.equal(pii?.stepUp, true);
+  assert.equal(pii?.stepUp, false);
 
   for (const template of accessRoleTemplates.filter((item) =>
     [
@@ -98,12 +99,55 @@ test('Forms PII access is a separate step-up permission and is absent from defau
 test('response correction is separately scoped and does not grant PII access', () => {
   const correction = getPermissionDefinition('forms.responses.correct');
   assert.deepEqual(correction?.scopes, ['branch', 'organization']);
-  assert.equal(correction?.stepUp, false);
+  assert.equal(correction?.stepUp, true);
   for (const template of accessRoleTemplates.filter((item) =>
     ['organization_manager', 'branch_manager'].includes(item.key),
   )) {
     assert.ok(template.permissionKeys.includes('forms.responses.correct'));
     assert.equal(template.permissionKeys.includes('forms.responses.pii.read'), false);
+  }
+});
+
+test('only the approved high-risk permission catalog requires routine step-up', () => {
+  const stepUpKeys = [
+    'organization.create',
+    'branch.deactivate',
+    'access.role.manage',
+    'access.permission.delegate',
+    'system.access.bootstrap',
+    'system.access.impersonate',
+    'report.export',
+    'forms.platform.manage',
+    'forms.responses.correct',
+    'forms.responses.export',
+  ];
+  for (const key of stepUpKeys) assert.equal(getPermissionDefinition(key)?.stepUp, true, key);
+  for (const key of [
+    'organization.read',
+    'organization.update',
+    'branch.create',
+    'branch.update',
+    'staff.read',
+    'staff.invite',
+    'staff.suspend',
+    'staff.reactivate',
+    'device.register',
+    'device.maintenance.manage',
+    'card.inventory.manage',
+    'card.assign',
+    'card.transfer',
+    'card.unassign',
+    'customer.lookup.limited',
+    'customer.family.read',
+    'report.read',
+    'audit.read',
+    'system.session_policy.manage',
+    'forms.publish',
+    'forms.responses.manage',
+    'forms.responses.pii.read',
+    'forms.templates.manage',
+  ]) {
+    assert.equal(getPermissionDefinition(key)?.stepUp, false, key);
   }
 });
 
@@ -128,7 +172,7 @@ function makeContext(overrides: readonly PermissionOverride[] = []): Authorizati
       ],
     },
     overrides,
-    policyVersion: 7,
+    policyVersion: 8,
     mfaVerifiedAt: fixedNow,
   };
 }
@@ -160,7 +204,7 @@ test('allows role permission only inside its organization scope', () => {
 
   assert.equal(allowed.allowed, true);
   assert.equal(allowed.reason, 'role_permission');
-  assert.equal(allowed.policyVersion, 7);
+  assert.equal(allowed.policyVersion, 8);
   assert.equal(denied.allowed, false);
   assert.equal(denied.reason, 'scope_invalid');
 });
@@ -176,7 +220,7 @@ test('an explicit membership deny overrides both role permission and personal al
   assert.equal(result.reason, 'user_deny_override');
 });
 
-test('a branch-level deny overrides a grant inherited from an organization membership', () => {
+test('a branch-level deny cannot suppress an independent organization-level grant', () => {
   const organizationMember = makeContext();
   organizationMember.role.permissions = ['report.read'];
   const branchMember = makeContext([
@@ -197,12 +241,113 @@ test('a branch-level deny overrides a grant inherited from an organization membe
     { now: fixedNow },
   );
 
-  assert.equal(result.allowed, false);
-  assert.equal(result.reason, 'user_deny_override');
+  assert.equal(result.allowed, true);
+  assert.equal(result.reason, 'role_permission');
   assert.equal(result.policyVersion, 8);
 });
 
-test('a deny override remains effective even if its role is disabled', () => {
+test('a branch-level deny blocks same-scope grants when no broader grant exists', () => {
+  const branchMember = makeContext([
+    makeOverride('deny', { membershipId: 'membership-branch', scope: branchScope }),
+  ]);
+  branchMember.membership.id = 'membership-branch';
+  branchMember.membership.scope = branchScope;
+  branchMember.role.scope = branchScope;
+  branchMember.role.permissions = ['report.read'];
+
+  const result = evaluateAuthorizationAcrossMemberships(
+    [branchMember],
+    { permission: 'report.read', scope: branchScope },
+    8,
+    { now: fixedNow },
+  );
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.reason, 'user_deny_override');
+});
+
+test('an organization deny blocks branch grants but cannot suppress a global grant', () => {
+  const organizationDeny = makeContext([makeOverride('deny', { scope: organizationScope })]);
+  organizationDeny.role.permissions = [];
+
+  const branchGrant = makeContext();
+  branchGrant.membership.id = 'membership-branch';
+  branchGrant.membership.scope = branchScope;
+  branchGrant.role.scope = branchScope;
+  branchGrant.role.permissions = ['report.read'];
+
+  const branchDenied = evaluateAuthorizationAcrossMemberships(
+    [organizationDeny, branchGrant],
+    { permission: 'report.read', scope: branchScope },
+    8,
+    { now: fixedNow },
+  );
+  assert.equal(branchDenied.allowed, false);
+  assert.equal(branchDenied.reason, 'user_deny_override');
+
+  const globalGrant = makeContext();
+  globalGrant.membership.id = 'membership-global';
+  globalGrant.membership.scope = { type: 'global' };
+  globalGrant.role.scope = { type: 'global' };
+  globalGrant.role.permissions = ['report.read'];
+  const globalAllowed = evaluateAuthorizationAcrossMemberships(
+    [organizationDeny, branchGrant, globalGrant],
+    { permission: 'report.read', scope: branchScope },
+    8,
+    { now: fixedNow },
+  );
+  assert.equal(globalAllowed.allowed, true);
+  assert.equal(globalAllowed.reason, 'role_permission');
+});
+
+test('an explicit global deny still blocks every descendant grant', () => {
+  const globalDeny = makeContext([
+    makeOverride('deny', {
+      membershipId: 'membership-global',
+      scope: { type: 'global' },
+    }),
+  ]);
+  globalDeny.membership.id = 'membership-global';
+  globalDeny.membership.scope = { type: 'global' };
+  globalDeny.role.scope = { type: 'global' };
+  globalDeny.role.permissions = [];
+
+  const organizationGrant = makeContext();
+  organizationGrant.role.permissions = ['report.read'];
+  const result = evaluateAuthorizationAcrossMemberships(
+    [globalDeny, organizationGrant],
+    { permission: 'report.read', scope: branchScope },
+    8,
+    { now: fixedNow },
+  );
+
+  assert.equal(result.allowed, false);
+  assert.equal(result.reason, 'user_deny_override');
+});
+
+test('administrator invariant checks use the same membership-scoped deny precedence', () => {
+  const organizationGrant = makeContext();
+  organizationGrant.role.permissions = ['report.read'];
+  const branchDeny = makeContext([
+    makeOverride('deny', { membershipId: 'membership-branch', scope: branchScope }),
+  ]);
+  branchDeny.membership.id = 'membership-branch';
+  branchDeny.membership.scope = branchScope;
+  branchDeny.role.scope = branchScope;
+  branchDeny.role.permissions = [];
+
+  assert.equal(
+    hasEffectivePermissionWithoutStepUp(
+      [organizationGrant, branchDeny],
+      { permission: 'report.read', scope: branchScope },
+      8,
+      fixedNow,
+    ),
+    true,
+  );
+});
+
+test('a deny remains effective within its membership when its role is disabled', () => {
   const organizationMember = makeContext();
   organizationMember.role.permissions = ['report.read'];
   const branchMember = makeContext([
@@ -217,15 +362,44 @@ test('a deny override remains effective even if its role is disabled', () => {
   branchMember.role.status = 'disabled';
   branchMember.role.permissions = [];
 
+  const ownDecision = evaluateAuthorization(branchMember, {
+    permission: 'report.read',
+    scope: branchScope,
+  });
+  assert.equal(ownDecision.allowed, false);
+  assert.equal(ownDecision.reason, 'user_deny_override');
+
   const result = evaluateAuthorizationAcrossMemberships(
     [organizationMember, branchMember],
     { permission: 'report.read', scope: branchScope },
-    9,
+    8,
     { now: fixedNow },
   );
 
-  assert.equal(result.allowed, false);
-  assert.equal(result.reason, 'user_deny_override');
+  assert.equal(result.allowed, true);
+  assert.equal(result.reason, 'role_permission');
+});
+
+test('a suspended membership deny does not suppress another active membership grant', () => {
+  const organizationGrant = makeContext();
+  organizationGrant.role.permissions = ['report.read'];
+  const suspendedBranchDeny = makeContext([
+    makeOverride('deny', { membershipId: 'membership-branch', scope: branchScope }),
+  ]);
+  suspendedBranchDeny.membership.id = 'membership-branch';
+  suspendedBranchDeny.membership.scope = branchScope;
+  suspendedBranchDeny.membership.status = 'suspended';
+  suspendedBranchDeny.role.scope = branchScope;
+  suspendedBranchDeny.role.permissions = [];
+
+  const result = evaluateAuthorizationAcrossMemberships(
+    [organizationGrant, suspendedBranchDeny],
+    { permission: 'report.read', scope: branchScope },
+    8,
+    { now: fixedNow },
+  );
+  assert.equal(result.allowed, true);
+  assert.equal(result.reason, 'role_permission');
 });
 
 test('a personal allow applies only to its membership and exact resource when constrained', () => {
@@ -352,7 +526,7 @@ test('unknown permissions and invalid policy versions are denied', () => {
   );
 });
 
-test('sensitive permissions fail closed until MFA freshness policy is configured', () => {
+test('step-up permissions fail closed until MFA freshness policy is configured', () => {
   const request = { permission: 'access.role.manage', scope: organizationScope };
   const context = makeContext();
 
@@ -377,6 +551,33 @@ test('sensitive permissions fail closed until MFA freshness policy is configured
     evaluateAuthorization(context, request, {
       now: fixedNow,
       mfaFreshnessSeconds: 300,
+    }).reason,
+    'step_up_required',
+  );
+});
+
+test('a command can require step-up without making the shared permission read sensitive', () => {
+  const context = makeContext();
+  context.role.permissions = ['staff.suspend'];
+  const request = { permission: 'staff.suspend', scope: organizationScope };
+  assert.equal(
+    evaluateAuthorization(context, request, { now: fixedNow, mfaFreshnessSeconds: 300 }).allowed,
+    true,
+  );
+  assert.equal(
+    evaluateAuthorization(context, request, {
+      now: fixedNow,
+      mfaFreshnessSeconds: 300,
+      forceStepUp: true,
+    }).allowed,
+    true,
+  );
+  context.mfaVerifiedAt = null;
+  assert.equal(
+    evaluateAuthorization(context, request, {
+      now: fixedNow,
+      mfaFreshnessSeconds: 300,
+      forceStepUp: true,
     }).reason,
     'step_up_required',
   );

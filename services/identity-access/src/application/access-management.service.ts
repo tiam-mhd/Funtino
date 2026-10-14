@@ -295,8 +295,7 @@ export class AccessManagementService {
         if (
           !Number.isSafeInteger(input.managementSessionTtlHours) ||
           input.managementSessionTtlHours < 1 ||
-          input.managementSessionTtlHours > 12 ||
-          (input.reason !== undefined && !hasValidReason(input.reason))
+          input.managementSessionTtlHours > 12
         ) {
           throw new BadRequestException('Management session policy values are invalid.');
         }
@@ -310,6 +309,20 @@ export class AccessManagementService {
             data: { managementSessionTtlHours: current.managementSessionTtlHours },
             policyVersion,
           };
+        }
+        this.requirePermissions(
+          contexts,
+          actorUserId,
+          policyVersion,
+          { type: 'global' },
+          ['system.session_policy.manage'],
+          audit,
+          { forceStepUp: true },
+        );
+        if (!hasValidReason(input.reason)) {
+          throw new BadRequestException(
+            'Changing the management session policy requires a reason.',
+          );
         }
         const updated = await tx.policyState.update({
           where: { id: 1 },
@@ -378,6 +391,11 @@ export class AccessManagementService {
           audit,
         );
         await this.assertTenantScopeWritable(input.scope, { actorUserId, ...audit });
+        if (!hasValidReason(input.reason)) {
+          throw new BadRequestException(
+            'Creating a role with effective permissions requires a reason.',
+          );
+        }
         if (replay) return replay;
 
         const role = await tx.accessRole.create({
@@ -458,6 +476,9 @@ export class AccessManagementService {
         const changesAuthorization =
           input.permissionKeys !== undefined ||
           (input.status !== undefined && input.status !== current.status);
+        if (changesAuthorization && !hasValidReason(input.reason)) {
+          throw new BadRequestException('Changing effective role access requires a reason.');
+        }
         const affectedScopes = changesAuthorization
           ? await this.roleAffectedScopes(tx, current)
           : [];
@@ -1060,6 +1081,9 @@ export class AccessManagementService {
             'Selected role is not active or compatible with this membership scope.',
           );
         }
+        if (current.roleId !== nextRole.id && !hasValidReason(reason)) {
+          throw new BadRequestException('Changing a staff membership role requires a reason.');
+        }
         this.requireDelegation(
           contexts,
           actorUserId,
@@ -1141,7 +1165,9 @@ export class AccessManagementService {
           scope,
           correlationId: meta.correlationId,
         };
-        this.requirePermissions(contexts, actorUserId, version, scope, [permission], audit);
+        this.requirePermissions(contexts, actorUserId, version, scope, [permission], audit, {
+          forceStepUp: nextStatus === 'revoked',
+        });
         await this.assertTenantScopeWritable(scope, { actorUserId, ...audit });
         if (nextStatus === 'revoked' && !hasValidReason(reason)) {
           throw new BadRequestException('Revoking an active staff membership requires a reason.');
@@ -1300,6 +1326,9 @@ export class AccessManagementService {
           );
         }
         await this.assertTenantScopeWritable(input.scope, { actorUserId, ...audit });
+        if (!hasValidReason(input.reason)) {
+          throw new BadRequestException('Creating a permission override requires a reason.');
+        }
         if (replay) return replay;
         const startsAt = new Date();
         const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
@@ -1800,13 +1829,17 @@ export class AccessManagementService {
     scope: AccessScope,
     permissions: string[],
     audit: DeniedAuditTarget,
+    options: { forceStepUp?: boolean } = {},
   ): void {
     for (const permission of permissions) {
       const decision = evaluateAuthorizationAcrossMemberships(
         contexts,
         { permission, scope },
         policyVersion,
-        { mfaFreshnessSeconds: mfaFreshnessSecondsForContexts(contexts) },
+        {
+          mfaFreshnessSeconds: mfaFreshnessSecondsForContexts(contexts),
+          forceStepUp: options.forceStepUp,
+        },
       );
       if (!decision.allowed) throw new AccessDeniedError({ ...audit, actorUserId });
     }

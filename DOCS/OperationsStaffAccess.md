@@ -18,7 +18,7 @@
 - inbox شخصی در صفحه‌ی انتخاب scope، حالت بی‌دسترسی و workspace فعال؛ نمایش نام زنده‌ی مجموعه/شعبه، وضعیت owner، نقش، شماره‌ی مقصد mask‌شده و مهلت دعوت؛ منبع inactive/unavailable قابل پذیرش نیست؛ دعوت سراسری به صفحه‌ی مدیریت سامانه هدایت می‌شود؛ پذیرش تنها برای کاربر احراز‌شده؛
 - تغییر role برای عضویت فعال/معلق با نسخه‌ی مورد انتظار؛ تعلیق عضویت فعال و فعال‌سازی مجدد عضویت معلق؛ عضویت pending/revoked از کنترل نامعتبر lifecycle برخوردار نیست؛
 - فهرست، اعطا و لغو override فردی در محدوده‌ی مجاز عضویت: permission از catalog، effect برابر allow/deny، scope، منبع اختیاری، انقضای اختیاری و دلیل؛
-- gate تعاملی MFA: OTP ورود کافی نیست؛ TOTP/recovery یک‌بارمصرف برای step-up استفاده می‌شود، TOTP در صورت نیاز enroll می‌شود و recovery codeها فقط یک‌بار نشان داده شده و پیش از ادامه acknowledgment می‌خواهند. اثبات نهایی و مهلت ۳۰۰ثانیه‌ای را نشست Gateway و IAM کنترل می‌کنند.
+- gate تعاملی فرمان‌های پرریسک طبق catalog: OTP ورود مدیریتی به‌تنهایی step-up محسوب نمی‌شود؛ فقط commandهایی که IAM پرریسک طبقه‌بندی کرده‌اند TOTP/recovery می‌خواهند. در صورت نیاز factor enroll می‌شود و recovery codeها فقط یک‌بار نشان داده شده و پیش از ادامه acknowledgment می‌خواهند. session، نسخه‌ی عامل و تازگی evidence را Gateway و IAM کنترل می‌کنند.
 - stateهای loading/empty/error، refresh پس از conflict، pagination، پیام موفقیت، فرم‌های RTL/mobile-first و landmark/labelهای صفحه‌خوان.
 
 این برش در Operations Web نقش تازه ایجاد یا permission catalog را تغییر نمی‌دهد؛ فقط role فعال و غیرسیستمی‌ای را می‌توان تخصیص داد که IAM در scope جاری برگردانده است. عملیات ساخت/ویرایش role و مدیریت roleهای سیستمی در مسیر System و bootstrap محدود IAM باقی می‌ماند.

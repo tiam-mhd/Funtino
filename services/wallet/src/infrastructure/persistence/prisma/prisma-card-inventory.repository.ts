@@ -503,7 +503,7 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
       cardId: string;
       action: 'registered' | 'status_changed';
       meta: CardCommandMeta;
-      reason: string;
+      reason: string | null;
       before: object | null;
       after: object;
     },

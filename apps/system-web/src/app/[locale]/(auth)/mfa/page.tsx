@@ -1,5 +1,5 @@
-import { MfaManagement } from '../../../../features/access-control/MfaManagement';
+import { redirect } from 'next/navigation';
 
 export default function MfaPage() {
-  return <MfaManagement />;
+  redirect('/fa/security/mfa');
 }

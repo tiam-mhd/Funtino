@@ -191,9 +191,13 @@ export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManag
   );
 
   const requestSensitiveAction = useCallback(
-    async (label: string, run: () => Promise<void>) => {
+    async (label: string, run: () => Promise<void>, requiresStepUp = true) => {
       setActionError('');
       setNotice('');
+      if (!requiresStepUp) {
+        await performMutation(label, run);
+        return;
+      }
       setMfaCheckBusy(true);
       try {
         let currentStatus = mfaStatus;
@@ -233,7 +237,7 @@ export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManag
       .filter(
         (member) =>
           !normalizedSearch ||
-          `${member.maskedPhone ?? ''} ${member.role.name}`
+          `${safeMemberName(member)} ${member.maskedPhone ?? ''} ${member.role.name}`
             .toLocaleLowerCase()
             .includes(normalizedSearch),
       )
@@ -241,7 +245,7 @@ export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManag
         const first =
           sortBy === 'role'
             ? left.role.name.localeCompare(right.role.name, 'fa')
-            : (left.maskedPhone ?? left.userId).localeCompare(right.maskedPhone ?? right.userId);
+            : safeMemberName(left).localeCompare(safeMemberName(right), 'fa');
         return first || left.membershipId.localeCompare(right.membershipId);
       });
   }, [rosterFilter, search, sortBy, staff]);
@@ -261,11 +265,16 @@ export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManag
     event.preventDefault();
     const normalizedPhone = normalizePhone(invitePhone);
     const reason = inviteReason.trim();
-    if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone) || !inviteRoleId || reason.length < 8) {
-      setActionError('شماره‌ی E.164 معتبر، نقش فعال و دلیل حداقل ۸ نویسه وارد کنید.');
+    if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone) || !inviteRoleId) {
+      setActionError('شماره‌ی E.164 معتبر و نقش فعال انتخاب کنید.');
       return;
     }
-    const input = { phoneE164: normalizedPhone, scope, roleId: inviteRoleId, reason };
+    const input = {
+      phoneE164: normalizedPhone,
+      scope,
+      roleId: inviteRoleId,
+      ...(reason ? { reason } : {}),
+    };
     const key = inviteKey(JSON.stringify(input));
     void requestSensitiveAction(
       'دعوت ثبت شد؛ فعال‌سازی فقط پس از پذیرش صریح با شماره‌ی تأییدشده انجام می‌شود.',
@@ -277,6 +286,7 @@ export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManag
         setInviteReason('');
         setTab('invitations');
       },
+      false,
     );
   }
 
@@ -420,9 +430,13 @@ export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManag
   }
 
   function revokeInvitation(invitation: OperationsStaffInvitation, reason: string, key: string) {
-    void requestSensitiveAction('دعوت لغو شد و دیگر قابل پذیرش نیست.', async () => {
-      await revokeScopedStaffInvitation(invitation.id, reason, key);
-    });
+    void requestSensitiveAction(
+      'دعوت لغو شد و دیگر قابل پذیرش نیست.',
+      async () => {
+        await revokeScopedStaffInvitation(invitation.id, reason || undefined, key);
+      },
+      false,
+    );
   }
 
   return (
@@ -708,21 +722,12 @@ export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManag
                     <textarea
                       disabled={actionsDisabled}
                       maxLength={500}
-                      minLength={8}
                       onChange={(event) => setInviteReason(event.currentTarget.value)}
-                      required
                       rows={3}
                       value={inviteReason}
                     />
                   </label>
-                  <Button
-                    disabled={
-                      actionsDisabled ||
-                      assignableRoles.length === 0 ||
-                      inviteReason.trim().length < 8
-                    }
-                    type="submit"
-                  >
+                  <Button disabled={actionsDisabled || assignableRoles.length === 0} type="submit">
                     صدور دعوت‌نامه
                   </Button>
                 </form>
@@ -788,8 +793,8 @@ export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManag
                         actionsDisabled={actionsDisabled}
                         key={member.membershipId}
                         member={member}
-                        onSensitiveAction={(label, action) =>
-                          void requestSensitiveAction(label, action)
+                        onSensitiveAction={(label, action, requiresStepUp) =>
+                          void requestSensitiveAction(label, action, requiresStepUp)
                         }
                         onSessionExpired={onSessionExpired}
                         permissions={permissions}
@@ -876,7 +881,7 @@ function ScopedInvitationCard({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanReason = reason.trim();
-    if (expired || cleanReason.length < 8) return;
+    if (expired) return;
     const fingerprint = JSON.stringify({ invitationId: invitation.id, reason: cleanReason });
     if (retryKey.current?.fingerprint !== fingerprint) {
       retryKey.current = { fingerprint, key: freshIdempotencyKey() };
@@ -916,18 +921,12 @@ function ScopedInvitationCard({
               <textarea
                 disabled={actionsDisabled}
                 maxLength={500}
-                minLength={8}
                 onChange={(event) => setReason(event.currentTarget.value)}
-                required
                 rows={2}
                 value={reason}
               />
             </label>
-            <Button
-              disabled={actionsDisabled || reason.trim().length < 8}
-              tone="danger"
-              type="submit"
-            >
+            <Button disabled={actionsDisabled} tone="danger" type="submit">
               لغو دعوت‌نامه
             </Button>
           </form>
@@ -941,6 +940,13 @@ function mergeById<T>(existing: T[], incoming: T[], idOf: (item: T) => string): 
   const items = new Map(existing.map((item) => [idOf(item), item]));
   for (const item of incoming) items.set(idOf(item), item);
   return [...items.values()];
+}
+
+function safeMemberName(member: OperationsStaffMember): string {
+  const identityName =
+    member.identity?.displayName?.trim() ||
+    [member.identity?.firstName, member.identity?.lastName].filter(Boolean).join(' ').trim();
+  return identityName || member.maskedPhone || 'کارمند · شماره پنهان';
 }
 
 function messageFor(failure: unknown): string {

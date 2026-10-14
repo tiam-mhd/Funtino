@@ -187,7 +187,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ReasonRequest' }
+            schema: { $ref: '#/components/schemas/OptionalReasonRequest' }
       responses:
         '200': { $ref: '#/components/responses/Json' }
         '409': { $ref: '#/components/responses/Error' }
@@ -200,7 +200,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/ReasonRequest' }
+            schema: { $ref: '#/components/schemas/OptionalReasonRequest' }
       responses:
         '200': { $ref: '#/components/responses/Json' }
         '409': { $ref: '#/components/responses/Error' }
@@ -305,10 +305,10 @@ paths:
               allOf:
                 - { $ref: '#/components/schemas/TenantScope' }
                 - type: object
-                  required: [status, reason]
+                  required: [status]
                   properties:
                     status: { $ref: '#/components/schemas/ResponseStatus' }
-                    reason: { type: string, minLength: 8, maxLength: 500 }
+                    reason: { type: string, maxLength: 500 }
                 - { $ref: '#/components/schemas/ActorMeta' }
               unevaluatedProperties: false
       responses:
@@ -643,6 +643,16 @@ components:
         organizationId: { type: string, format: uuid }
         branchId: { type: string, format: uuid }
         reason: { type: string, minLength: 8, maxLength: 500 }
+        actorUserId: { type: string, format: uuid }
+        correlationId: { type: string, format: uuid }
+      additionalProperties: false
+    OptionalReasonRequest:
+      type: object
+      required: [organizationId, actorUserId, correlationId]
+      properties:
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        reason: { type: string, maxLength: 500 }
         actorUserId: { type: string, format: uuid }
         correlationId: { type: string, format: uuid }
       additionalProperties: false

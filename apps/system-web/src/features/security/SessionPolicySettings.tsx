@@ -23,6 +23,7 @@ export function SessionPolicySettings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const policyChanged = Boolean(policy && Number(hours) !== policy.managementSessionTtlHours);
 
   const loadPolicy = useCallback(async () => {
     setLoading(true);
@@ -119,16 +120,25 @@ export function SessionPolicySettings() {
               ))}
             </select>
 
-            <label htmlFor="session-policy-reason">دلیل تغییر (اختیاری؛ برای ممیزی)</label>
+            <label htmlFor="session-policy-reason">
+              دلیل تغییر {policyChanged ? '(اجباری؛ حداقل ۸ نویسه)' : '(اختیاری؛ برای ممیزی)'}
+            </label>
             <textarea
               id="session-policy-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              minLength={8}
+              required={policyChanged}
+              minLength={policyChanged ? 8 : undefined}
               maxLength={500}
               rows={3}
               disabled={saving}
             />
+            {policyChanged && (
+              <p className={styles.note}>
+                تغییر واقعی مدت نشست کارکنان نیازمند تأیید MFA تازه است.{' '}
+                <a href="/fa/security/mfa">تأیید دومرحله‌ای</a>
+              </p>
+            )}
             <button type="submit" disabled={saving}>
               {saving ? 'در حال ذخیره...' : 'ذخیره تنظیم'}
             </button>

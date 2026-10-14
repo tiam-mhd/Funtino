@@ -607,6 +607,22 @@
   font-size: 9px;
 }
 
+.accountSecurityLink {
+  border: 1px solid var(--ft-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--ft-purple);
+  font-size: 10px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.accountSecurityLink:focus-visible {
+  outline: 3px solid var(--ft-teal);
+  outline-offset: 2px;
+}
+
 .logoutButton {
   min-height: 38px !important;
   border-radius: 11px !important;
@@ -908,6 +924,11 @@
 
   .account {
     gap: 6px;
+  }
+
+  .accountSecurityLink {
+    padding: 7px;
+    font-size: 9px;
   }
 
   .logoutButton {

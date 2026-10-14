@@ -13,13 +13,13 @@
 ## قابلیت‌های فعال
 
 - role سفارشی در scope سراسری/مجموعه/شعبه، نقش‌های template و optimistic concurrency با `If-Match`؛ role system-managed قابل ویرایش نیست.
-- delegation ceiling: actor فقط permissionهایی را واگذار می‌کند که خودش در همان scope دارد و کاتالوگ آن‌ها را delegable اعلام کرده است؛ deny بر allow و role grant مقدم است.
+- delegation ceiling: actor فقط permissionهایی را واگذار می‌کند که خودش در همان scope دارد و کاتالوگ آن‌ها را delegable اعلام کرده است؛ deny فقط grantهای هم‌سطح/پایین‌تر همان زنجیره‌ی scope را می‌بندد و grant مستقل در scope بالاتر را حذف نمی‌کند؛ deny global روی scopeهای فرزند veto است.
 - دعوت staff با انقضای ۷روزه، HMAC نسخه‌دار شماره و شماره‌ی mask‌شده؛ مدیر دعوت‌های scope خود را می‌بیند و می‌تواند پیش از پذیرش لغو کند. دعوت پس از OTP فقط با پذیرش صریح فعال می‌شود. شماره‌ی plaintext وارد IAM، audit یا event نمی‌شود.
 - تعلیق، فعال‌سازی مجدد، لغو دائمی عضویت و تغییر role؛ درخواست‌های بعدی پس از commit با policy جاری ارزیابی می‌شوند.
 - allow/deny override در سطح membership با scope/resource/انقضا؛ هر تغییر حساس زیر policy lock، با idempotency، audit append-only و outbox نسخه‌دار انجام می‌شود.
-- audit خواندنی، صفحه‌بندی‌شده و scopeدار؛ دسترسی موفق مدیریتی به فهرست کارکنان، دعوت‌ها، overrideها و خود audit نیز ثبت می‌شود. تلاش‌های authorization ردشده نیز audit می‌شوند؛ خواندن audit به step-up تازه‌ی MFA نیاز دارد.
+- audit خواندنی، صفحه‌بندی‌شده و scopeدار؛ دسترسی موفق مدیریتی به فهرست کارکنان، دعوت‌ها، overrideها و خود audit نیز ثبت می‌شود. تلاش‌های authorization ردشده نیز audit می‌شوند؛ خواندن audit به permission و scope نیاز دارد و MFA step-up نمی‌خواهد.
 - idempotency key در هر actor/operation برای ۲۴ ساعت replay می‌شود؛ استفاده‌ی مجدد از همان کلید با body متفاوت `409` می‌دهد. request fingerprint با HMAC ذخیره می‌شود.
-- نشست کاربران دارای عضویت مدیریتی TTL مطلقی برابر تنظیم IAM از ۱ تا ۱۲ ساعت (پیش‌فرض ۱۲) دارد و از ورود بعدی اعمال می‌شود؛ مشتریان بدون عضویت مدیریتی TTL سی‌روزه را نگه می‌دارند. مدیر سراسری در هر login MFA می‌کند و proof او فقط تا پایان نشست Gateway معتبر است؛ برای سایر کارکنان step-up پنج‌دقیقه‌ای باقی است. IAM در هر درخواست فعال‌بودن MFA و نسخه‌ی عامل را بازبینی می‌کند و proof فقط از session سمت‌سرور Gateway می‌آید.
+- نشست management TTL مطلق تنظیم IAM از ۱ تا ۱۲ ساعت (پیش‌فرض ۱۲) دارد و از ورود بعدی اعمال می‌شود؛ نشست customer سی‌روزه است. ورود مدیریتی با OTP و audience جدا انجام می‌شود؛ MFA هنگام login اجباری نیست و فقط commandهای پرریسک step-up می‌خواهند. IAM در هر درخواست عضویت، role، scope، permission، وضعیت عامل MFA و proof نشست سمت‌سرور Gateway را دوباره بررسی می‌کند.
 - تغییر role، membership، invitation و override با policy version، audit before/after و Outbox اتمیک ثبت می‌شود. Outbox ممکن است حداقل‌یک‌بار ارسال شود؛ consumerها باید idempotent باشند.
 
 ## Bootstrap مدیر سراسری
@@ -38,7 +38,7 @@ Bootstrap endpoint عمومی ندارد و فقط با CLI تعاملی در co
 
 `system_admin` همه‌ی کلیدهای کاتالوگ جاری را در scope سراسری می‌گیرد، از جمله `system.access.bootstrap` و `system.access.impersonate`; این کلیدها خودشان endpoint ایجاد نمی‌کنند. finalize نقش قبلی همین شماره را کامل می‌کند و membershipهای system admin متعلق به حساب‌های دیگر را در همان transaction با audit/outbox revoke می‌کند. roleهایی با permission ناشناخته یا state ناسازگار fail-closed می‌مانند. جزئیات در [ADR-0021](../../DOCS/decisions/0021-runflare-bound-system-admin-owner.md) آمده است.
 
-`system_admin` و `system_admin_bootstrap` از دعوت، API عادی و UI قابل تخصیص نیستند. `IDENTITY_ACCESS_BOOTSTRAP_ENABLED` را در محیط پایدار Runflare نگه ندارید؛ آن را فقط ابتدای یک invocation تعاملی تنظیم کنید. نشست مدیریتی از ۱ تا ۱۲ ساعت (پیش‌فرض ۱۲) است و MFA مدیر سراسری پس از login تا پایان همان session معتبر می‌ماند؛ تنظیم در System Web از ورود بعدی اعمال می‌شود.
+`system_admin` و `system_admin_bootstrap` از دعوت، API عادی و UI قابل تخصیص نیستند. `IDENTITY_ACCESS_BOOTSTRAP_ENABLED` را در محیط پایدار Runflare نگه ندارید؛ آن را فقط ابتدای یک invocation تعاملی تنظیم کنید. نشست مدیریتی از ۱ تا ۱۲ ساعت (پیش‌فرض ۱۲) است؛ MFA فقط برای فرمان‌های پرریسک step-up می‌شود و enrollment در login اجباری نیست. تنظیم مدت نشست در System Web از ورود بعدی اعمال می‌شود.
 
 برای writeهای عادی role/staff/permission در production، مقدار `IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED=true` را در Runflare روی IAM تنظیم کنید. مقدار پیش‌فرض کد `false` می‌ماند؛ در صورت `false` پاسخ 503 با کد `IAM_MANAGEMENT_WRITES_DISABLED` به معنی بسته‌بودن همین گیت است. bootstrap one-off از این گیت جداست. بستن گیت با `false` rollback عملیاتی است.
 

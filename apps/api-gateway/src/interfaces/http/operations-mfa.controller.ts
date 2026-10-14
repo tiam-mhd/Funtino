@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { DomainError } from '@funtino/backend-core';
 import { FUNTINO_STORE, type FuntinoStorePort } from '../../infrastructure/store/funtino-store.js';
 import {
@@ -98,7 +99,10 @@ export class OperationsMfaController {
       requestCorrelationId(request),
       body.code,
     );
-    const sessionBoundResult = bindMfaProofToSystemAdminSession(result, session);
+    const sessionBoundResult = bindMfaProofToSystemAdminSession(
+      result,
+      await this.systemAdminProofPolicy(user.id, session),
+    );
     await this.store.updateSessionMfa(session.id, sessionBoundResult);
     return success(sessionBoundResult, request);
   }
@@ -120,7 +124,10 @@ export class OperationsMfaController {
       requestCorrelationId(request),
       body,
     );
-    const sessionBoundResult = bindMfaProofToSystemAdminSession(result, session);
+    const sessionBoundResult = bindMfaProofToSystemAdminSession(
+      result,
+      await this.systemAdminProofPolicy(user.id, session),
+    );
     await this.store.updateSessionMfa(session.id, sessionBoundResult);
     return success(sessionBoundResult, request);
   }
@@ -142,7 +149,10 @@ export class OperationsMfaController {
       requestCorrelationId(request),
       body,
     );
-    const sessionBoundResult = bindMfaProofToSystemAdminSession(result, session);
+    const sessionBoundResult = bindMfaProofToSystemAdminSession(
+      result,
+      await this.systemAdminProofPolicy(user.id, session),
+    );
     await this.store.updateSessionMfa(session.id, sessionBoundResult);
     return success(sessionBoundResult, request);
   }
@@ -158,8 +168,11 @@ export class OperationsMfaController {
   ) {
     this.preventCaching(reply);
     const session = this.requireSession(request);
-    if (session.isSystemAdmin) {
-      throw new DomainError('FORBIDDEN', 'MFA برای مدیر سامانه اجباری است و غیرفعال نمی‌شود.');
+    if (await this.isGlobalSystemAdmin(user.id, requestCorrelationId(request))) {
+      throw new DomainError(
+        'FORBIDDEN',
+        'عامل MFA مدیر سراسری برای step-up فرمان‌های پرریسک نگه داشته می‌شود.',
+      );
     }
     const result = await this.identityAccess.disableMfa(
       user.id,
@@ -174,6 +187,30 @@ export class OperationsMfaController {
   private requireSession(request: AuthenticatedRequest) {
     if (!request.session) throw new DomainError('UNAUTHENTICATED', 'نشست معتبر نیست.');
     return request.session;
+  }
+
+  private async systemAdminProofPolicy(
+    userId: string,
+    session: { expiresAt: number },
+  ): Promise<{ isSystemAdmin: boolean; expiresAt: number }> {
+    return {
+      isSystemAdmin: await this.isGlobalSystemAdmin(userId),
+      expiresAt: session.expiresAt,
+    };
+  }
+
+  private async isGlobalSystemAdmin(userId: string, correlationId?: string): Promise<boolean> {
+    const access = await this.identityAccess.currentAccessContext(
+      userId,
+      correlationId ?? randomUUID(),
+    );
+    return access.memberships.some(
+      (membership) =>
+        membership.status === 'active' &&
+        membership.role.status === 'active' &&
+        membership.role.name === 'system_admin' &&
+        membership.scope.type === 'global',
+    );
   }
 
   private preventCaching(reply: FastifyReply): void {

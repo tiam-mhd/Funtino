@@ -1,10 +1,15 @@
-export const permissionCatalogVersion = 5;
+export const permissionCatalogVersion = 6;
 
 export const permissionCatalog = [
   { key: 'organization.create', scopes: ['global'], delegable: false, stepUp: true },
   { key: 'organization.read', scopes: ['organization', 'global'], delegable: true, stepUp: false },
-  { key: 'organization.update', scopes: ['organization', 'global'], delegable: true, stepUp: true },
-  { key: 'branch.create', scopes: ['organization', 'global'], delegable: true, stepUp: true },
+  {
+    key: 'organization.update',
+    scopes: ['organization', 'global'],
+    delegable: true,
+    stepUp: false,
+  },
+  { key: 'branch.create', scopes: ['organization', 'global'], delegable: true, stepUp: false },
   {
     key: 'branch.read',
     scopes: ['branch', 'organization', 'global'],
@@ -15,7 +20,7 @@ export const permissionCatalog = [
     key: 'branch.update',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'branch.deactivate',
@@ -33,19 +38,19 @@ export const permissionCatalog = [
     key: 'staff.invite',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'staff.suspend',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'staff.reactivate',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'access.role.read',
@@ -75,13 +80,13 @@ export const permissionCatalog = [
     key: 'device.register',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'device.maintenance.manage',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'card.inventory.read',
@@ -93,37 +98,37 @@ export const permissionCatalog = [
     key: 'card.inventory.manage',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'card.assign',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'card.transfer',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'card.unassign',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'customer.lookup.limited',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'customer.family.read',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'report.read',
@@ -141,7 +146,7 @@ export const permissionCatalog = [
     key: 'audit.read',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   { key: 'system.access.bootstrap', scopes: ['global'], delegable: false, stepUp: true },
   { key: 'system.access.impersonate', scopes: ['global'], delegable: false, stepUp: true },
@@ -151,7 +156,7 @@ export const permissionCatalog = [
   { key: 'forms.platform.manage', scopes: ['global'], delegable: false, stepUp: true },
   { key: 'forms.read', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
   { key: 'forms.manage', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
-  { key: 'forms.publish', scopes: ['branch', 'organization'], delegable: true, stepUp: true },
+  { key: 'forms.publish', scopes: ['branch', 'organization'], delegable: true, stepUp: false },
   {
     key: 'forms.responses.read',
     scopes: ['branch', 'organization'],
@@ -162,19 +167,19 @@ export const permissionCatalog = [
     key: 'forms.responses.manage',
     scopes: ['branch', 'organization'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'forms.responses.correct',
     scopes: ['branch', 'organization'],
     delegable: true,
-    stepUp: false,
+    stepUp: true,
   },
   {
     key: 'forms.responses.pii.read',
     scopes: ['branch', 'organization'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
   {
     key: 'forms.responses.export',
@@ -186,7 +191,7 @@ export const permissionCatalog = [
     key: 'forms.templates.manage',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
-    stepUp: true,
+    stepUp: false,
   },
 ] as const;
 

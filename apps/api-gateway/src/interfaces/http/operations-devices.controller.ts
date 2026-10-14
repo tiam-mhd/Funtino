@@ -62,7 +62,12 @@ const pageQuerySchema = z
     pageSize: z.coerce.number().int().min(1).max(100).default(100),
   })
   .strict();
-const reason = z.string().trim().min(8).max(500);
+const reason = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .transform((value) => value || undefined);
 const registrationSchema = z
   .object({
     adapterKey: z

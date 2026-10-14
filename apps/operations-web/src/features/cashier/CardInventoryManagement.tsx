@@ -17,7 +17,6 @@ import {
   type OperationsScope,
   type OperationsScopeOption,
 } from '../../lib/auth/operations-access';
-import { OperationsMfaStepUpPanel } from '../../components/forms/OperationsMfaStepUpPanel';
 import { HouseholdCardAssignments } from './HouseholdCardAssignments';
 import styles from './CardInventoryManagement.module.css';
 
@@ -25,8 +24,6 @@ type Props = {
   scope: OperationsScope;
   scopeOption: OperationsScopeOption;
   onSessionExpired: () => void;
-  mfaStepUpUntil: number | null;
-  onMfaStepUp: (validUntil: number) => void;
 };
 
 type RegistrationDraft = { externalCardId: string; reason: string };
@@ -60,16 +57,9 @@ const noCardCapabilities: OperationsCardCapabilities = {
   canTransfer: false,
   canUnassign: false,
   canLookupCustomer: false,
-  requiresStepUp: false,
 };
 
-export function CardInventoryManagement({
-  scope,
-  scopeOption,
-  onSessionExpired,
-  mfaStepUpUntil,
-  onMfaStepUp,
-}: Props) {
+export function CardInventoryManagement({ scope, scopeOption, onSessionExpired }: Props) {
   const currentScopeKey = scopeKey(scope);
   const initialBranches: OperationsBranch[] =
     scope.type === 'branch'
@@ -252,7 +242,7 @@ export function CardInventoryManagement({
     if (!selectedBranchId || !canManage) return;
     const body = {
       externalCardId: registrationDraft.externalCardId.trim(),
-      reason: registrationDraft.reason.trim(),
+      ...(registrationDraft.reason.trim() ? { reason: registrationDraft.reason.trim() } : {}),
     };
     const fingerprint = JSON.stringify([scope.organizationId, selectedBranchId, body]);
     const key =
@@ -288,7 +278,10 @@ export function CardInventoryManagement({
       setActionError('برای بازنشستگی دائمی، تأیید نهایی را انتخاب کنید.');
       return;
     }
-    const body = { status: statusDraft.status, reason: statusDraft.reason.trim() };
+    const body = {
+      status: statusDraft.status,
+      ...(statusDraft.reason.trim() ? { reason: statusDraft.reason.trim() } : {}),
+    };
     const fingerprint = JSON.stringify([card.id, card.version, body]);
     const key =
       lastStatusAttempt.current?.fingerprint === fingerprint
@@ -417,21 +410,6 @@ export function CardInventoryManagement({
         </Surface>
       )}
 
-      {selectedBranchId &&
-        !loadError &&
-        !loading &&
-        (!canManage || capabilities.requiresStepUp) && (
-          <OperationsMfaStepUpPanel
-            idPrefix="card-inventory"
-            mfaStepUpUntil={mfaStepUpUntil}
-            onMfaStepUp={(validUntil) => {
-              onMfaStepUp(validUntil);
-              void refresh(true);
-            }}
-            onSessionExpired={onSessionExpired}
-          />
-        )}
-
       {notice && (
         <p className={styles.notice} role="status">
           {notice}
@@ -471,12 +449,10 @@ export function CardInventoryManagement({
               />
             </label>
             <label className={styles.field} htmlFor="card-inventory-registration-reason">
-              دلیل ثبت
+              دلیل ثبت (اختیاری)
               <textarea
                 id="card-inventory-registration-reason"
-                required
                 disabled={registrationBusy}
-                minLength={8}
                 maxLength={500}
                 value={registrationDraft.reason}
                 onChange={(event) => {
@@ -647,12 +623,10 @@ export function CardInventoryManagement({
                           </select>
                         </label>
                         <label className={styles.field} htmlFor={`card-reason-${card.id}`}>
-                          دلیل تغییر
+                          دلیل تغییر (اختیاری)
                           <textarea
                             id={`card-reason-${card.id}`}
-                            required
                             disabled={statusBusy}
-                            minLength={8}
                             maxLength={500}
                             value={statusDraft.reason}
                             onChange={(event) => {

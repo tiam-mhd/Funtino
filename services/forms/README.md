@@ -20,6 +20,6 @@ Then run `pnpm --filter @funtino/forms prisma:migrate` in the controlled release
 
 - Customer identity is stored only when an authenticated caller explicitly consents to link the response.
 - Response content is excluded from logs, event payloads, and error messages.
-- Corrections require the separately scoped `forms.responses.correct` permission. Sensitive-field corrections also require `forms.responses.pii.read` with a current MFA step-up; current answers update transactionally while each before/after value, actor, reason, time, and correction version stays in the append-only correction journal.
+- Corrections require the separately scoped `forms.responses.correct` permission and a current MFA step-up. Changes to sensitive fields also require `forms.responses.pii.read`; that permission and ordinary PII reads do not themselves require step-up. Current answers update transactionally while each before/after value, actor, reason, time, and correction version stays in the append-only correction journal.
 - Until a retention policy is approved, responses remain stored and no automatic deletion/anonymization job runs.
 - File, image, and signature fields are not enabled until an approved object-storage provider and authorized-download contract exist.

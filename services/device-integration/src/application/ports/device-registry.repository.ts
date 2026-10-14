@@ -19,7 +19,7 @@ export type RegisterDeviceCommand = {
   externalDeviceId: string;
   displayName: string;
   deviceType: DeviceType;
-  reason: string;
+  reason?: string;
 };
 
 export type UpdateDeviceCommand = {
@@ -29,7 +29,7 @@ export type UpdateDeviceCommand = {
   expectedVersion: number;
   displayName?: string;
   status?: DeviceStatus;
-  reason: string;
+  reason?: string;
 };
 
 export type ReportHealthCommand = {

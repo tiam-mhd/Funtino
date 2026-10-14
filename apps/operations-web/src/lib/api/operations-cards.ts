@@ -21,7 +21,6 @@ export type OperationsCardCapabilities = {
   canTransfer: boolean;
   canUnassign: boolean;
   canLookupCustomer: boolean;
-  requiresStepUp: boolean;
 };
 export type OperationsCardPage = {
   data: OperationsCard[];
@@ -75,7 +74,7 @@ export async function listOperationsCards(
 export async function registerOperationsCard(
   organizationId: string,
   branchId: string,
-  input: { externalCardId: string; reason: string },
+  input: { externalCardId: string; reason?: string },
   idempotencyKey: string,
 ) {
   return apiRequest<OperationsCard>(cardsPath(organizationId, branchId), {
@@ -87,7 +86,7 @@ export async function registerOperationsCard(
 
 export async function changeOperationsCardStatus(
   card: OperationsCard,
-  input: { status: OperationsCardStatus; reason: string },
+  input: { status: OperationsCardStatus; reason?: string },
   idempotencyKey: string,
 ) {
   return apiRequest<OperationsCard>(

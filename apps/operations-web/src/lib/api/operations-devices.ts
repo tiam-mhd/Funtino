@@ -94,7 +94,7 @@ export type DeviceRegistration = {
   externalDeviceId: string;
   displayName: string;
   deviceType: OperationsDevice['deviceType'];
-  reason: string;
+  reason?: string;
 };
 
 export async function registerOperationsDevice(
@@ -111,7 +111,7 @@ export async function registerOperationsDevice(
 
 export async function updateOperationsDevice(
   device: OperationsDevice,
-  input: { displayName?: string; status?: OperationsDevice['status']; reason: string },
+  input: { displayName?: string; status?: OperationsDevice['status']; reason?: string },
   idempotencyKey: string,
 ) {
   return apiRequest<{ deviceId: string; status: OperationsDevice['status']; version: number }>(

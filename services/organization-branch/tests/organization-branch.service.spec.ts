@@ -310,6 +310,7 @@ test('system organization and branch mutations allow an omitted reason but termi
   );
   assert.equal(statusInputSchema.safeParse({ status: 'suspended' }).success, true);
   assert.equal(statusInputSchema.safeParse({ status: 'archived' }).success, false);
+  assert.equal(statusInputSchema.safeParse({ status: 'archived', reason: 'short' }).success, false);
   assert.equal(
     statusInputSchema.safeParse({ status: 'archived', reason: 'Approved terminal archive' })
       .success,

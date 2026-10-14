@@ -10,15 +10,6 @@ import {
   type OperationsScopeOption,
 } from '../../lib/auth/operations-access';
 import {
-  confirmOperationsMfaEnrollment,
-  getOperationsMfaStatus,
-  startOperationsMfaEnrollment,
-  verifyOperationsMfaStepUp,
-  type OperationsMfaEnrollment,
-  type OperationsMfaRecoveryCodes,
-  type OperationsMfaStatus,
-} from '../../lib/api/operations-staff';
-import {
   listOperationsDeviceBranches,
   listOperationsDevices,
   registerOperationsDevice,
@@ -33,13 +24,10 @@ type Props = {
   scope: OperationsScope;
   scopeOption: OperationsScopeOption;
   onSessionExpired: () => void;
-  mfaStepUpUntil: number | null;
-  onMfaStepUp: (validUntil: number) => void;
 };
 type HealthFilter = 'all' | OperationsDevice['healthState'];
 type DeviceTypeFilter = 'all' | OperationsDevice['deviceType'];
 type StatusFilter = 'all' | OperationsDevice['status'];
-type MfaStage = 'verify' | 'start-enrollment' | 'confirm-enrollment' | 'save-recovery';
 type DeviceDraft = {
   displayName: string;
   status: '' | OperationsDevice['status'];
@@ -89,13 +77,7 @@ const typeLabels: Record<OperationsDevice['deviceType'], string> = {
   other: 'سایر',
 };
 
-export function DeviceManagement({
-  scope,
-  scopeOption,
-  onSessionExpired,
-  mfaStepUpUntil,
-  onMfaStepUp,
-}: Props) {
+export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props) {
   const currentScopeKey = scopeKey(scope);
   const [devices, setDevices] = useState<OperationsDevice[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -133,16 +115,6 @@ export function DeviceManagement({
     reason: '',
     confirmRetirement: false,
   });
-  const [mfaStatus, setMfaStatus] = useState<OperationsMfaStatus | null>(null);
-  const [mfaStage, setMfaStage] = useState<MfaStage | null>(null);
-  const [mfaMethod, setMfaMethod] = useState<'totp' | 'recovery'>('totp');
-  const [mfaCode, setMfaCode] = useState('');
-  const [mfaError, setMfaError] = useState('');
-  const [mfaBusy, setMfaBusy] = useState(false);
-  const [enrollment, setEnrollment] = useState<OperationsMfaEnrollment | null>(null);
-  const [enrollmentCode, setEnrollmentCode] = useState('');
-  const [recoveryCodes, setRecoveryCodes] = useState<OperationsMfaRecoveryCodes | null>(null);
-  const [recoveryCodesSaved, setRecoveryCodesSaved] = useState(false);
   const scopeRef = useRef(scope);
   const scopeOptionRef = useRef(scopeOption);
   const statusFilterRef = useRef(statusFilter);
@@ -272,10 +244,6 @@ export function DeviceManagement({
     setBranchFilter('all');
     setShowFollowUp(false);
     setRegistrationOpen(false);
-    setMfaStatus(null);
-    setMfaStage(null);
-    setEnrollment(null);
-    setRecoveryCodes(null);
     setRegistrationDraft({
       branchId: activeScope.type === 'branch' ? activeScope.branchId : '',
       adapterKey: 'manual',
@@ -408,7 +376,7 @@ export function DeviceManagement({
       externalDeviceId: registrationDraft.externalDeviceId.trim(),
       displayName: registrationDraft.displayName.trim(),
       deviceType: registrationDraft.deviceType,
-      reason: registrationDraft.reason.trim(),
+      ...(registrationDraft.reason.trim() ? { reason: registrationDraft.reason.trim() } : {}),
     };
     const fingerprint = JSON.stringify([scope.organizationId, branchId, body]);
     const key =
@@ -446,9 +414,8 @@ export function DeviceManagement({
       setActionError('برای بازنشستگی دائمی دستگاه، تأیید صریح را ثبت کنید.');
       return;
     }
-    const body: { displayName?: string; status?: OperationsDevice['status']; reason: string } = {
-      reason: deviceDraft.reason.trim(),
-    };
+    const body: { displayName?: string; status?: OperationsDevice['status']; reason?: string } = {};
+    if (deviceDraft.reason.trim()) body.reason = deviceDraft.reason.trim();
     const nextName = deviceDraft.displayName.trim();
     if (nextName && nextName !== device.displayName) body.displayName = nextName;
     if (deviceDraft.status && deviceDraft.status !== device.status)
@@ -477,115 +444,6 @@ export function DeviceManagement({
       else setActionError(messageFor(failure));
     } finally {
       setActionBusy(false);
-    }
-  }
-
-  async function openMfaStepUp() {
-    setMfaBusy(true);
-    setMfaError('');
-    try {
-      const status = await getOperationsMfaStatus();
-      setMfaStatus(status);
-      setMfaStage(status.enabled ? 'verify' : 'start-enrollment');
-      setMfaCode('');
-    } catch (failure) {
-      if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
-      else setMfaError(messageFor(failure));
-    } finally {
-      setMfaBusy(false);
-    }
-  }
-
-  async function beginMfaEnrollment() {
-    setMfaBusy(true);
-    setMfaError('');
-    try {
-      const nextEnrollment = await startOperationsMfaEnrollment();
-      setEnrollment(nextEnrollment);
-      setEnrollmentCode('');
-      setMfaStage('confirm-enrollment');
-    } catch (failure) {
-      if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
-      else setMfaError(messageFor(failure));
-    } finally {
-      setMfaBusy(false);
-    }
-  }
-
-  async function verifyMfa(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const code =
-      mfaMethod === 'totp'
-        ? normalizeDigits(mfaCode).replace(/\D/g, '')
-        : normalizeDigits(mfaCode).trim().toUpperCase();
-    if (
-      mfaMethod === 'totp' ? !/^\d{6}$/.test(code) : !/^[0-9A-F]{8}(?:-[0-9A-F]{8}){3}$/.test(code)
-    ) {
-      setMfaError(
-        mfaMethod === 'totp'
-          ? 'کد برنامه‌ی رمزساز باید ۶ رقم باشد.'
-          : 'قالب کد بازیابی معتبر نیست.',
-      );
-      return;
-    }
-    setMfaBusy(true);
-    setMfaError('');
-    try {
-      const proof = await verifyOperationsMfaStepUp({ method: mfaMethod, code });
-      onMfaStepUp(Date.parse(proof.validUntil));
-      setMfaCode('');
-      setMfaStage(null);
-      await refresh(true);
-      setNotice('تأیید دومرحله‌ای این نشست انجام شد؛ مجوزهای عملیاتی دوباره از سرور خوانده شدند.');
-    } catch (failure) {
-      if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
-      else setMfaError(messageFor(failure));
-    } finally {
-      setMfaBusy(false);
-    }
-  }
-
-  async function confirmMfaEnrollment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const code = normalizeDigits(enrollmentCode).replace(/\D/g, '');
-    if (!/^\d{6}$/.test(code)) {
-      setMfaError('کد برنامه‌ی رمزساز باید ۶ رقم باشد.');
-      return;
-    }
-    setMfaBusy(true);
-    setMfaError('');
-    try {
-      const result = await confirmOperationsMfaEnrollment(code);
-      onMfaStepUp(Date.parse(result.validUntil));
-      setRecoveryCodes(result);
-      setRecoveryCodesSaved(false);
-      setMfaStatus({
-        enabled: true,
-        enrollmentPending: false,
-        recoveryCodesRemaining: result.recoveryCodes.length,
-      });
-      setEnrollment(null);
-      setEnrollmentCode('');
-      setMfaStage('save-recovery');
-    } catch (failure) {
-      if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
-      else setMfaError(messageFor(failure));
-    } finally {
-      setMfaBusy(false);
-    }
-  }
-
-  async function finishMfaEnrollment() {
-    if (!recoveryCodesSaved || mfaBusy) return;
-    setMfaBusy(true);
-    setMfaError('');
-    try {
-      setRecoveryCodes(null);
-      setMfaStage(null);
-      await refresh(true);
-      setNotice('MFA فعال شد؛ مجوزهای ثبت و مدیریت دوباره از سرور بررسی شدند.');
-    } finally {
-      setMfaBusy(false);
     }
   }
 
@@ -634,146 +492,6 @@ export function DeviceManagement({
             برای ثبت دستگاه در محدوده‌ی مجموعه، مجوز مشاهده‌ی شعب (branch.read) نیز لازم است.
           </p>
         )}
-      {!capabilities.canRegister && !capabilities.canManage && (
-        <Surface className={styles.mfaPanel} aria-labelledby="device-mfa-title">
-          <div className={styles.mfaHeading}>
-            <div>
-              <h3 id="device-mfa-title">تأیید MFA برای عملیات حساس</h3>
-              <p className={styles.helper}>
-                ثبت و تغییر چرخه‌عمر به مجوز نقش و step-up کوتاه‌مدت نیاز دارد. بررسی نهایی همیشه در
-                سرور انجام می‌شود.
-              </p>
-            </div>
-            {!mfaStage && !(mfaStepUpUntil && mfaStepUpUntil > Date.now()) && (
-              <Button
-                type="button"
-                tone="secondary"
-                disabled={mfaBusy}
-                onClick={() => void openMfaStepUp()}
-              >
-                {mfaBusy ? 'در حال بررسی…' : 'احراز MFA در این نشست'}
-              </Button>
-            )}
-          </div>
-          {!mfaStage && mfaStepUpUntil && mfaStepUpUntil > Date.now() && (
-            <p className={styles.helper} role="status">
-              MFA این نشست تأیید شده است، اما IAM برای این محدوده مجوز ثبت یا مدیریت دستگاه نداده
-              است؛ برای دسترسی با مدیر سامانه تماس بگیرید.
-            </p>
-          )}
-          {mfaError && (
-            <p className={styles.error} role="alert">
-              {mfaError}
-            </p>
-          )}
-          {mfaStage === 'verify' && (
-            <form className={styles.mfaForm} onSubmit={(event) => void verifyMfa(event)}>
-              <label className={styles.field} htmlFor="device-mfa-method">
-                روش تأیید
-                <select
-                  id="device-mfa-method"
-                  disabled={mfaBusy}
-                  value={mfaMethod}
-                  onChange={(event) =>
-                    setMfaMethod(event.currentTarget.value as 'totp' | 'recovery')
-                  }
-                >
-                  <option value="totp">کد برنامه‌ی رمزساز</option>
-                  <option value="recovery">کد بازیابی یک‌بارمصرف</option>
-                </select>
-              </label>
-              <label className={styles.field} htmlFor="device-mfa-code">
-                {mfaMethod === 'totp' ? 'کد ۶ رقمی' : 'کد بازیابی'}
-                <input
-                  id="device-mfa-code"
-                  autoComplete="one-time-code"
-                  dir="ltr"
-                  inputMode={mfaMethod === 'totp' ? 'numeric' : 'text'}
-                  maxLength={mfaMethod === 'totp' ? 6 : 35}
-                  required
-                  value={mfaCode}
-                  onChange={(event) => setMfaCode(event.currentTarget.value)}
-                />
-              </label>
-              <Button type="submit" disabled={mfaBusy}>
-                {mfaBusy ? 'در حال تأیید…' : 'تأیید و بازخوانی مجوزها'}
-              </Button>
-            </form>
-          )}
-          {mfaStage === 'start-enrollment' && (
-            <div className={styles.mfaForm}>
-              <p className={styles.helper}>
-                برای عملیات حساس، برنامه‌ی رمزساز را راه‌اندازی کنید؛ پیامک جایگزین MFA نیست.
-              </p>
-              <Button type="button" disabled={mfaBusy} onClick={() => void beginMfaEnrollment()}>
-                {mfaBusy
-                  ? 'در حال آماده‌سازی…'
-                  : mfaStatus?.enrollmentPending
-                    ? 'ادامه‌ی راه‌اندازی MFA'
-                    : 'راه‌اندازی MFA'}
-              </Button>
-            </div>
-          )}
-          {mfaStage === 'confirm-enrollment' && enrollment && (
-            <form className={styles.mfaForm} onSubmit={(event) => void confirmMfaEnrollment(event)}>
-              <p className={styles.helper}>
-                کلید را در برنامه‌ی رمزساز وارد و کد همان برنامه را ثبت کنید. کلید فقط در این نشست
-                نمایش داده می‌شود.
-              </p>
-              <code className={styles.secretCode} dir="ltr">
-                {enrollment.secret}
-              </code>
-              <p className={styles.helper}>مهلت راه‌اندازی: {formatDate(enrollment.expiresAt)}</p>
-              <label className={styles.field} htmlFor="device-mfa-enrollment-code">
-                کد برنامه‌ی رمزساز
-                <input
-                  id="device-mfa-enrollment-code"
-                  autoComplete="one-time-code"
-                  dir="ltr"
-                  inputMode="numeric"
-                  maxLength={6}
-                  required
-                  value={enrollmentCode}
-                  onChange={(event) => setEnrollmentCode(event.currentTarget.value)}
-                />
-              </label>
-              <Button type="submit" disabled={mfaBusy}>
-                {mfaBusy ? 'در حال فعال‌سازی…' : 'فعال‌سازی و دریافت کدهای بازیابی'}
-              </Button>
-            </form>
-          )}
-          {mfaStage === 'save-recovery' && recoveryCodes && (
-            <div className={styles.mfaForm}>
-              <p className={styles.warning}>
-                این کدهای بازیابی فقط همین یک‌بار نمایش داده می‌شوند. آن‌ها را در محل امن ذخیره
-                کنید.
-              </p>
-              <ol className={styles.recoveryCodes} dir="ltr">
-                {recoveryCodes.recoveryCodes.map((code) => (
-                  <li key={code}>
-                    <code>{code}</code>
-                  </li>
-                ))}
-              </ol>
-              <label className={styles.checkField}>
-                <input
-                  type="checkbox"
-                  checked={recoveryCodesSaved}
-                  onChange={(event) => setRecoveryCodesSaved(event.currentTarget.checked)}
-                />
-                کدها را در محل امن ذخیره کردم
-              </label>
-              <Button
-                type="button"
-                disabled={!recoveryCodesSaved || mfaBusy}
-                onClick={() => void finishMfaEnrollment()}
-              >
-                {mfaBusy ? 'در حال ادامه…' : 'ادامه و بررسی مجوزها'}
-              </Button>
-            </div>
-          )}
-        </Surface>
-      )}
       {loadError && (
         <div className={styles.errorBlock} role="alert">
           <p>{loadError}</p>
@@ -886,11 +604,9 @@ export function DeviceManagement({
               </select>
             </label>
             <label className={styles.field} htmlFor="device-registration-reason">
-              دلیل ثبت
+              دلیل ثبت (اختیاری)
               <textarea
                 id="device-registration-reason"
-                required
-                minLength={8}
                 maxLength={500}
                 value={registrationDraft.reason}
                 onChange={(event) =>
@@ -1227,11 +943,9 @@ export function DeviceManagement({
                           </select>
                         </label>
                         <label className={styles.field} htmlFor={`device-reason-${device.id}`}>
-                          دلیل تغییر
+                          دلیل تغییر (اختیاری)
                           <textarea
                             id={`device-reason-${device.id}`}
-                            required
-                            minLength={8}
                             maxLength={500}
                             value={deviceDraft.reason}
                             onChange={(event) =>

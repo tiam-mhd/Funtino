@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
-import Link from 'next/link';
 import { Badge, Button, Surface } from '@funtino/design-system';
 import { ApiRequestError } from '../../lib/api/client';
 import {
@@ -24,7 +23,6 @@ export function SystemCustomerFamilySupport() {
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState('');
-  const [needsStepUp, setNeedsStepUp] = useState(false);
 
   useEffect(() => {
     void getSystemOrganizations()
@@ -66,7 +64,6 @@ export function SystemCustomerFamilySupport() {
     event.preventDefault();
     setSearching(true);
     setError('');
-    setNeedsStepUp(false);
     try {
       const response = await lookupSystemCustomerFamily({
         organizationId,
@@ -76,7 +73,6 @@ export function SystemCustomerFamilySupport() {
       setItems(response.items);
     } catch (failure) {
       setItems(null);
-      setNeedsStepUp(failure instanceof ApiRequestError && failure.status === 403);
       setError(readError(failure));
     } finally {
       setSearching(false);
@@ -97,7 +93,6 @@ export function SystemCustomerFamilySupport() {
       {error && (
         <div className={styles.error} role="alert">
           <span>{error}</span>
-          {needsStepUp && <Link href="/fa/mfa">تأیید دومرحله‌ای</Link>}
         </div>
       )}
       <Surface className={styles.searchCard} aria-busy={loading || searching}>
@@ -281,7 +276,7 @@ function formatHistoryDate(value: string) {
 
 function readError(failure: unknown) {
   if (failure instanceof ApiRequestError && failure.status === 403) {
-    return 'مجوز مشاهده‌ی اطلاعات خانواده وجود ندارد یا تأیید دومرحله‌ای تازه لازم است.';
+    return 'مجوز مشاهده‌ی اطلاعات خانواده یا محدوده‌ی سازمان/شعبه وجود ندارد.';
   }
   if (failure instanceof Error && failure.message) return failure.message;
   return 'اتصال به سامانه برقرار نشد. دوباره تلاش کن.';

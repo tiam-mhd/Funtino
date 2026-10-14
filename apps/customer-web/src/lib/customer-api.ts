@@ -36,23 +36,6 @@ export type OtpRequestResult = {
   devCode?: string;
 };
 
-export type AdminMfaStatus = {
-  enabled: boolean;
-  enrollmentPending: boolean;
-  recoveryCodesRemaining: number;
-};
-
-export type AdminMfaEnrollment = {
-  secret: string;
-  otpauthUri: string;
-  expiresAt: string;
-};
-
-export type AdminMfaRecovery = {
-  recoveryCodes: string[];
-  validUntil: string;
-};
-
 export type CustomerCard = {
   id: string;
   householdId: string;
@@ -213,33 +196,8 @@ export async function verifyOtp(input: {
   challengeId: string;
   phone: string;
   code: string;
-}): Promise<{ user: CustomerUser; expiresAt: string; mfaRequired: boolean }> {
+}): Promise<{ user: CustomerUser; expiresAt: string }> {
   return apiFetch('/api/v1/auth/otp/verify', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-}
-
-export function getOperationsAdminMfaStatus(): Promise<AdminMfaStatus> {
-  return apiFetch('/api/v1/operations/mfa/status');
-}
-
-export function startOperationsAdminMfaEnrollment(): Promise<AdminMfaEnrollment> {
-  return apiFetch('/api/v1/operations/mfa/enrollment/start', { method: 'POST' });
-}
-
-export function confirmOperationsAdminMfaEnrollment(code: string): Promise<AdminMfaRecovery> {
-  return apiFetch('/api/v1/operations/mfa/enrollment/confirm', {
-    method: 'POST',
-    body: JSON.stringify({ code }),
-  });
-}
-
-export function verifyOperationsAdminMfaStepUp(input: {
-  method: 'totp' | 'recovery';
-  code: string;
-}): Promise<{ validUntil: string }> {
-  return apiFetch('/api/v1/operations/mfa/step-up/verify', {
     method: 'POST',
     body: JSON.stringify(input),
   });

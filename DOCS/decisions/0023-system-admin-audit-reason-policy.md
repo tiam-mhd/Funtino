@@ -4,6 +4,7 @@
 - وضعیت: accepted
 - تصمیم‌گیر: مالک محصول
 - دامنه: System Web، API Gateway، Identity & Access، Organization & Branch، OpenAPI و دو runtime bundle
+- superseded by ADR-0025: دسته‌بندی reason برای تغییر role/permission، override و membership؛ فهرست step-up و فرمان‌های پرریسک
 
 ## زمینه
 
@@ -11,13 +12,13 @@
 
 ## تصمیم
 
-- فیلدهای دلیل در فرم‌های مدیریتی System باقی می‌مانند. ایجاد، ویرایش، تغییر نقش، دعوت یا لغو دعوتِ در انتظار، تعلیق/فعال‌سازی مجدد و ایجاد override بدون دلیل هم مجازند؛ دلیل واردشده ثبت می‌شود.
-- دلیل برای لغو عضویت فعال کارکنان و لغو override فعال اجباری است. System Web پیش از هر دو عمل تأیید صریح می‌گیرد. API Gateway و سرویس Identity & Access این الزام را مستقل از UI اعمال می‌کنند.
+- فیلدهای دلیل در فرم‌های مدیریتی System باقی می‌مانند. دلیل برای دعوت و لغو دعوتِ در انتظار، تعلیق/فعال‌سازی مجدد، ویرایش نام نقش و تغییرهای عادی سازمان/شعبه اختیاری است؛ دلیل واردشده ثبت می‌شود.
+- دلیل برای ایجاد نقش دارای permission، تغییر مؤثر permissionهای role، تغییر role عضویت فعال، ایجاد/revoke override فعال و revoke دائمی membership فعال اجباری است. ADR-0025 تعیین می‌کند کدام commandهای این فهرست نیز به MFA step-up نیاز دارند.
 - در قابلیت فعلی System Web، حذف نقش، مجموعه یا شعبه ارائه نمی‌شود. غیرفعال‌کردن نقش و تعلیق مجموعه/شعبه گذارهای برگشت‌پذیرند و دلیل اجباری ندارند. آرشیو terminal در API مالک سازمان/شعبه، اگر از مسیر مجاز دیگری اجرا شود، همچنان دلیل می‌خواهد.
 - هر mutation همچنان actor، scope، هدف، زمان، correlation id، نتیجه و snapshot قبل/بعد لازم را audit می‌کند. نسخه‌ی policy، رکورد audit و Outbox در IAM اتمیک می‌مانند؛ در Organization & Branch، audit و Outbox مالک نیز اتمیک می‌مانند.
 - دلیل اختیاری در storage با مقدار `NULL` نمایش داده می‌شود؛ متن خالی ذخیره نمی‌شود. audit append-only و retention فعلی بدون تغییر می‌ماند.
 - APIهای Operations و System برای دسترسی IAM مشترک‌اند؛ API اجازه‌ی دلیل خالی در mutationهای عادی را می‌دهد، اما UI عملیات فعلی دست‌نخورده می‌ماند. الزام دلیل در لغوهای بحرانی برای همه‌ی مصرف‌کنندگان API یکسان است.
-- MFA، مجوز server-side، scope، last-admin protection، idempotency، optimistic concurrency و قواعد مالکیت داده تغییر نمی‌کنند.
+- قواعد جاری MFA و step-up طبق ADR-0025 هستند؛ مجوز server-side، scope، last-admin protection، idempotency، optimistic concurrency، ساختار audit و قواعد مالکیت داده‌ی این ADR حفظ می‌شوند.
 
 ## گزینه‌های بررسی‌شده
 
