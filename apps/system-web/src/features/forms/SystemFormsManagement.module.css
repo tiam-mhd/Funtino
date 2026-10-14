@@ -167,6 +167,25 @@
   gap: 22px;
 }
 
+.columns[data-mode='edit'],
+.columns[data-mode='settings'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.templateActions,
+.formActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.formActions {
+  justify-content: flex-end;
+  border-block-start: 1px solid var(--sys-line);
+  padding-block-start: 14px;
+}
+
 .templateEditor,
 .createTemplate,
 .themeForm {

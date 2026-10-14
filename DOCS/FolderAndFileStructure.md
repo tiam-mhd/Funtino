@@ -292,12 +292,39 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 
     apps/operations-web/src/
       app/
-        page.tsx
+        (workspace)/
+          layout.tsx
+          page.tsx
+          branches/page.tsx
+          staff/page.tsx
+          invitations/
+            received/page.tsx
+            issued/page.tsx
+          devices/page.tsx
+          cards/
+            inventory/page.tsx
+            assignments/page.tsx
+          family/
+            layout.tsx
+            page.tsx
+            members/page.tsx
+            invitations/page.tsx
+            history/page.tsx
+          forms/
+            page.tsx
+            responses/page.tsx
+            branches/page.tsx
+          reports/
+            page.tsx
+            branches/page.tsx
+            daily/page.tsx
         account/
           security/
             management-password/
       features/
         branch-scope/
+          OperationsEntry.tsx
+          OperationsWorkspaceContext.tsx
         staff-access/
         security/
         cashier/
@@ -307,6 +334,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
         reports/
       components/
         workspace-shell/
+          ManagementListPage.tsx
         tables/
         forms/
         confirmation/
@@ -326,7 +354,8 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 - عملیات پرتکرار صندوق برای keyboard و شبکه‌ی ضعیف بهینه شود.
 - data table و form از componentهای اختصاصی و قابل تست استفاده کنند؛ query مستقیم در component عمومی ممنوع است.
 - تنظیم رمز مدیریت در `features/security/ManagementPasswordSettings.tsx` و route `app/account/security/management-password/` است؛ API فقط از نشست دارای audience مدیریت استفاده می‌کند.
-- به‌دلیل ساختار موجود Operations که با `src/app/page.tsx` و `OperationsEntry` اجرا می‌شود، صفحه‌ی رمز مدیریت در `src/app/account/security/management-password/page.tsx` قرار می‌گیرد. این exception فقط route امنیت حساب را پوشش می‌دهد و هر گسترش routeهای چندزبانه یا تبدیل Entry به workspace layout به ADR جدا نیاز دارد.
+- routeهای فضای کاری در گروه `(workspace)` قرار می‌گیرند تا layout احراز هویت و scope روی جابه‌جایی route باقی بماند؛ `/` نمای کلی است و فهرست‌های شعب، کارکنان، دعوت‌ها، تجهیزات/کارت، فرم، گزارش و بخش‌های خانواده مسیرهای جدا دارند. layout خانواده نتیجه‌ی lookup مجاز را حین جابه‌جایی داخلی نگه می‌دارد؛ پس از refresh، شماره در URL یا ذخیره‌سازی مرورگر بازیابی نمی‌شود و lookup باید دوباره انجام شود. این گسترش طبق [ADR-0026](decisions/0026-separate-management-list-pages.md) انجام می‌شود.
+- صفحه‌ی رمز مدیریت خارج از route group کاری در `src/app/account/security/management-password/page.tsx` می‌ماند؛ نشست و رفتار امنیت حساب تغییر نمی‌کند.
 
 ## ۷. ساختار system-web
 
@@ -341,13 +370,57 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
               page.tsx
           (console)/
             layout.tsx
-            access/page.tsx
-            customer-family/page.tsx
-            forms/page.tsx
+            access/
+              page.tsx
+              layout.tsx
+              staff/
+                page.tsx
+                invite/page.tsx
+                [membershipId]/page.tsx
+                [membershipId]/edit/page.tsx
+              invitations/
+                received/page.tsx
+                received/[invitationId]/page.tsx
+                issued/page.tsx
+                issued/[invitationId]/page.tsx
+              roles/
+                page.tsx
+                new/page.tsx
+                [roleId]/page.tsx
+                [roleId]/edit/page.tsx
+              audit/
+                page.tsx
+                [eventId]/page.tsx
+            customer-family/
+              layout.tsx
+              page.tsx
+              members/page.tsx
+              invitations/page.tsx
+              history/page.tsx
+            forms/
+              layout.tsx
+              page.tsx
+              templates/
+                page.tsx
+                new/page.tsx
+                [templateId]/page.tsx
+                [templateId]/edit/page.tsx
+                settings/page.tsx
             organizations/
+              layout.tsx
               page.tsx
+              new/page.tsx
+              [organizationId]/page.tsx
+              [organizationId]/edit/page.tsx
+              branches/
+                page.tsx
+                new/page.tsx
+                [branchId]/page.tsx
+                [branchId]/edit/page.tsx
             system-health/
+              layout.tsx
               page.tsx
+              alerts/page.tsx
             security/
               mfa/page.tsx
               management-password/page.tsx
@@ -361,13 +434,14 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
         health/
       components/
         system-shell/
+          ManagementListPage.tsx
       lib/
         api/
       tests/
 
-در وضعیت فعلی source، صفحه‌ی ورود مستقل وجود ندارد: گروه `(console)` با `ManagementAuthGate` نشست مدیریتی را بررسی و در صورت نیاز OTP و رمز اختیاری را دریافت می‌کند. مسیر `(auth)/mfa` فقط به تنظیمات MFA در کنسول هدایت می‌شود. مسیر `/` صفحه‌ی ورود به پنل است. routeهای `overview`، `branches`، `users`، `memberships`، `roles`، `integrations`، `audit`، `feature-flags` و `support` در برنامه‌ی محصول آمده‌اند اما در source فعلی route مستقل ندارند؛ تا زمان پیاده‌سازی قرارداد و صفحه‌ی واقعی، نباید در navigation نمایش داده شوند.
+در وضعیت فعلی source، صفحه‌ی ورود مستقل وجود ندارد: گروه `(console)` با `ManagementAuthGate` نشست مدیریتی را بررسی و در صورت نیاز OTP و رمز اختیاری را دریافت می‌کند. مسیر `(auth)/mfa` فقط به تنظیمات MFA در کنسول هدایت می‌شود. فهرست‌های موجود برای سازمان، شعبه، کارکنان و دعوت‌ها، نقش‌ها، ممیزی دسترسی، فرم‌ها و قالب‌ها، سرویس‌ها و هشدارهای فعال routeهای مستقل در کنسول می‌گیرند؛ هرکدام از endpointهای موجود همان feature خوانده می‌شوند. مسیرهای `integrations`، `feature-flags` و `support` در برنامه‌ی محصول آمده‌اند اما در source فعلی قرارداد و صفحه‌ی مستقل ندارند؛ تا پیاده‌سازی واقعی، نباید در navigation نمایش داده شوند. مسیرهای قبلی هر حوزه view اصلی همان بخش را نگه می‌دارند تا bookmarkهای معتبر نشکنند.
 
-کامپوننت‌های مشترک کنسول (پوسته، header صفحه، تأیید عملیات، toast و loading skeleton) در `components/system-shell/` قرار می‌گیرند. APIهای ویژه‌ی system-web در `lib/api/` باقی می‌مانند و فرم، خانواده، health، organization، security و access control در feature مالک خود پیاده می‌شوند.
+کامپوننت‌های مشترک کنسول (پوسته، header صفحه، الگوی فهرست، تأیید عملیات، toast و loading skeleton) در `components/system-shell/` قرار می‌گیرند. APIهای ویژه‌ی system-web در `lib/api/` باقی می‌مانند و فرم، خانواده، health، organization، security و access control در feature مالک خود پیاده می‌شوند. `ManagementListPage.tsx` فقط چیدمان و کنترل‌های عمومی فهرست را ارائه می‌کند؛ فیلتر، مجوز، scope و داده در feature باقی می‌ماند.
 
 قواعد system-web:
 
@@ -380,6 +454,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 - تنظیم مدت نشست مدیریتی در `features/security/SessionPolicySettings.tsx` و route `app/[locale]/(console)/security/session-policy/` قرار می‌گیرد؛ API فقط از Gateway و پس از مجوز global در IAM فراخوانی می‌شود.
 - تنظیم رمز مدیریت در `features/security/ManagementPasswordSettings.tsx` و route `app/[locale]/(console)/security/management-password/` قرار می‌گیرد؛ نشست با audience مدیریت محافظت می‌شود و رمز فقط به‌صورت hash در User Gateway ذخیره می‌شود.
 - ورود مدیریتی در gate گروه `(console)` انجام می‌شود؛ OTP مدیریت از OTP مشتری جداست و customer session هرگز به management session ارتقا داده نمی‌شود.
+- تفکیک route و گروه‌بندی منو طبق [ADR-0026](decisions/0026-separate-management-list-pages.md) انجام می‌شود؛ فهرست اعضا، دعوت‌ها و تاریخچه‌ی خانواده routeهای مجزا دارند و نتیجه‌ی lookup فقط در layout همان جریان می‌ماند. هیچ دسته‌بندی تازه‌ای فراتر از قابلیت‌های موجود وارد navigation نمی‌شود.
 
 ## ۸. ساختار هر سرویس دامنه
 

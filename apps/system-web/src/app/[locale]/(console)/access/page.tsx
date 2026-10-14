@@ -1,5 +1,5 @@
-import { AccessManagement } from '../../../../features/access-control/AccessManagement';
+import { redirect } from 'next/navigation';
 
 export default function AccessPage() {
-  return <AccessManagement />;
+  redirect('/fa/access/staff');
 }

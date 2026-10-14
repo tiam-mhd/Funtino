@@ -26,6 +26,7 @@ type Props = {
   onSessionExpired: () => void;
   mfaStepUpUntil: number | null;
   onMfaStepUp: (validUntil: number) => void;
+  view?: 'summary' | 'branches' | 'daily';
 };
 type MfaStage = 'verify' | 'enroll' | 'confirm' | 'recovery';
 
@@ -39,7 +40,13 @@ const metricLabels: Array<{ key: keyof Omit<OperationsDailyReportRow, 'date'>; l
   { key: 'healthOffline', label: 'مشاهده آفلاین' },
 ];
 
-export function OperationsReports({ scope, onSessionExpired, mfaStepUpUntil, onMfaStepUp }: Props) {
+export function OperationsReports({
+  scope,
+  onSessionExpired,
+  mfaStepUpUntil,
+  onMfaStepUp,
+  view = 'summary',
+}: Props) {
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const defaultFrom = useMemo(() => {
     const value = new Date(`${today}T00:00:00.000Z`);
@@ -253,8 +260,18 @@ export function OperationsReports({ scope, onSessionExpired, mfaStepUpUntil, onM
       <div className={styles.heading}>
         <div>
           <div className={styles.eyebrow}>گزارش فقط‌خواندنی و scope‌دار</div>
-          <h2 id="operations-reports-title">گزارش‌های عملیاتی</h2>
-          <p>داده‌ی تجمیعی شعب و سلامت دستگاه‌ها؛ بدون اطلاعات تماس، عضو یا مانده‌ی مالی.</p>
+          <h2 id="operations-reports-title">
+            {view === 'branches'
+              ? 'مقایسه‌ی شعب'
+              : view === 'daily'
+                ? 'روند روزانه‌ی رویدادها'
+                : 'خلاصه‌ی گزارش عملیاتی'}
+          </h2>
+          <p>
+            {view === 'branches'
+              ? 'وضعیت جاری دستگاه‌ها در شعب مجموعه؛ نه عملکرد مالی یا مراجعه.'
+              : 'داده‌ی تجمیعی سلامت و رویدادها؛ بدون اطلاعات تماس، عضو یا مانده‌ی مالی.'}
+          </p>
         </div>
         <Button
           type="button"
@@ -266,48 +283,50 @@ export function OperationsReports({ scope, onSessionExpired, mfaStepUpUntil, onM
         </Button>
       </div>
 
-      <Surface className={styles.filters}>
-        <form className={styles.filterForm} onSubmit={(event) => void applyRange(event)}>
-          <label htmlFor="report-from">
-            از تاریخ
-            <JalaliDatePickerField
-              id="report-from"
-              maxDate={today}
-              required
-              value={from}
-              onChange={setFrom}
-              title="انتخاب تاریخ شروع گزارش"
-            />
-          </label>
-          <label htmlFor="report-to">
-            تا تاریخ
-            <JalaliDatePickerField
-              id="report-to"
-              maxDate={today}
-              required
-              value={to}
-              onChange={setTo}
-              title="انتخاب تاریخ پایان گزارش"
-            />
-          </label>
-          <div className={styles.filterActions}>
-            <Button type="submit" disabled={loading}>
-              اعمال بازه
-            </Button>
-            <Button
-              type="button"
-              tone="ghost"
-              disabled={exporting || !report?.capabilities.canExport}
-              onClick={() => void downloadReport()}
-            >
-              {exporting ? 'در حال آماده‌سازی…' : 'خروجی CSV امن'}
-            </Button>
-          </div>
-        </form>
-        <p className={styles.helper}>
-          روزهای انتخابی بر پایه‌ی UTC محاسبه می‌شوند؛ حداکثر بازه ۳۶۶ روز است.
-        </p>
-      </Surface>
+      {view !== 'branches' && (
+        <Surface className={styles.filters}>
+          <form className={styles.filterForm} onSubmit={(event) => void applyRange(event)}>
+            <label htmlFor="report-from">
+              از تاریخ
+              <JalaliDatePickerField
+                id="report-from"
+                maxDate={today}
+                required
+                value={from}
+                onChange={setFrom}
+                title="انتخاب تاریخ شروع گزارش"
+              />
+            </label>
+            <label htmlFor="report-to">
+              تا تاریخ
+              <JalaliDatePickerField
+                id="report-to"
+                maxDate={today}
+                required
+                value={to}
+                onChange={setTo}
+                title="انتخاب تاریخ پایان گزارش"
+              />
+            </label>
+            <div className={styles.filterActions}>
+              <Button type="submit" disabled={loading}>
+                اعمال بازه
+              </Button>
+              <Button
+                type="button"
+                tone="ghost"
+                disabled={exporting || !report?.capabilities.canExport}
+                onClick={() => void downloadReport()}
+              >
+                {exporting ? 'در حال آماده‌سازی…' : 'خروجی CSV امن'}
+              </Button>
+            </div>
+          </form>
+          <p className={styles.helper}>
+            روزهای انتخابی بر پایه‌ی UTC محاسبه می‌شوند؛ حداکثر بازه ۳۶۶ روز است.
+          </p>
+        </Surface>
+      )}
 
       {loading && !report && (
         <Surface className={styles.state} role="status" aria-live="polite">
@@ -363,65 +382,69 @@ export function OperationsReports({ scope, onSessionExpired, mfaStepUpUntil, onM
             </p>
           </Surface>
 
-          {!report.capabilities.canExport && (
+          {view !== 'branches' && !report.capabilities.canExport && (
             <p className={styles.helper}>
               برای این محدوده مجوز report.export ندارید؛ امکان دریافت فایل فعال نیست.
             </p>
           )}
-          <div className={styles.metricsGrid}>
-            <MetricCard
-              title="شعب در projection"
-              value={
-                report.snapshot.branches.active +
-                report.snapshot.branches.suspended +
-                report.snapshot.branches.archived
-              }
-              detail={`فعال ${report.snapshot.branches.active} · تعلیق ${report.snapshot.branches.suspended} · آرشیو ${report.snapshot.branches.archived}`}
-            />
-            <MetricCard
-              title="دستگاه‌های ثبت‌شده"
-              value={report.snapshot.devices.total}
-              detail={`فعال ${report.snapshot.devices.active} · تعلیق ${report.snapshot.devices.suspended} · بازنشسته ${report.snapshot.devices.retired}`}
-            />
-            <MetricCard
-              title="نیازمند پیگیری"
-              value={
-                report.snapshot.devices.health.offline +
-                report.snapshot.devices.health.stale +
-                report.snapshot.devices.health.degraded
-              }
-              detail={`آفلاین ${report.snapshot.devices.health.offline} · کهنه ${report.snapshot.devices.health.stale} · مختل ${report.snapshot.devices.health.degraded}`}
-              tone="warning"
-            />
-            <MetricCard
-              title="تازگی نامشخص"
-              value={report.snapshot.devices.health.unknown}
-              detail={`چرخه‌عمر ناشناخته ${report.snapshot.devices.unknownLifecycle}`}
-            />
-          </div>
-
-          <Surface className={styles.periodSummary}>
-            <div className={styles.sectionHeading}>
-              <div>
-                <h3>رویدادهای بازه</h3>
-                <p>
-                  {report.period.from} تا {report.period.to} · {toPersianDigits(report.period.days)}{' '}
-                  روز
-                </p>
-              </div>
-              <Badge tone="neutral">UTC</Badge>
+          {view === 'summary' && (
+            <div className={styles.metricsGrid}>
+              <MetricCard
+                title="شعب در projection"
+                value={
+                  report.snapshot.branches.active +
+                  report.snapshot.branches.suspended +
+                  report.snapshot.branches.archived
+                }
+                detail={`فعال ${report.snapshot.branches.active} · تعلیق ${report.snapshot.branches.suspended} · آرشیو ${report.snapshot.branches.archived}`}
+              />
+              <MetricCard
+                title="دستگاه‌های ثبت‌شده"
+                value={report.snapshot.devices.total}
+                detail={`فعال ${report.snapshot.devices.active} · تعلیق ${report.snapshot.devices.suspended} · بازنشسته ${report.snapshot.devices.retired}`}
+              />
+              <MetricCard
+                title="نیازمند پیگیری"
+                value={
+                  report.snapshot.devices.health.offline +
+                  report.snapshot.devices.health.stale +
+                  report.snapshot.devices.health.degraded
+                }
+                detail={`آفلاین ${report.snapshot.devices.health.offline} · کهنه ${report.snapshot.devices.health.stale} · مختل ${report.snapshot.devices.health.degraded}`}
+                tone="warning"
+              />
+              <MetricCard
+                title="تازگی نامشخص"
+                value={report.snapshot.devices.health.unknown}
+                detail={`چرخه‌عمر ناشناخته ${report.snapshot.devices.unknownLifecycle}`}
+              />
             </div>
-            <div className={styles.totalGrid}>
-              {metricLabels.map(({ key, label }) => (
-                <div key={key}>
-                  <span>{label}</span>
-                  <strong>{toPersianDigits(report.totals[key])}</strong>
+          )}
+
+          {view === 'summary' && (
+            <Surface className={styles.periodSummary}>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <h3>رویدادهای بازه</h3>
+                  <p>
+                    {report.period.from} تا {report.period.to} ·{' '}
+                    {toPersianDigits(report.period.days)} روز
+                  </p>
                 </div>
-              ))}
-            </div>
-          </Surface>
+                <Badge tone="neutral">UTC</Badge>
+              </div>
+              <div className={styles.totalGrid}>
+                {metricLabels.map(({ key, label }) => (
+                  <div key={key}>
+                    <span>{label}</span>
+                    <strong>{toPersianDigits(report.totals[key])}</strong>
+                  </div>
+                ))}
+              </div>
+            </Surface>
+          )}
 
-          {scope.type === 'organization' && (
+          {view === 'branches' && scope.type === 'organization' && (
             <Surface className={styles.branchPanel}>
               <div className={styles.sectionHeading}>
                 <div>
@@ -476,76 +499,80 @@ export function OperationsReports({ scope, onSessionExpired, mfaStepUpUntil, onM
             </Surface>
           )}
 
-          <Surface className={styles.periodSummary}>
-            <div className={styles.sectionHeading}>
-              <div>
-                <h3>روند روزانه</h3>
-                <p>شمار رویدادهای معتبر، نه تعداد مشتری یکتا.</p>
+          {view === 'daily' && (
+            <Surface className={styles.periodSummary}>
+              <div className={styles.sectionHeading}>
+                <div>
+                  <h3>روند روزانه</h3>
+                  <p>شمار رویدادهای معتبر، نه تعداد مشتری یکتا.</p>
+                </div>
               </div>
-            </div>
-            <div
-              className={styles.tableScroller}
-              role="region"
-              aria-label="جدول روند روزانه؛ پیمایش افقی"
-              tabIndex={0}
-            >
-              <table>
-                <thead>
-                  <tr>
-                    <th scope="col">روز UTC</th>
-                    {metricLabels.map(({ key, label }) => (
-                      <th scope="col" key={key}>
-                        {label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.daily.map((row) => (
-                    <tr key={row.date}>
-                      <th scope="row">{row.date}</th>
-                      {metricLabels.map(({ key }) => (
-                        <td key={key}>{toPersianDigits(row[key])}</td>
+              <div
+                className={styles.tableScroller}
+                role="region"
+                aria-label="جدول روند روزانه؛ پیمایش افقی"
+                tabIndex={0}
+              >
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">روز UTC</th>
+                      {metricLabels.map(({ key, label }) => (
+                        <th scope="col" key={key}>
+                          {label}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Surface>
+                  </thead>
+                  <tbody>
+                    {report.daily.map((row) => (
+                      <tr key={row.date}>
+                        <th scope="row">{row.date}</th>
+                        {metricLabels.map(({ key }) => (
+                          <td key={key}>{toPersianDigits(row[key])}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Surface>
+          )}
 
-          <div className={styles.healthPanel} aria-label="توزیع سلامت جاری دستگاه‌ها">
-            {healthMetric(
-              'آنلاین',
-              report.snapshot.devices.health.online,
-              maxHealthCount,
-              'success',
-            )}
-            {healthMetric(
-              'دارای اختلال',
-              report.snapshot.devices.health.degraded,
-              maxHealthCount,
-              'warning',
-            )}
-            {healthMetric(
-              'داده کهنه',
-              report.snapshot.devices.health.stale,
-              maxHealthCount,
-              'warning',
-            )}
-            {healthMetric(
-              'آفلاین',
-              report.snapshot.devices.health.offline,
-              maxHealthCount,
-              'danger',
-            )}
-            {healthMetric(
-              'نامشخص',
-              report.snapshot.devices.health.unknown,
-              maxHealthCount,
-              'neutral',
-            )}
-          </div>
+          {view === 'summary' && (
+            <div className={styles.healthPanel} aria-label="توزیع سلامت جاری دستگاه‌ها">
+              {healthMetric(
+                'آنلاین',
+                report.snapshot.devices.health.online,
+                maxHealthCount,
+                'success',
+              )}
+              {healthMetric(
+                'دارای اختلال',
+                report.snapshot.devices.health.degraded,
+                maxHealthCount,
+                'warning',
+              )}
+              {healthMetric(
+                'داده کهنه',
+                report.snapshot.devices.health.stale,
+                maxHealthCount,
+                'warning',
+              )}
+              {healthMetric(
+                'آفلاین',
+                report.snapshot.devices.health.offline,
+                maxHealthCount,
+                'danger',
+              )}
+              {healthMetric(
+                'نامشخص',
+                report.snapshot.devices.health.unknown,
+                maxHealthCount,
+                'neutral',
+              )}
+            </div>
+          )}
         </>
       )}
 

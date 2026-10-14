@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Badge, Button, Surface } from '@funtino/design-system';
 import { ApiRequestError } from '../../lib/api/client';
-import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
+import { ManagementListPage } from '../../components/system-shell/ManagementListPage';
 import {
   getSystemOrganizationBranches,
   getSystemOrganizations,
@@ -14,7 +14,33 @@ import {
 } from '../../lib/api/customer-family';
 import styles from './SystemCustomerFamilySupport.module.css';
 
-export function SystemCustomerFamilySupport() {
+export type SystemCustomerFamilyView = 'lookup' | 'members' | 'invitations' | 'history';
+
+const viewCopy: Record<SystemCustomerFamilyView, { title: string; description: string }> = {
+  lookup: {
+    title: 'جست‌وجوی خانواده',
+    description:
+      'برای جست‌وجو، مجموعه و شعبهٔ فعال را انتخاب کنید. فقط خانواده‌های دارای کارت فعال در همان شعبه نمایش داده می‌شوند.',
+  },
+  members: {
+    title: 'اعضای خانواده',
+    description: 'پس از جست‌وجو، فقط اعضای خانوادهٔ پیدا‌شده در این فهرست نمایش داده می‌شوند.',
+  },
+  invitations: {
+    title: 'دعوت‌های خانواده',
+    description: 'وضعیت دعوت‌های خانوادهٔ پیدا‌شده را جداگانه بررسی کنید.',
+  },
+  history: {
+    title: 'تاریخچهٔ خانواده',
+    description: 'تغییرات مجاز ثبت‌شده برای خانوادهٔ پیدا‌شده را جداگانه ببینید.',
+  },
+};
+
+export function SystemCustomerFamilySupport({
+  view = 'lookup',
+}: {
+  view?: SystemCustomerFamilyView;
+}) {
   const [organizations, setOrganizations] = useState<SystemOrganizationOption[]>([]);
   const [branches, setBranches] = useState<SystemBranchOption[]>([]);
   const [organizationId, setOrganizationId] = useState('');
@@ -25,6 +51,7 @@ export function SystemCustomerFamilySupport() {
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState('');
+  const [pageNumber, setPageNumber] = useState(1);
 
   useEffect(() => {
     void getSystemOrganizations()
@@ -39,6 +66,7 @@ export function SystemCustomerFamilySupport() {
 
   useEffect(() => {
     if (!organizationId) {
+      setItems(null);
       setBranches([]);
       setBranchId('');
       setBranchesLoading(false);
@@ -46,6 +74,7 @@ export function SystemCustomerFamilySupport() {
     }
     let cancelled = false;
     setError('');
+    setItems(null);
     setBranchesLoading(true);
     setBranchId('');
     setBranches([]);
@@ -92,10 +121,12 @@ export function SystemCustomerFamilySupport() {
     }
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>): Promise<boolean> {
     event.preventDefault();
     setSearching(true);
     setError('');
+    setItems(null);
+    setPageNumber(1);
     try {
       const response = await lookupSystemCustomerFamily({
         organizationId,
@@ -103,197 +134,265 @@ export function SystemCustomerFamilySupport() {
         phone: phone.trim(),
       });
       setItems(response.items);
+      return true;
     } catch (failure) {
       setItems(null);
       setError(readError(failure));
+      return false;
     } finally {
       setSearching(false);
     }
   }
 
+  function clearLookup() {
+    setOrganizationId('');
+    setBranchId('');
+    setPhone('');
+    setItems(null);
+    setError('');
+  }
+
+  const lookupFields = (
+    <>
+      <label className={styles.field}>
+        <span>مجموعه‌ی فعال</span>
+        <select
+          disabled={loading || !organizations.length}
+          required
+          value={organizationId}
+          onChange={(event) => {
+            setOrganizationId(event.currentTarget.value);
+            setItems(null);
+          }}
+        >
+          <option value="">
+            {loading
+              ? 'در حال دریافت مجموعه‌ها…'
+              : organizations.length
+                ? 'انتخاب مجموعه'
+                : 'مجموعه‌ای در دسترس نیست'}
+          </option>
+          {!loading && organizations.length
+            ? organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name}
+                </option>
+              ))
+            : null}
+        </select>
+      </label>
+      <label className={styles.field}>
+        <span>شعبه‌ی فعال</span>
+        <select
+          disabled={branchesLoading || !branches.length}
+          required
+          value={branchId}
+          onChange={(event) => {
+            setBranchId(event.currentTarget.value);
+            setItems(null);
+          }}
+        >
+          <option value="">
+            {branchesLoading
+              ? 'در حال دریافت شعب…'
+              : branches.length
+                ? 'انتخاب شعبه'
+                : 'شعبه‌ای انتخاب نشده'}
+          </option>
+          {!branchesLoading && branches.length
+            ? branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))
+            : null}
+        </select>
+      </label>
+      <label className={styles.field}>
+        <span>شماره‌ی کامل همراه</span>
+        <input
+          autoComplete="off"
+          dir="ltr"
+          inputMode="tel"
+          maxLength={20}
+          minLength={8}
+          onChange={(event) => setPhone(event.currentTarget.value)}
+          placeholder="09…"
+          required
+          value={phone}
+        />
+      </label>
+    </>
+  );
+  const visibleHouseholds = items?.slice((pageNumber - 1) * 25, pageNumber * 25) ?? [];
+
   return (
     <main className={styles.page}>
-      <SystemPageHeader
+      <ManagementListPage
         eyebrow="پشتیبانی سراسری · فقط‌خواندنی"
-        title="مشاهده‌ی خانواده‌ی مشتری"
-        description="برای جست‌وجو، مجموعه و شعبه‌ی فعال را انتخاب کنید. فقط خانواده‌هایی نمایش داده می‌شوند که کارت فعال همان شعبه را دارند."
-      />
-
-      {error && (
-        <div className={styles.error} role="alert">
-          <span>{error}</span>
-          {(organizations.length === 0 || (organizationId && branches.length === 0)) && (
-            <Button
-              type="button"
-              tone="ghost"
-              onClick={() => void retryOptions()}
-              disabled={loading || branchesLoading}
-            >
-              {loading || branchesLoading ? 'در حال تلاش…' : 'تلاش دوباره'}
-            </Button>
-          )}
-        </div>
-      )}
-      <Surface className={styles.searchCard} aria-busy={loading || searching}>
-        <form className={styles.form} onSubmit={submit}>
-          <label className={styles.field}>
-            <span>مجموعه‌ی فعال</span>
-            <select
-              disabled={loading || !organizations.length}
-              required
-              value={organizationId}
-              onChange={(event) => setOrganizationId(event.currentTarget.value)}
-            >
-              <option value="">
-                {loading
-                  ? 'در حال دریافت مجموعه‌ها…'
-                  : organizations.length
-                    ? 'انتخاب مجموعه'
-                    : 'مجموعه‌ای در دسترس نیست'}
-              </option>
-              {!loading && organizations.length
-                ? organizations.map((organization) => (
-                    <option key={organization.id} value={organization.id}>
-                      {organization.name}
-                    </option>
-                  ))
-                : null}
-            </select>
-          </label>
-          <label className={styles.field}>
-            <span>شعبه‌ی فعال</span>
-            <select
-              disabled={branchesLoading || !branches.length}
-              required
-              value={branchId}
-              onChange={(event) => setBranchId(event.currentTarget.value)}
-            >
-              <option value="">
-                {branchesLoading
-                  ? 'در حال دریافت شعب…'
-                  : branches.length
-                    ? 'انتخاب شعبه'
-                    : 'شعبه‌ای انتخاب نشده'}
-              </option>
-              {!branchesLoading && branches.length
-                ? branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))
-                : null}
-            </select>
-          </label>
-          <label className={styles.field}>
-            <span>شماره‌ی کامل همراه</span>
-            <input
-              autoComplete="off"
-              dir="ltr"
-              inputMode="tel"
-              maxLength={20}
-              minLength={8}
-              onChange={(event) => setPhone(event.currentTarget.value)}
-              placeholder="09…"
-              required
-              value={phone}
-            />
-          </label>
-          <Button disabled={loading || searching || !branchId} type="submit">
-            {searching ? 'در حال بررسی…' : 'جست‌وجو'}
-          </Button>
-        </form>
-        <p className={styles.privacy}>
-          شماره در URL قرار نمی‌گیرد. هر جست‌وجو audit می‌شود و سقف درخواست دارد. این صفحه امکان
-          ویرایش، ادغام یا خروجی‌گرفتن ندارد.
-        </p>
-      </Surface>
-
-      {items !== null && !error && (
-        <section className={styles.results} aria-live="polite" aria-label="نتیجه‌ی جست‌وجو">
-          <div className={styles.resultsHeading}>
-            <div>
-              <h2>نتیجه‌ی جست‌وجو</h2>
-              <p>
-                {organizations.find((item) => item.id === organizationId)?.name ?? 'مجموعه'}
-                {' · '}
-                {branches.find((item) => item.id === branchId)?.name ?? 'شعبه'}
-              </p>
-            </div>
-            <Badge tone={items.length ? 'info' : 'neutral'}>
-              {items.length.toLocaleString('fa-IR')} خانواده
-            </Badge>
+        title={viewCopy[view].title}
+        description={`${viewCopy[view].description} شمارهٔ تلفن در URL قرار نمی‌گیرد و این ابزار فقط‌خواندنی است.`}
+        filterTitle="جست‌وجوی مجاز خانواده"
+        filterDescription="محدوده و شماره را برای خواندن محدود و auditشده انتخاب کنید."
+        filterFields={view === 'lookup' ? undefined : lookupFields}
+        onApplyFilters={view === 'lookup' ? undefined : submit}
+        onClearFilters={view === 'lookup' ? undefined : clearLookup}
+        appliedFilterCount={view !== 'lookup' && items !== null ? 1 : 0}
+        filtersBusy={loading || searching || branchesLoading}
+        pagination={
+          items === null
+            ? undefined
+            : {
+                page: pageNumber,
+                itemCount: visibleHouseholds.length,
+                canGoPrevious: pageNumber > 1,
+                canGoNext: pageNumber * 25 < items.length,
+                busy: searching,
+                onPrevious: () => setPageNumber((current) => Math.max(1, current - 1)),
+                onNext: () => setPageNumber((current) => current + 1),
+              }
+        }
+      >
+        {error && (
+          <div className={styles.error} role="alert">
+            <span>{error}</span>
+            {(organizations.length === 0 || (organizationId && branches.length === 0)) && (
+              <Button
+                type="button"
+                tone="ghost"
+                onClick={() => void retryOptions()}
+                disabled={loading || branchesLoading}
+              >
+                {loading || branchesLoading ? 'در حال تلاش…' : 'تلاش دوباره'}
+              </Button>
+            )}
           </div>
-          {!items.length ? (
-            <Surface className={styles.empty}>
-              خانواده‌ای با کارت فعال در شعبه‌ی انتخاب‌شده پیدا نشد.
-            </Surface>
-          ) : (
-            items.map((household) => (
-              <Surface className={styles.household} key={household.householdId}>
-                <div className={styles.householdHeading}>
-                  <div>
-                    <span>خانواده</span>
-                    <h2>{household.householdName}</h2>
-                  </div>
-                  <Badge tone="neutral">{household.members.length} عضو</Badge>
-                </div>
-                <ul className={styles.memberList}>
-                  {household.members.map((member) => (
-                    <li key={member.id}>
-                      <div>
-                        <strong>{member.displayName}</strong>
-                        <span>{member.relationshipLabel}</span>
-                        <small>
-                          {member.isAccountLinked ? 'حساب فانتینو متصل' : 'بدون حساب متصل'}
-                        </small>
-                        {member.relationshipStatus === 'needs_review' &&
-                          member.legacyRelationship && (
-                            <small>نسبت قدیمی ثبت‌شده: {member.legacyRelationship}</small>
-                          )}
-                      </div>
-                      <Badge tone={member.isDependent ? 'info' : 'neutral'}>
-                        {member.isDependent ? 'وابسته' : 'بزرگسال'}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-                {household.invitations.length > 0 && (
-                  <section className={styles.invitationHistory} aria-label="وضعیت دعوت‌های خانواده">
-                    <h3>دعوت‌های خانواده</h3>
-                    <ul className={styles.memberList}>
-                      {household.invitations.map((invitation, index) => (
-                        <li key={`${invitation.memberName}-${index}`}>
-                          <div>
-                            <strong>{invitation.memberName}</strong>
-                            <span>{invitationStatusLabel(invitation.status)}</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
-                <section className={styles.invitationHistory} aria-label="تاریخچه‌ی مجاز خانواده">
-                  <h3>تاریخچه‌ی تغییرات</h3>
-                  {household.history.length ? (
-                    <ul className={styles.memberList}>
-                      {household.history.map((entry, index) => (
-                        <li key={`${entry.createdAt}-${index}`}>
-                          <div>
-                            <strong>{familyHistoryLabel(entry.action)}</strong>
-                            <span>{formatHistoryDate(entry.createdAt)}</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className={styles.privacy}>تغییری برای نمایش ثبت نشده است.</p>
-                  )}
-                </section>
+        )}
+        {view === 'lookup' && (
+          <Surface className={styles.searchCard} aria-busy={loading || searching}>
+            <form className={styles.form} onSubmit={submit}>
+              {lookupFields}
+              <Button disabled={loading || searching || !branchId} type="submit">
+                {searching ? 'در حال بررسی…' : 'جست‌وجو'}
+              </Button>
+            </form>
+            <p className={styles.privacy}>
+              شماره در URL قرار نمی‌گیرد. هر جست‌وجو audit می‌شود و سقف درخواست دارد. این صفحه امکان
+              ویرایش، ادغام یا خروجی‌گرفتن ندارد.
+            </p>
+          </Surface>
+        )}
+
+        {view !== 'lookup' && items === null && !searching && !error && (
+          <Surface className={styles.empty} role="status">
+            برای دیدن {viewCopy[view].title}، جست‌وجوی خانواده را با مجموعه و شعبهٔ مجاز انجام دهید.
+          </Surface>
+        )}
+        {items !== null && !error && (
+          <section className={styles.results} aria-live="polite" aria-label={viewCopy[view].title}>
+            <div className={styles.resultsHeading}>
+              <div>
+                <h2>{view === 'lookup' ? 'نتیجهٔ جست‌وجو' : viewCopy[view].title}</h2>
+                <p>
+                  {organizations.find((item) => item.id === organizationId)?.name ?? 'مجموعه'}
+                  {' · '}
+                  {branches.find((item) => item.id === branchId)?.name ?? 'شعبه'}
+                </p>
+              </div>
+              <Badge tone={items.length ? 'info' : 'neutral'}>
+                {items.length.toLocaleString('fa-IR')} خانواده
+              </Badge>
+            </div>
+            {!items.length ? (
+              <Surface className={styles.empty}>
+                خانواده‌ای با کارت فعال در شعبهٔ انتخاب‌شده پیدا نشد.
               </Surface>
-            ))
-          )}
-        </section>
-      )}
+            ) : (
+              visibleHouseholds.map((household) => (
+                <Surface className={styles.household} key={household.householdId}>
+                  <div className={styles.householdHeading}>
+                    <div>
+                      <span>{view === 'lookup' ? 'خانوادهٔ پیدا‌شده' : 'خانواده'}</span>
+                      <h2>{household.householdName}</h2>
+                    </div>
+                    <Badge tone="neutral">
+                      {view === 'invitations'
+                        ? `${household.invitations.length.toLocaleString('fa-IR')} دعوت`
+                        : view === 'history'
+                          ? `${household.history.length.toLocaleString('fa-IR')} رویداد`
+                          : `${household.members.length.toLocaleString('fa-IR')} عضو`}
+                    </Badge>
+                  </div>
+                  {view === 'lookup' && (
+                    <p className={styles.privacy}>
+                      برای مشاهدهٔ جزئیات، صفحهٔ مربوط را از منوی پشتیبانی انتخاب کنید.
+                    </p>
+                  )}
+                  {view === 'members' &&
+                    (household.members.length ? (
+                      <ul className={styles.memberList}>
+                        {household.members.map((member) => (
+                          <li key={member.id}>
+                            <div>
+                              <strong>{member.displayName}</strong>
+                              <span>{member.relationshipLabel}</span>
+                              <small>
+                                {member.isAccountLinked ? 'حساب فانتینو متصل' : 'بدون حساب متصل'}
+                              </small>
+                              {member.relationshipStatus === 'needs_review' &&
+                                member.legacyRelationship && (
+                                  <small>نسبت قدیمی ثبت‌شده: {member.legacyRelationship}</small>
+                                )}
+                            </div>
+                            <Badge tone={member.isDependent ? 'info' : 'neutral'}>
+                              {member.isDependent ? 'وابسته' : 'بزرگسال'}
+                            </Badge>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className={styles.privacy}>عضوی برای نمایش ثبت نشده است.</p>
+                    ))}
+                  {view === 'invitations' &&
+                    (household.invitations.length ? (
+                      <section className={styles.invitationHistory} aria-label="دعوت‌های خانواده">
+                        <ul className={styles.memberList}>
+                          {household.invitations.map((invitation, index) => (
+                            <li key={`${invitation.memberName}-${index}`}>
+                              <div>
+                                <strong>{invitation.memberName}</strong>
+                                <span>{invitationStatusLabel(invitation.status)}</span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ) : (
+                      <p className={styles.privacy}>دعوتی برای نمایش ثبت نشده است.</p>
+                    ))}
+                  {view === 'history' &&
+                    (household.history.length ? (
+                      <section className={styles.invitationHistory} aria-label="تاریخچهٔ خانواده">
+                        <ul className={styles.memberList}>
+                          {household.history.map((entry, index) => (
+                            <li key={`${entry.createdAt}-${index}`}>
+                              <div>
+                                <strong>{familyHistoryLabel(entry.action)}</strong>
+                                <span>{formatHistoryDate(entry.createdAt)}</span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ) : (
+                      <p className={styles.privacy}>تغییری برای نمایش ثبت نشده است.</p>
+                    ))}
+                </Surface>
+              ))
+            )}
+          </section>
+        )}
+      </ManagementListPage>
     </main>
   );
 }

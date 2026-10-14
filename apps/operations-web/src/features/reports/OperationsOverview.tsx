@@ -20,11 +20,8 @@ type Props = {
   scope: OperationsScope;
   scopeOption: OperationsScopeOption;
   onNavigate: (section: WorkspaceSection) => void;
-  onSelectScope: (scope: OperationsScope) => void | Promise<void>;
   onSessionExpired: () => void;
 };
-
-type RangeDays = 7 | 30;
 
 const eventFields: Array<keyof Omit<OperationsDailyReportRow, 'date'>> = [
   'branchesCreated',
@@ -36,68 +33,48 @@ const eventFields: Array<keyof Omit<OperationsDailyReportRow, 'date'>> = [
   'healthOffline',
 ];
 
-const eventLabels: Record<(typeof eventFields)[number], string> = {
-  branchesCreated: 'ایجاد شعبه',
-  branchStatusChanges: 'تغییر وضعیت شعبه',
-  devicesRegistered: 'ثبت دستگاه',
-  deviceUpdates: 'به‌روزرسانی دستگاه',
-  healthOnline: 'گزارش سلامت آنلاین',
-  healthDegraded: 'گزارش اختلال',
-  healthOffline: 'گزارش آفلاین',
-};
-
-export function OperationsOverview({
-  scope,
-  scopeOption,
-  onNavigate,
-  onSelectScope,
-  onSessionExpired,
-}: Props) {
-  const [rangeDays, setRangeDays] = useState<RangeDays>(7);
+export function OperationsOverview({ scope, scopeOption, onNavigate, onSessionExpired }: Props) {
   const [report, setReport] = useState<OperationsReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const requestId = useRef(0);
   const activeScopeKey = scopeKey(scope);
 
-  const loadReport = useCallback(
-    async (days: RangeDays) => {
-      const currentRequest = ++requestId.current;
-      const to = new Date().toISOString().slice(0, 10);
-      const fromDate = new Date(`${to}T00:00:00.000Z`);
-      fromDate.setUTCDate(fromDate.getUTCDate() - (days - 1));
-      const from = fromDate.toISOString().slice(0, 10);
-      setLoading(true);
-      setError('');
+  const loadReport = useCallback(async () => {
+    const currentRequest = ++requestId.current;
+    const to = new Date().toISOString().slice(0, 10);
+    const fromDate = new Date(`${to}T00:00:00.000Z`);
+    fromDate.setUTCDate(fromDate.getUTCDate() - 6);
+    const from = fromDate.toISOString().slice(0, 10);
+    setLoading(true);
+    setError('');
 
-      try {
-        const nextReport = await getOperationsReport(scope, from, to);
-        if (
-          nextReport.scope.scopeType !== scope.type ||
-          nextReport.scope.organizationId.toLowerCase() !== scope.organizationId.toLowerCase() ||
-          (nextReport.scope.branchId?.toLowerCase() ?? null) !==
-            (scope.type === 'branch' ? scope.branchId.toLowerCase() : null)
-        ) {
-          throw new Error('SCOPE_MISMATCH');
-        }
-        if (currentRequest === requestId.current) setReport(nextReport);
-      } catch (failure) {
-        if (currentRequest !== requestId.current) return;
-        if (failure instanceof ApiRequestError && failure.status === 401) {
-          onSessionExpired();
-        } else {
-          setError(messageFor(failure));
-          setReport(null);
-        }
-      } finally {
-        if (currentRequest === requestId.current) setLoading(false);
+    try {
+      const nextReport = await getOperationsReport(scope, from, to);
+      if (
+        nextReport.scope.scopeType !== scope.type ||
+        nextReport.scope.organizationId.toLowerCase() !== scope.organizationId.toLowerCase() ||
+        (nextReport.scope.branchId?.toLowerCase() ?? null) !==
+          (scope.type === 'branch' ? scope.branchId.toLowerCase() : null)
+      ) {
+        throw new Error('SCOPE_MISMATCH');
       }
-    },
-    [onSessionExpired, scope],
-  );
+      if (currentRequest === requestId.current) setReport(nextReport);
+    } catch (failure) {
+      if (currentRequest !== requestId.current) return;
+      if (failure instanceof ApiRequestError && failure.status === 401) {
+        onSessionExpired();
+      } else {
+        setError(messageFor(failure));
+        setReport(null);
+      }
+    } finally {
+      if (currentRequest === requestId.current) setLoading(false);
+    }
+  }, [onSessionExpired, scope]);
 
   useEffect(() => {
-    void loadReport(7);
+    void loadReport();
     return () => {
       requestId.current += 1;
     };
@@ -118,30 +95,7 @@ export function OperationsOverview({
     return { branches, devices, attention, events };
   }, [report]);
 
-  const eventDays = useMemo(() => {
-    if (!report) return [];
-    return report.daily.slice(-rangeDays).map((row) => ({
-      ...row,
-      total: eventFields.reduce((total, field) => total + row[field], 0),
-    }));
-  }, [rangeDays, report]);
-  const maxEvents = Math.max(1, ...eventDays.map((day) => day.total));
-
-  function changeRange(days: RangeDays) {
-    setRangeDays(days);
-    void loadReport(days);
-  }
-
   const attentionCount = summary?.attention ?? 0;
-  const branchRows = report?.snapshot.branchBreakdown ?? [];
-  const prioritizedBranches = [...branchRows]
-    .sort(
-      (left, right) =>
-        attentionFor(right) - attentionFor(left) ||
-        left.branchName?.localeCompare(right.branchName ?? '', 'fa') ||
-        0,
-    )
-    .slice(0, 5);
 
   return (
     <div className={styles.page}>
@@ -162,7 +116,7 @@ export function OperationsOverview({
           <Button
             className={styles.refreshButton}
             disabled={loading}
-            onClick={() => void loadReport(rangeDays)}
+            onClick={() => void loadReport()}
             tone="ghost"
             type="button"
           >
@@ -181,7 +135,7 @@ export function OperationsOverview({
             <strong>گزارش بارگذاری نشد</strong>
             <p>{error}</p>
           </div>
-          <Button disabled={loading} onClick={() => void loadReport(rangeDays)} type="button">
+          <Button disabled={loading} onClick={() => void loadReport()} type="button">
             تلاش دوباره
           </Button>
         </Surface>
@@ -266,86 +220,28 @@ export function OperationsOverview({
             <Surface className={styles.activityPanel}>
               <div className={styles.panelHeading}>
                 <div>
-                  <span className={styles.eyebrow}>روند ثبت‌شده</span>
-                  <h3>فعالیت روزانه</h3>
-                  <p>مجموع رویدادهای ثبت شعبه، دستگاه و گزارش سلامت</p>
+                  <span className={styles.eyebrow}>جزئیات فعالیت</span>
+                  <h3>گزارش روزانه</h3>
+                  <p>روند ثبت شعبه، دستگاه و سلامت را در صفحهٔ مستقل گزارش ببینید.</p>
                 </div>
-                <div aria-label="بازهٔ زمانی" className={styles.rangeControl} role="group">
-                  {([7, 30] as const).map((days) => (
-                    <button
-                      aria-pressed={rangeDays === days}
-                      className={rangeDays === days ? styles.rangeActive : ''}
-                      disabled={loading}
-                      key={days}
-                      onClick={() => changeRange(days)}
-                      type="button"
-                    >
-                      {formatNumber(days)} روز
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {eventDays.length > 0 ? (
-                <div className={styles.chartWrap}>
-                  <div
-                    aria-label={`نمودار رویدادهای روزانه، مجموع ${formatNumber(summary.events)} رویداد`}
-                    className={styles.chart}
-                    role="img"
-                  >
-                    {eventDays.map((day) => {
-                      const height =
-                        day.total === 0 ? 3 : Math.max(8, (day.total / maxEvents) * 100);
-                      return (
-                        <div
-                          className={styles.chartColumn}
-                          key={day.date}
-                          title={eventBreakdown(day)}
-                        >
-                          <span className={styles.chartValue}>{formatNumber(day.total)}</span>
-                          <span className={styles.chartTrack}>
-                            <span className={styles.chartBar} style={{ height: `${height}%` }} />
-                          </span>
-                          <span className={styles.chartLabel}>{formatDay(day.date)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <table className={styles.srOnly}>
-                    <caption>مجموع رویدادهای ثبت‌شده به تفکیک روز</caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">تاریخ</th>
-                        <th scope="col">رویدادها</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {eventDays.map((day) => (
-                        <tr key={day.date}>
-                          <th scope="row">{formatDateOnly(day.date)}</th>
-                          <td>{day.total}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <EmptyState
-                  title="داده‌ای برای این بازه نیست"
-                  detail="با ثبت رویدادهای عملیاتی، روند روزانه در این بخش دیده می‌شود."
-                />
-              )}
-              <div className={styles.chartFooter}>
-                <span>
-                  <span className={styles.legendDot} /> رویدادهای همین بازه
+                <span className={styles.healthPulse} aria-hidden="true">
+                  <ActivityIcon />
                 </span>
-                <button
-                  className={styles.linkButton}
-                  onClick={() => onNavigate('reports')}
-                  type="button"
-                >
-                  جزئیات گزارش‌ها <ArrowIcon />
-                </button>
               </div>
+              <div className={styles.singleBranchMetrics}>
+                <span>
+                  <strong>{formatNumber(summary.events)}</strong>
+                  <small>رویداد در {formatNumber(report.period.days)} روز گزارش</small>
+                </span>
+              </div>
+              <Button
+                className={styles.fullButton}
+                onClick={() => onNavigate('reportsDaily')}
+                tone="ghost"
+                type="button"
+              >
+                باز کردن گزارش روزانه <ArrowIcon />
+              </Button>
             </Surface>
 
             <Surface className={styles.healthPanel}>
@@ -402,101 +298,39 @@ export function OperationsOverview({
             </Surface>
           </div>
 
-          <Surface className={styles.branchesPanel}>
-            <div className={styles.panelHeading}>
-              <div>
-                <span className={styles.eyebrow}>
-                  {scope.type === 'organization' ? 'مقایسهٔ شعب' : 'وضعیت محدوده'}
+          {scope.type === 'organization' && (
+            <Surface className={styles.branchesPanel}>
+              <div className={styles.panelHeading}>
+                <div>
+                  <span className={styles.eyebrow}>اطلاعات شعب</span>
+                  <h3>فهرست و مقایسهٔ شعب</h3>
+                  <p>فهرست شعب و گزارش مقایسه‌ای هرکدام در صفحهٔ مستقل قرار دارد.</p>
+                </div>
+                <span className={styles.branchMark} aria-hidden="true">
+                  <BranchIcon />
                 </span>
-                <h3>{scope.type === 'organization' ? 'شعب نیازمند توجه' : 'جزئیات این شعبه'}</h3>
-                <p>
-                  {scope.type === 'organization'
-                    ? 'بر اساس سلامت دستگاه‌ها در خروجی تجمیعی سرویس گزارش'
-                    : `وضعیت شعبهٔ ${scopeOption.branch?.name ?? 'انتخاب‌شده'} در محدودهٔ فعلی`}
-                </p>
               </div>
-              {scope.type === 'organization' && (
+              <div className={styles.singleBranchMetrics}>
+                <span>
+                  <strong>{formatNumber(report.snapshot.branchBreakdown.length)}</strong>
+                  <small>شعب در دادهٔ گزارش</small>
+                </span>
+              </div>
+              {report.snapshot.branchBreakdownTruncated && (
+                <p className={styles.truncationNotice}>
+                  دادهٔ مقایسه خلاصه است؛ برای فهرست کامل شعب، صفحهٔ فهرست شعب را باز کنید.
+                </p>
+              )}
+              <div className={styles.chartFooter}>
                 <Button onClick={() => onNavigate('branches')} tone="ghost" type="button">
                   فهرست شعب <ArrowIcon />
                 </Button>
-              )}
-            </div>
-
-            {scope.type === 'organization' ? (
-              prioritizedBranches.length > 0 ? (
-                <div className={styles.branchList}>
-                  {prioritizedBranches.map((branch) => {
-                    const attention = attentionFor(branch);
-                    const canSelect = branch.status === 'active';
-                    return (
-                      <div className={styles.branchRow} key={branch.branchId}>
-                        <span className={styles.branchMark} aria-hidden="true">
-                          <BranchIcon />
-                        </span>
-                        <div className={styles.branchIdentity}>
-                          <strong>{branch.branchName || 'شعبهٔ بدون نام در گزارش'}</strong>
-                          <span>{statusLabel(branch.status)}</span>
-                        </div>
-                        <div className={styles.branchStats}>
-                          <span>
-                            <strong>{formatNumber(branch.devicesTotal)}</strong>
-                            <small>دستگاه</small>
-                          </span>
-                          <span>
-                            <strong>{formatNumber(branch.online)}</strong>
-                            <small>آنلاین</small>
-                          </span>
-                        </div>
-                        <Badge tone={attention ? 'warning' : 'success'}>
-                          {attention
-                            ? `${formatNumber(attention)} مورد توجه`
-                            : 'بدون اختلال ثبت‌شده'}
-                        </Badge>
-                        <Button
-                          className={styles.branchAction}
-                          disabled={!canSelect}
-                          onClick={() =>
-                            void onSelectScope({
-                              type: 'branch',
-                              organizationId: scope.organizationId,
-                              branchId: branch.branchId,
-                            })
-                          }
-                          title={
-                            canSelect
-                              ? undefined
-                              : 'فقط شعبهٔ فعال قابلیت انتخاب به‌عنوان محدوده را دارد'
-                          }
-                          tone="ghost"
-                          type="button"
-                        >
-                          ورود به شعبه <ArrowIcon />
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <EmptyState
-                  title="هنوز دادهٔ مقایسهٔ شعبه‌ای ثبت نشده"
-                  detail="این گزارش تنها شعبی را نشان می‌دهد که دادهٔ آن‌ها در read model موجود است."
-                />
-              )
-            ) : (
-              <BranchSummary
-                report={report}
-                scope={scope}
-                scopeOption={scopeOption}
-                onNavigate={onNavigate}
-              />
-            )}
-            {scope.type === 'organization' && report.snapshot.branchBreakdownTruncated && (
-              <p className={styles.truncationNotice}>
-                گزارش مقایسه به دلیل محدودیت خروجی خلاصه شده است؛ برای فهرست کامل، «فهرست شعب» را
-                باز کنید.
-              </p>
-            )}
-          </Surface>
+                <Button onClick={() => onNavigate('reportsBranches')} tone="ghost" type="button">
+                  مقایسهٔ گزارش‌ها <ArrowIcon />
+                </Button>
+              </div>
+            </Surface>
+          )}
 
           <footer className={styles.reportMeta}>
             <span>
@@ -581,95 +415,6 @@ function HealthRow({
   );
 }
 
-function BranchSummary({
-  report,
-  scope,
-  scopeOption,
-  onNavigate,
-}: {
-  report: OperationsReport;
-  scope: Extract<OperationsScope, { type: 'branch' }>;
-  scopeOption: OperationsScopeOption;
-  onNavigate: (section: WorkspaceSection) => void;
-}) {
-  const branch = report.snapshot.branchBreakdown.find(
-    (item) => item.branchId.toLowerCase() === scope.branchId.toLowerCase(),
-  );
-  if (!branch) {
-    return (
-      <EmptyState
-        title="جزئیات شعبه در گزارش موجود نیست"
-        detail="دسترسی به محدوده برقرار است، اما گزارش تجمیعی هنوز این شعبه را پوشش نمی‌دهد."
-      />
-    );
-  }
-  const attention = attentionFor(branch);
-  return (
-    <div className={styles.singleBranchSummary}>
-      <div className={styles.singleBranchTitle}>
-        <span className={styles.branchMark} aria-hidden="true">
-          <BranchIcon />
-        </span>
-        <div>
-          <strong>{branch.branchName || scopeOption.branch?.name || 'شعبه'}</strong>
-          <span>{statusLabel(branch.status)}</span>
-        </div>
-        <Badge tone={attention ? 'warning' : 'success'}>
-          {attention ? `${formatNumber(attention)} مورد توجه` : 'بدون اختلال ثبت‌شده'}
-        </Badge>
-      </div>
-      <div className={styles.singleBranchMetrics}>
-        <span>
-          <strong>{formatNumber(branch.devicesTotal)}</strong>
-          <small>دستگاه</small>
-        </span>
-        <span>
-          <strong>{formatNumber(branch.online)}</strong>
-          <small>آنلاین</small>
-        </span>
-        <span>
-          <strong>
-            {formatNumber(branch.degraded + branch.offline + branch.stale + branch.unknown)}
-          </strong>
-          <small>نیازمند رسیدگی</small>
-        </span>
-      </div>
-      <Button onClick={() => onNavigate('devices')} tone="ghost" type="button">
-        رفتن به دستگاه‌ها <ArrowIcon />
-      </Button>
-    </div>
-  );
-}
-
-function EmptyState({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className={styles.emptyState}>
-      <span className={styles.emptyIcon} aria-hidden="true">
-        <InfoIcon />
-      </span>
-      <div>
-        <strong>{title}</strong>
-        <p>{detail}</p>
-      </div>
-    </div>
-  );
-}
-
-function attentionFor(branch: OperationsReport['snapshot']['branchBreakdown'][number]) {
-  return branch.degraded + branch.offline + branch.stale + branch.unknown;
-}
-
-function eventBreakdown(day: OperationsDailyReportRow) {
-  const details = eventFields
-    .filter((field) => day[field] > 0)
-    .map((field) => `${eventLabels[field]}: ${formatNumber(day[field])}`);
-  return `${formatDateOnly(day.date)}؛ ${details.length > 0 ? details.join('، ') : 'بدون رویداد'}`;
-}
-
-function statusLabel(status: OperationsReport['snapshot']['branchBreakdown'][number]['status']) {
-  return { active: 'فعال', suspended: 'تعلیق‌شده', archived: 'بایگانی‌شده' }[status];
-}
-
 function messageFor(failure: unknown) {
   if (failure instanceof ApiRequestError) {
     if (failure.status === 403)
@@ -698,20 +443,6 @@ function formatDate(value: string) {
         timeStyle: 'short',
         timeZone: 'Asia/Tehran',
       }).format(date);
-}
-
-function formatDateOnly(value: string) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return new Intl.DateTimeFormat('fa-IR', { dateStyle: 'medium', timeZone: 'UTC' }).format(date);
-}
-
-function formatDay(value: string) {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return new Intl.DateTimeFormat('fa-IR', {
-    day: 'numeric',
-    month: 'short',
-    timeZone: 'UTC',
-  }).format(date);
 }
 
 function RefreshIcon() {

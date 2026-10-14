@@ -1,6 +1,14 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react';
 import {
   clampJalaliDate,
   currentLocalGregorianDate,
@@ -11,18 +19,7 @@ import {
   jalaliMonthNames,
   jalaliToGregorian,
   parseTimeValue,
-  toAsciiDigits,
 } from './persian-calendar';
-
-const weekDays = [
-  { short: 'ش', full: 'شنبه' },
-  { short: 'ی', full: 'یکشنبه' },
-  { short: 'د', full: 'دوشنبه' },
-  { short: 'س', full: 'سه‌شنبه' },
-  { short: 'چ', full: 'چهارشنبه' },
-  { short: 'پ', full: 'پنجشنبه' },
-  { short: 'ج', full: 'جمعه' },
-] as const;
 
 export type JalaliDateSelectorProps = {
   value: string;
@@ -32,183 +29,350 @@ export type JalaliDateSelectorProps = {
 };
 
 export function JalaliDateSelector({ value, onChange, minDate, maxDate }: JalaliDateSelectorProps) {
-  const selectorRef = useRef<HTMLElement>(null);
-  const initialJalali = gregorianToJalali(value) ?? gregorianToJalali(currentLocalGregorianDate());
-  const [visibleMonth, setVisibleMonth] = useState(() => initialJalali ?? { year: 1400, month: 1, day: 1 });
-  const [yearDraft, setYearDraft] = useState(() => formatPersianNumber(initialJalali?.year ?? 1400));
-  const [activeDate, setActiveDate] = useState(value || currentLocalGregorianDate());
+  const selectorId = useId();
+  const selected = gregorianToJalali(value) ??
+    gregorianToJalali(currentLocalGregorianDate()) ?? { year: 1400, month: 1, day: 1 };
+  const minParts = minDate ? gregorianToJalali(minDate) : null;
+  const maxParts = maxDate ? gregorianToJalali(maxDate) : null;
+  const hasValidRange = !(minParts && maxParts && minDate && maxDate && minDate > maxDate);
+  const firstYear = hasValidRange ? (minParts?.year ?? 1) : selected.year;
+  const lastYear = hasValidRange ? (maxParts?.year ?? 9999) : selected.year;
+  const hasSelectableYears = hasValidRange && firstYear <= lastYear;
+  const yearCount = hasSelectableYears ? lastYear - firstYear + 1 : 1;
   const dates = useMemo(
-    () => getJalaliMonthDates(visibleMonth.year, visibleMonth.month),
-    [visibleMonth.month, visibleMonth.year],
+    () => getJalaliMonthDates(selected.year, selected.month),
+    [selected.month, selected.year],
   );
-  const firstDate = dates[0]?.iso;
-  const weekdayOffset = firstDate ? (new Date(`${firstDate}T12:00:00Z`).getUTCDay() + 1) % 7 : 0;
-  const dateCells: Array<{ day: number; iso: string } | null> = [];
-  for (let index = 0; index < weekdayOffset; index += 1) dateCells.push(null);
-  dateCells.push(...dates);
-  while (dateCells.length % 7 !== 0) dateCells.push(null);
-  const dateRows = Array.from({ length: dateCells.length / 7 }, (_, rowIndex) =>
-    dateCells.slice(rowIndex * 7, rowIndex * 7 + 7),
-  );
-
-  useEffect(() => {
-    const jalali = gregorianToJalali(value);
-    if (!jalali) return;
-    setVisibleMonth(jalali);
-    setYearDraft(formatPersianNumber(jalali.year));
-    setActiveDate(value);
-  }, [value]);
-
-  const setMonth = (year: number, month: number) => {
-    const normalized = normalizeMonth(year, month);
-    const next = clampJalaliDate({ ...visibleMonth, ...normalized });
-    setVisibleMonth(next);
-    setYearDraft(formatPersianNumber(next.year));
-    const iso = jalaliToGregorian(next);
-    if (iso) setActiveDate(iso);
+  const selectionRef = useRef({
+    selected,
+    value,
+    minParts,
+    maxParts,
+    minDate,
+    maxDate,
+    hasValidRange,
+    onChange,
+  });
+  selectionRef.current = {
+    selected,
+    value,
+    minParts,
+    maxParts,
+    minDate,
+    maxDate,
+    hasValidRange,
+    onChange,
   };
 
-  const shiftMonth = (amount: number, preferredDay = visibleMonth.day): string | null => {
-    const normalized = normalizeMonth(visibleMonth.year, visibleMonth.month + amount);
-    const next = clampJalaliDate({ ...visibleMonth, ...normalized, day: preferredDay });
-    setVisibleMonth(next);
-    setYearDraft(formatPersianNumber(next.year));
-    const iso = jalaliToGregorian(next);
-    if (iso) setActiveDate(iso);
-    return iso;
-  };
+  const selectDatePart = (part: 'day' | 'month' | 'year', partValue: number) => {
+    const current = selectionRef.current;
+    if (!current.hasValidRange) return;
 
-  const commitYearDraft = () => {
-    const normalizedYear = toAsciiDigits(yearDraft.trim());
-    const year = Number(normalizedYear);
-    if (/^\d{1,4}$/u.test(normalizedYear) && year > 0 && year <= 9999) {
-      setMonth(year, visibleMonth.month);
-    } else {
-      setYearDraft(formatPersianNumber(visibleMonth.year));
+    const next = { ...current.selected, [part]: partValue };
+    if (part !== 'day') {
+      if (
+        current.minParts &&
+        next.year === current.minParts.year &&
+        (next.month < current.minParts.month ||
+          (next.month === current.minParts.month && next.day < current.minParts.day))
+      ) {
+        next.month = current.minParts.month;
+        next.day = current.minParts.day;
+      }
+      if (
+        current.maxParts &&
+        next.year === current.maxParts.year &&
+        (next.month > current.maxParts.month ||
+          (next.month === current.maxParts.month && next.day > current.maxParts.day))
+      ) {
+        next.month = current.maxParts.month;
+        next.day = current.maxParts.day;
+      }
     }
-  };
 
-  const handleDayKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const key = event.key;
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(key)) return;
-    event.preventDefault();
-    if (key === 'PageUp' || key === 'PageDown') {
-      const targetDate = shiftMonth(key === 'PageUp' ? -1 : 1);
-      if (targetDate) requestAnimationFrame(() => selectorRef.current?.querySelector<HTMLButtonElement>(`[data-date="${targetDate}"]`)?.focus());
-      return;
-    }
-    let nextIndex = index;
-    if (key === 'ArrowLeft') nextIndex += 1;
-    if (key === 'ArrowRight') nextIndex -= 1;
-    if (key === 'ArrowDown') nextIndex += 7;
-    if (key === 'ArrowUp') nextIndex -= 7;
-    if (key === 'Home') nextIndex = Math.max(0, index - ((weekdayOffset + index) % 7));
-    if (key === 'End') nextIndex = Math.min(dates.length - 1, index + (6 - ((weekdayOffset + index) % 7)));
-
-    const target = dates[nextIndex];
-    if (target) {
-      setActiveDate(target.iso);
-      selectorRef.current?.querySelector<HTMLButtonElement>(`[data-date="${target.iso}"]`)?.focus();
-    } else if (nextIndex < 0) {
-      const targetDate = shiftMonth(-1, 31);
-      if (targetDate) requestAnimationFrame(() => selectorRef.current?.querySelector<HTMLButtonElement>(`[data-date="${targetDate}"]`)?.focus());
-    } else if (nextIndex >= dates.length) {
-      const targetDate = shiftMonth(1, 1);
-      if (targetDate) requestAnimationFrame(() => selectorRef.current?.querySelector<HTMLButtonElement>(`[data-date="${targetDate}"]`)?.focus());
+    const normalized = clampJalaliDate(next);
+    const iso = jalaliToGregorian(normalized);
+    if (iso && isDateWithinBounds(iso, current.minDate, current.maxDate) && iso !== current.value) {
+      selectionRef.current = { ...current, selected: normalized, value: iso };
+      current.onChange(iso);
     }
   };
 
   return (
-    <section ref={selectorRef} className="ft-date-picker" aria-label="انتخاب تاریخ جلالی">
-      <div className="ft-date-picker__navigation">
-        <button className="ft-date-picker__month-step" type="button" aria-label="ماه قبل" onClick={() => shiftMonth(-1)}>
-          <span aria-hidden="true">›</span>
-        </button>
-        <label className="ft-date-picker__month-select">
-          <span className="ft-visually-hidden">ماه</span>
-          <select
-            value={visibleMonth.month}
-            onChange={(event) => setMonth(visibleMonth.year, Number(event.target.value))}
-          >
-            {jalaliMonthNames.map((month, index) => (
-              <option key={month} value={index + 1}>{month}</option>
-            ))}
-          </select>
-        </label>
-        <label className="ft-date-picker__year">
-          <span className="ft-visually-hidden">سال</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            dir="ltr"
-            value={yearDraft}
-            onChange={(event) => setYearDraft(event.target.value)}
-            onBlur={commitYearDraft}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                commitYearDraft();
-                event.currentTarget.blur();
-              }
-            }}
-            aria-label="سال شمسی"
-          />
-        </label>
-        <button className="ft-date-picker__month-step" type="button" aria-label="ماه بعد" onClick={() => shiftMonth(1)}>
-          <span aria-hidden="true">‹</span>
-        </button>
+    <section className="ft-date-picker" aria-label="انتخاب تاریخ جلالی">
+      <div className="ft-date-picker__columns" role="group" aria-label="ستون‌های انتخاب تاریخ">
+        <DateWheelColumn
+          id={`${selectorId}-day`}
+          hintId={`${selectorId}-hint`}
+          label="روز"
+          startValue={1}
+          optionCount={dates.length}
+          selectedValue={selected.day}
+          dataPickerAutofocus
+          getOptionLabel={(day) => formatPersianNumber(day)}
+          isOptionDisabled={(day) => {
+            const date = dates[day - 1];
+            return !hasValidRange || !date || !isDateWithinBounds(date.iso, minDate, maxDate);
+          }}
+          onSelect={(day) => selectDatePart('day', day)}
+        />
+        <DateWheelColumn
+          id={`${selectorId}-month`}
+          hintId={`${selectorId}-hint`}
+          label="ماه"
+          startValue={1}
+          optionCount={12}
+          selectedValue={selected.month}
+          getOptionLabel={(month) => jalaliMonthNames[month - 1]}
+          isOptionDisabled={(month) =>
+            !hasValidRange ||
+            Boolean(minParts && selected.year === minParts.year && month < minParts.month) ||
+            Boolean(maxParts && selected.year === maxParts.year && month > maxParts.month)
+          }
+          onSelect={(month) => selectDatePart('month', month)}
+        />
+        <DateWheelColumn
+          id={`${selectorId}-year`}
+          hintId={`${selectorId}-hint`}
+          label="سال"
+          startValue={hasSelectableYears ? firstYear : selected.year}
+          optionCount={yearCount}
+          selectedValue={selected.year}
+          getOptionLabel={(year) => formatPersianNumber(year)}
+          isOptionDisabled={() => !hasSelectableYears}
+          onSelect={(year) => selectDatePart('year', year)}
+        />
       </div>
-
-      <div className="ft-date-picker__calendar" role="grid" aria-label={`${jalaliMonthNames[visibleMonth.month - 1]} ${formatPersianNumber(visibleMonth.year)}`}>
-        <div className="ft-date-picker__week" role="row">
-          {weekDays.map((day) => (
-            <span key={day.full} role="columnheader" aria-label={day.full} title={day.full}>{day.short}</span>
-          ))}
-        </div>
-        <div className="ft-date-picker__days" role="rowgroup">
-          {dateRows.map((row, rowIndex) => (
-            <div className="ft-date-picker__week-row" role="row" key={`week-${rowIndex}`}>
-              {row.map((date, columnIndex) => {
-                if (!date) {
-                  return <span className="ft-date-picker__empty" role="gridcell" aria-hidden="true" key={`empty-${rowIndex}-${columnIndex}`} />;
-                }
-                const dayIndex = dates.findIndex((item) => item.iso === date.iso);
-                const jalali = gregorianToJalali(date.iso);
-                const label = jalali ? `${jalali.day} ${jalaliMonthNames[jalali.month - 1]} ${jalali.year}` : date.iso;
-                const selected = value === date.iso;
-                const withinBounds = isDateWithinBounds(date.iso, minDate, maxDate);
-                const isToday = date.iso === currentLocalGregorianDate();
-                return (
-                  <button
-                    key={date.iso}
-                    type="button"
-                    className={`ft-date-picker__day${selected ? ' is-selected' : ''}${isToday ? ' is-today' : ''}`}
-                    role="gridcell"
-                    aria-label={label}
-                    aria-selected={selected}
-                    aria-current={isToday ? 'date' : undefined}
-                    disabled={!withinBounds}
-                    tabIndex={activeDate === date.iso || (!dates.some((item) => item.iso === activeDate) && dayIndex === 0) ? 0 : -1}
-                    data-date={date.iso}
-                    data-picker-autofocus={activeDate === date.iso ? '' : undefined}
-                    onFocus={() => setActiveDate(date.iso)}
-                    onClick={() => {
-                      onChange(date.iso);
-                      setActiveDate(date.iso);
-                    }}
-                    onKeyDown={(event) => handleDayKeyDown(event, dayIndex)}
-                  >
-                    {formatPersianNumber(date.day)}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      </div>
-      <p className="ft-date-picker__hint">برای جابه‌جایی بین روزها از کلیدهای جهت‌دار استفاده کنید.</p>
+      <p id={`${selectorId}-hint`} className="ft-date-picker__hint">
+        {hasValidRange
+          ? 'هر ستون را با اسکرول یا کلیدهای جهت‌دار جابه‌جا کنید؛ مقدار وسط انتخاب می‌شود.'
+          : 'برای این بازه تاریخی وجود ندارد.'}
+      </p>
     </section>
   );
+}
+
+type DateWheelColumnProps = {
+  id: string;
+  hintId: string;
+  label: string;
+  startValue: number;
+  optionCount: number;
+  selectedValue: number;
+  getOptionLabel: (value: number) => string;
+  isOptionDisabled: (value: number) => boolean;
+  onSelect: (value: number) => void;
+  dataPickerAutofocus?: boolean;
+};
+
+const dateWheelRowHeight = 48;
+const dateWheelHeight = 240;
+const dateWheelCenterPadding = (dateWheelHeight - dateWheelRowHeight) / 2;
+const dateWheelWindowSize = 15;
+
+function DateWheelColumn({
+  id,
+  hintId,
+  label,
+  startValue,
+  optionCount,
+  selectedValue,
+  getOptionLabel,
+  isOptionDisabled,
+  onSelect,
+  dataPickerAutofocus = false,
+}: DateWheelColumnProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const settleTimerRef = useRef<number | null>(null);
+  const selectedIndex = clampIndex(selectedValue - startValue, optionCount);
+  const [centeredIndex, setCenteredIndex] = useState(selectedIndex);
+  const centeredIndexRef = useRef(selectedIndex);
+  const [windowStart, setWindowStart] = useState(() =>
+    getDateWheelWindowStart(selectedIndex, optionCount),
+  );
+
+  useEffect(() => {
+    if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+    const nextIndex = clampIndex(selectedValue - startValue, optionCount);
+    centeredIndexRef.current = nextIndex;
+    setCenteredIndex(nextIndex);
+    setWindowStart(getDateWheelWindowStart(nextIndex, optionCount));
+    if (listRef.current) listRef.current.scrollTop = nextIndex * dateWheelRowHeight;
+  }, [optionCount, selectedValue, startValue]);
+
+  useEffect(
+    () => () => {
+      if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+    },
+    [],
+  );
+
+  const setCenteredOption = (index: number) => {
+    const nextIndex = clampIndex(index, optionCount);
+    centeredIndexRef.current = nextIndex;
+    setCenteredIndex(nextIndex);
+    setWindowStart(getDateWheelWindowStart(nextIndex, optionCount));
+  };
+
+  const scrollToIndex = (index: number, behavior: ScrollBehavior) => {
+    const nextIndex = clampIndex(index, optionCount);
+    const list = listRef.current;
+    if (!list) return;
+    if (behavior === 'auto') setCenteredOption(nextIndex);
+    list.scrollTo({ top: nextIndex * dateWheelRowHeight, behavior });
+  };
+
+  const nearestEnabledIndex = (index: number) => {
+    const target = clampIndex(index, optionCount);
+    for (let distance = 0; distance < optionCount; distance += 1) {
+      const candidates = distance === 0 ? [target] : [target - distance, target + distance];
+      for (const candidate of candidates) {
+        if (candidate < 0 || candidate >= optionCount) continue;
+        if (!isOptionDisabled(startValue + candidate)) return candidate;
+      }
+    }
+    return -1;
+  };
+
+  const handleScroll = () => {
+    const list = listRef.current;
+    if (!list || optionCount < 1) return;
+    const nextIndex = clampIndex(Math.round(list.scrollTop / dateWheelRowHeight), optionCount);
+    setCenteredOption(nextIndex);
+    if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = window.setTimeout(() => {
+      settleTimerRef.current = null;
+      const centered = clampIndex(Math.round(list.scrollTop / dateWheelRowHeight), optionCount);
+      const selectableIndex = nearestEnabledIndex(centered);
+      if (selectableIndex < 0) return;
+      if (selectableIndex !== centered) {
+        scrollToIndex(selectableIndex, getDateWheelScrollBehavior());
+        return;
+      }
+      setCenteredOption(centered);
+      onSelect(startValue + centered);
+    }, 110);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const currentIndex = listRef.current
+      ? clampIndex(Math.round(listRef.current.scrollTop / dateWheelRowHeight), optionCount)
+      : centeredIndexRef.current;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      const selectableIndex = nearestEnabledIndex(currentIndex);
+      if (selectableIndex < 0) return;
+      if (selectableIndex !== currentIndex) {
+        scrollToIndex(selectableIndex, getDateWheelScrollBehavior());
+      } else {
+        onSelect(startValue + selectableIndex);
+      }
+      return;
+    }
+
+    let targetIndex = currentIndex;
+    if (event.key === 'ArrowDown') targetIndex += 1;
+    else if (event.key === 'ArrowUp') targetIndex -= 1;
+    else if (event.key === 'PageDown') targetIndex += 5;
+    else if (event.key === 'PageUp') targetIndex -= 5;
+    else if (event.key === 'Home') targetIndex = 0;
+    else if (event.key === 'End') targetIndex = optionCount - 1;
+    else return;
+
+    event.preventDefault();
+    const selectableIndex = nearestEnabledIndex(targetIndex);
+    if (selectableIndex < 0) return;
+    scrollToIndex(selectableIndex, getDateWheelScrollBehavior());
+    if (selectableIndex === currentIndex) onSelect(startValue + selectableIndex);
+  };
+
+  const handleOptionClick = (index: number) => {
+    const optionValue = startValue + index;
+    if (isOptionDisabled(optionValue)) return;
+    listRef.current?.focus({ preventScroll: true });
+    const list = listRef.current;
+    if (list && Math.abs(list.scrollTop - index * dateWheelRowHeight) < 1) {
+      setCenteredOption(index);
+      onSelect(optionValue);
+      return;
+    }
+    scrollToIndex(index, getDateWheelScrollBehavior());
+  };
+
+  const windowEnd = Math.min(optionCount, windowStart + dateWheelWindowSize);
+  const options = [];
+  for (let index = windowStart; index < windowEnd; index += 1) {
+    const optionValue = startValue + index;
+    const optionId = `${id}-option-${optionValue}`;
+    const disabled = isOptionDisabled(optionValue);
+    const style = {
+      '--option-top': `${dateWheelCenterPadding + index * dateWheelRowHeight}px`,
+    } as CSSProperties;
+    options.push(
+      <div
+        key={optionValue}
+        id={optionId}
+        role="option"
+        aria-setsize={optionCount}
+        aria-posinset={index + 1}
+        aria-label={`${label} ${getOptionLabel(optionValue)}`}
+        aria-selected={selectedValue === optionValue}
+        aria-disabled={disabled || undefined}
+        className={`ft-date-picker__option${centeredIndex === index ? ' is-centered' : ''}`}
+        style={style}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => handleOptionClick(index)}
+      >
+        {getOptionLabel(optionValue)}
+      </div>,
+    );
+  }
+
+  return (
+    <div className="ft-date-picker__column">
+      <span className="ft-date-picker__column-label" id={`${id}-label`}>
+        {label}
+      </span>
+      <div
+        ref={listRef}
+        className="ft-date-picker__column-list"
+        role="listbox"
+        aria-labelledby={`${id}-label`}
+        aria-describedby={hintId}
+        aria-activedescendant={`${id}-option-${startValue + centeredIndex}`}
+        tabIndex={0}
+        data-picker-autofocus={dataPickerAutofocus ? '' : undefined}
+        onFocus={(event) => {
+          if (event.target === event.currentTarget) scrollToIndex(selectedIndex, 'auto');
+        }}
+        onKeyDown={handleKeyDown}
+        onScroll={handleScroll}
+      >
+        <div
+          className="ft-date-picker__column-track"
+          role="presentation"
+          style={{ height: `${dateWheelCenterPadding * 2 + optionCount * dateWheelRowHeight}px` }}
+        >
+          {options}
+        </div>
+      </div>
+      <span className="ft-date-picker__column-center" aria-hidden="true" />
+    </div>
+  );
+}
+
+function clampIndex(index: number, optionCount: number): number {
+  return Math.min(Math.max(index, 0), Math.max(optionCount - 1, 0));
+}
+
+function getDateWheelWindowStart(centerIndex: number, optionCount: number): number {
+  const maxStart = Math.max(optionCount - dateWheelWindowSize, 0);
+  return Math.min(Math.max(centerIndex - Math.floor(dateWheelWindowSize / 2), 0), maxStart);
+}
+
+function getDateWheelScrollBehavior(): ScrollBehavior {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'auto';
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 }
 
 export type ClockTimeSelectorProps = {
@@ -234,11 +398,18 @@ export function ClockTimeSelector({ value, onChange }: ClockTimeSelectorProps) {
     setStage('minute');
   };
 
-  const focusHour = (hour: number) => selectorRef.current?.querySelector<HTMLButtonElement>(`[data-hour="${hour}"]`)?.focus();
-  const focusMinute = (minute: number) => selectorRef.current?.querySelector<HTMLButtonElement>(`[data-minute="${minute}"]`)?.focus();
+  const focusHour = (hour: number) =>
+    selectorRef.current?.querySelector<HTMLButtonElement>(`[data-hour="${hour}"]`)?.focus();
+  const focusMinute = (minute: number) =>
+    selectorRef.current?.querySelector<HTMLButtonElement>(`[data-minute="${minute}"]`)?.focus();
 
   const hourKeyDown = (event: KeyboardEvent<HTMLButtonElement>, hour: number) => {
-    const steps: Record<string, number> = { ArrowRight: 1, ArrowDown: 4, ArrowLeft: -1, ArrowUp: -4 };
+    const steps: Record<string, number> = {
+      ArrowRight: 1,
+      ArrowDown: 4,
+      ArrowLeft: -1,
+      ArrowUp: -4,
+    };
     if (event.key in steps) {
       event.preventDefault();
       const next = (hour + steps[event.key] + 24) % 24;
@@ -248,23 +419,40 @@ export function ClockTimeSelector({ value, onChange }: ClockTimeSelectorProps) {
   };
 
   const minuteKeyDown = (event: KeyboardEvent<HTMLButtonElement>, minute: number) => {
-    const steps: Record<string, number> = { ArrowRight: 1, ArrowDown: 6, ArrowLeft: -1, ArrowUp: -6 };
-    if (event.key in steps) {
-      event.preventDefault();
-      const next = (minute + steps[event.key] + 60) % 60;
-      setActiveMinute(next);
-      focusMinute(next);
+    let next: number;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      const step = event.key === 'ArrowRight' ? 1 : -1;
+      const ringStart = minute < 30 ? 0 : 30;
+      next = ringStart + (((minute % 30) + step + 30) % 30);
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      next = minute < 30 ? minute + 30 : minute - 30;
+    } else {
+      return;
     }
+
+    event.preventDefault();
+    setActiveMinute(next);
+    focusMinute(next);
   };
 
   return (
     <section ref={selectorRef} className="ft-time-picker" aria-label="انتخاب ساعت ۲۴ ساعته">
       <div className="ft-time-picker__display" aria-live="polite">
-        <button type="button" className={stage === 'hour' ? 'is-active' : ''} aria-label="انتخاب ساعت" onClick={() => setStage('hour')}>
+        <button
+          type="button"
+          className={stage === 'hour' ? 'is-active' : ''}
+          aria-label="انتخاب ساعت"
+          onClick={() => setStage('hour')}
+        >
           {formatPersianNumber(parsed.hour, 2)}
         </button>
         <span aria-hidden="true">:</span>
-        <button type="button" className={stage === 'minute' ? 'is-active' : ''} aria-label="انتخاب دقیقه" onClick={() => setStage('minute')}>
+        <button
+          type="button"
+          className={stage === 'minute' ? 'is-active' : ''}
+          aria-label="انتخاب دقیقه"
+          onClick={() => setStage('minute')}
+        >
           {formatPersianNumber(parsed.minute, 2)}
         </button>
       </div>
@@ -299,46 +487,55 @@ export function ClockTimeSelector({ value, onChange }: ClockTimeSelectorProps) {
               </button>
             );
           })}
-          <span className="ft-time-picker__clock-center" aria-hidden="true">ساعت</span>
+          <span className="ft-time-picker__clock-center" aria-hidden="true">
+            ساعت
+          </span>
         </div>
       ) : (
-        <div className="ft-time-picker__minutes" role="grid" aria-label="دقیقه‌ها">
-          {[...Array(60)].map((_, minute) => (
-            <button
-              key={minute}
-              type="button"
-              role="gridcell"
-              className={`ft-time-picker__minute${parsed.minute === minute ? ' is-selected' : ''}`}
-              aria-label={`${formatPersianNumber(minute, 2)} دقیقه`}
-              aria-selected={parsed.minute === minute}
-              data-minute={minute}
-              data-picker-autofocus={activeMinute === minute ? '' : undefined}
-              tabIndex={activeMinute === minute ? 0 : -1}
-              onFocus={() => setActiveMinute(minute)}
-              onClick={() => {
-                setActiveMinute(minute);
-                onChange(`${pad(parsed.hour)}:${pad(minute)}`);
-              }}
-              onKeyDown={(event) => minuteKeyDown(event, minute)}
-            >
-              {formatPersianNumber(minute, 2)}
-            </button>
-          ))}
+        <div className="ft-time-picker__minute-dial" role="grid" aria-label="دقیقه‌ها">
+          {[...Array(60)].map((_, minute) => {
+            const angle = (minute % 30) * 12 - 90;
+            const radius = minute < 30 ? 43 : 32;
+            const style = {
+              '--x': `${50 + Math.cos((angle * Math.PI) / 180) * radius}%`,
+              '--y': `${50 + Math.sin((angle * Math.PI) / 180) * radius}%`,
+            } as CSSProperties;
+
+            return (
+              <button
+                key={minute}
+                type="button"
+                role="gridcell"
+                className={`ft-time-picker__minute${minute >= 30 ? ' is-inner' : ''}${parsed.minute === minute ? ' is-selected' : ''}`}
+                aria-label={`${formatPersianNumber(minute, 2)} دقیقه`}
+                aria-selected={parsed.minute === minute}
+                data-minute={minute}
+                data-picker-autofocus={activeMinute === minute ? '' : undefined}
+                tabIndex={activeMinute === minute ? 0 : -1}
+                style={style}
+                onFocus={() => setActiveMinute(minute)}
+                onClick={() => {
+                  setActiveMinute(minute);
+                  onChange(`${pad(parsed.hour)}:${pad(minute)}`);
+                }}
+                onKeyDown={(event) => minuteKeyDown(event, minute)}
+              >
+                {formatPersianNumber(minute, 2)}
+              </button>
+            );
+          })}
+          <span className="ft-time-picker__minute-center" aria-hidden="true">
+            دقیقه
+          </span>
         </div>
       )}
       <p className="ft-time-picker__hint">
-        {stage === 'hour' ? 'ساعت را در بازهٔ ۰۰ تا ۲۳ انتخاب کنید.' : 'دقیقه را انتخاب کنید یا برای تغییر ساعت، عدد ساعت را بزنید.'}
+        {stage === 'hour'
+          ? 'ساعت را در بازهٔ ۰۰ تا ۲۳ انتخاب کنید.'
+          : 'دقیقه را انتخاب کنید یا برای تغییر ساعت، عدد ساعت را بزنید.'}
       </p>
     </section>
   );
-}
-
-function normalizeMonth(year: number, month: number) {
-  let nextYear = year;
-  let nextMonth = month;
-  while (nextMonth < 1) { nextMonth += 12; nextYear -= 1; }
-  while (nextMonth > 12) { nextMonth -= 12; nextYear += 1; }
-  return { year: Math.min(9999, Math.max(1, nextYear)), month: nextMonth };
 }
 
 function pad(value: number): string {

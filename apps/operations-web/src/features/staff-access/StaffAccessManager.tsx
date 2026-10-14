@@ -36,13 +36,14 @@ import styles from './StaffAccessManager.module.css';
 type StaffAccessManagerProps = {
   scope: OperationsScope;
   onSessionExpired: () => void;
+  view?: 'roster' | 'invitations';
 };
 
 type PendingMutation = { label: string; run: () => Promise<void> };
 type MfaStage = 'verify' | 'start-enrollment' | 'confirm-enrollment' | 'save-recovery';
 type RosterFilter = 'all' | OperationsStaffMember['status'];
 
-export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManagerProps) {
+export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAccessManagerProps) {
   const [staff, setStaff] = useState<OperationsStaffMember[]>([]);
   const [staffCursor, setStaffCursor] = useState<string | null>(null);
   const [roles, setRoles] = useState<OperationsAccessRole[]>([]);
@@ -156,10 +157,10 @@ export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManag
     setLoadError('');
     setActionError('');
     setNotice('');
-    setTab('roster');
+    setTab(view ?? 'roster');
     setLoading(true);
     void loadData();
-  }, [currentScopeKey, loadData]);
+  }, [currentScopeKey, loadData, view]);
 
   const performMutation = useCallback(
     async (label: string, action: () => Promise<void>) => {
@@ -635,24 +636,26 @@ export function StaffAccessManager({ scope, onSessionExpired }: StaffAccessManag
 
       {!loadError && (
         <>
-          <div className={styles.tabs} role="group" aria-label="بخش مدیریت کارکنان">
-            <Button
-              aria-pressed={tab === 'roster'}
-              onClick={() => setTab('roster')}
-              type="button"
-              tone={tab === 'roster' ? 'primary' : 'ghost'}
-            >
-              فهرست کارکنان و دعوت
-            </Button>
-            <Button
-              aria-pressed={tab === 'invitations'}
-              onClick={() => setTab('invitations')}
-              type="button"
-              tone={tab === 'invitations' ? 'primary' : 'ghost'}
-            >
-              دعوت‌های صادرشده ({invitations.length} دریافت‌شده)
-            </Button>
-          </div>
+          {!view && (
+            <div className={styles.tabs} role="group" aria-label="بخش مدیریت کارکنان">
+              <Button
+                aria-pressed={tab === 'roster'}
+                onClick={() => setTab('roster')}
+                type="button"
+                tone={tab === 'roster' ? 'primary' : 'ghost'}
+              >
+                فهرست کارکنان و دعوت
+              </Button>
+              <Button
+                aria-pressed={tab === 'invitations'}
+                onClick={() => setTab('invitations')}
+                type="button"
+                tone={tab === 'invitations' ? 'primary' : 'ghost'}
+              >
+                دعوت‌های صادرشده ({invitations.length})
+              </Button>
+            </div>
+          )}
 
           {loading ? (
             <Surface className={styles.loadingState} role="status" aria-live="polite">

@@ -1,12 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Badge,
   Button,
   ClockTimePickerField,
   DateTimePickerField,
   JalaliDatePickerField,
+  Surface,
 } from '@funtino/design-system';
 import { FormRenderer } from '@funtino/forms-renderer';
 import {
@@ -123,6 +125,7 @@ type Props = {
   onSessionExpired: () => void;
   mfaStepUpUntil: number | null;
   onMfaStepUp: (validUntil: number) => void;
+  view?: 'library' | 'responses' | 'branches';
 };
 
 type FormSettingsDraft = {
@@ -154,7 +157,9 @@ export function OperationsForms({
   onSessionExpired,
   mfaStepUpUntil,
   onMfaStepUp,
+  view = 'library',
 }: Props) {
+  const router = useRouter();
   const [forms, setForms] = useState<OperationsForm[]>([]);
   const [templates, setTemplates] = useState<OperationsFormTemplate[]>([]);
   const [capabilities, setCapabilities] = useState<OperationsFormsCapabilities | null>(null);
@@ -195,6 +200,7 @@ export function OperationsForms({
   const [formsNextCursor, setFormsNextCursor] = useState<string | null>(null);
   const [formsLoadingMore, setFormsLoadingMore] = useState(false);
   const [responses, setResponses] = useState<OperationsFormResponse[]>([]);
+  const initialResponseLoadKey = useRef<string | null>(null);
   const [responseNextCursor, setResponseNextCursor] = useState<string | null>(null);
   const [responseStats, setResponseStats] = useState<{
     total: number;
@@ -426,57 +432,65 @@ export function OperationsForms({
     };
   }, [definition, draftDirty, formScope, onSessionExpired, selectedForm]);
 
-  async function openForm(formId: string, rowOverride?: OperationsForm) {
-    const row = rowOverride ?? forms.find((item) => item.id === formId);
-    if (!row) return;
-    setLoading(true);
-    setError('');
-    setNotice('');
-    try {
-      const targetScope: OperationsScope = {
-        type: 'branch',
-        organizationId: row.organizationId,
-        branchId: row.branchId,
-      };
-      const [form, permissionSet] = await Promise.all([
-        getOperationsForm(row.id, targetScope),
-        getOperationsFormsCapabilities(targetScope),
-      ]);
-      const nextDefinition = formDefinitionSchema.parse(form.draftSchema);
-      setCapabilities(permissionSet);
-      setSelectedForm(form);
-      setDefinition(nextDefinition);
-      definitionRef.current = nextDefinition;
-      setActivePageId(nextDefinition.pages[0]?.id ?? null);
-      setSelectedFieldId(nextDefinition.pages[0]?.fields[0]?.id ?? null);
-      setUndoStack([]);
-      setRedoStack([]);
-      setDraftDirty(false);
-      setValidationIssues([]);
-      setValidationIssueDetails([]);
-      setReorderAnnouncement('');
-      setSettingsDraft(settingsFromForm(form));
-      setPreviewAnswers({});
-      setPreviewPageId(
-        nextDefinition.pages.find((page) => page.kind === 'start')?.id ??
-          nextDefinition.pages.find((page) => page.kind === 'questions')?.id,
-      );
-      setPreviewCompleted(false);
-      setResponses([]);
-      setSelectedResponse(null);
-      setShowSensitiveDetail(false);
-      setIncludeSensitive(false);
-      setResponseStats(null);
-      setActiveTab('builder');
-      const stats = await getOperationsFormResponseStats(form.id, targetScope).catch(() => null);
-      setResponseStats(stats);
-    } catch (failure) {
-      setError(errorMessage(failure, onSessionExpired));
-      if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
-    } finally {
-      setLoading(false);
-    }
-  }
+  const openForm = useCallback(
+    async (
+      formId: string,
+      rowOverride?: OperationsForm,
+      initialTab: 'builder' | 'responses' = view === 'responses' ? 'responses' : 'builder',
+    ) => {
+      const row = rowOverride ?? forms.find((item) => item.id === formId);
+      if (!row) return;
+      initialResponseLoadKey.current = null;
+      setLoading(true);
+      setError('');
+      setNotice('');
+      try {
+        const targetScope: OperationsScope = {
+          type: 'branch',
+          organizationId: row.organizationId,
+          branchId: row.branchId,
+        };
+        const [form, permissionSet] = await Promise.all([
+          getOperationsForm(row.id, targetScope),
+          getOperationsFormsCapabilities(targetScope),
+        ]);
+        const nextDefinition = formDefinitionSchema.parse(form.draftSchema);
+        setCapabilities(permissionSet);
+        setSelectedForm(form);
+        setDefinition(nextDefinition);
+        definitionRef.current = nextDefinition;
+        setActivePageId(nextDefinition.pages[0]?.id ?? null);
+        setSelectedFieldId(nextDefinition.pages[0]?.fields[0]?.id ?? null);
+        setUndoStack([]);
+        setRedoStack([]);
+        setDraftDirty(false);
+        setValidationIssues([]);
+        setValidationIssueDetails([]);
+        setReorderAnnouncement('');
+        setSettingsDraft(settingsFromForm(form));
+        setPreviewAnswers({});
+        setPreviewPageId(
+          nextDefinition.pages.find((page) => page.kind === 'start')?.id ??
+            nextDefinition.pages.find((page) => page.kind === 'questions')?.id,
+        );
+        setPreviewCompleted(false);
+        setResponses([]);
+        setSelectedResponse(null);
+        setShowSensitiveDetail(false);
+        setIncludeSensitive(false);
+        setResponseStats(null);
+        setActiveTab(initialTab);
+        const stats = await getOperationsFormResponseStats(form.id, targetScope).catch(() => null);
+        setResponseStats(stats);
+      } catch (failure) {
+        setError(errorMessage(failure, onSessionExpired));
+        if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
+      } finally {
+        setLoading(false);
+      }
+    },
+    [forms, onSessionExpired, view],
+  );
 
   function commitDefinition(updater: (current: FormDefinition) => FormDefinition) {
     const current = definitionRef.current;
@@ -571,6 +585,14 @@ export function OperationsForms({
     setActivePageId(null);
     setActiveTab('builder');
   }
+
+  useEffect(() => {
+    if (view !== 'responses' || selectedForm || loading) return;
+    const formId = new URLSearchParams(window.location.search).get('formId');
+    if (!formId) return;
+    const row = forms.find((item) => item.id === formId);
+    if (row) void openForm(row.id, row, 'responses');
+  }, [forms, loading, openForm, selectedForm, view]);
 
   async function createForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -838,36 +860,55 @@ export function OperationsForms({
     }
   }
 
-  async function loadResponses(append = false, cursor?: string) {
-    if (!selectedForm || !formScope || !capabilities?.canReadResponses) return;
-    setResponsesLoading(true);
-    setError('');
-    try {
-      const from = responseFrom ? new Date(`${responseFrom}T00:00:00`).toISOString() : undefined;
-      const to = responseTo ? new Date(`${responseTo}T23:59:59.999`).toISOString() : undefined;
-      const page = await getOperationsFormResponses(selectedForm.id, formScope, {
-        status: responseStatusFilter ? (responseStatusFilter as ResponseStatus) : undefined,
-        from,
-        to,
-        searchFieldId: searchFieldId || undefined,
-        search: responseSearch.trim() || undefined,
-        cursor,
-        pageSize: 50,
-      });
-      setResponses((current) => (append ? [...current, ...page.items] : page.items));
-      setResponseNextCursor(page.nextCursor);
-      setResponseStats(await getOperationsFormResponseStats(selectedForm.id, formScope));
-    } catch (failure) {
-      setError(errorMessage(failure, onSessionExpired));
-    } finally {
-      setResponsesLoading(false);
-    }
-  }
+  const loadResponses = useCallback(
+    async (append = false, cursor?: string) => {
+      if (!selectedForm || !formScope || !capabilities?.canReadResponses) return;
+      setResponsesLoading(true);
+      setError('');
+      try {
+        const from = responseFrom ? new Date(`${responseFrom}T00:00:00`).toISOString() : undefined;
+        const to = responseTo ? new Date(`${responseTo}T23:59:59.999`).toISOString() : undefined;
+        const page = await getOperationsFormResponses(selectedForm.id, formScope, {
+          status: responseStatusFilter ? (responseStatusFilter as ResponseStatus) : undefined,
+          from,
+          to,
+          searchFieldId: searchFieldId || undefined,
+          search: responseSearch.trim() || undefined,
+          cursor,
+          pageSize: 50,
+        });
+        setResponses((current) => (append ? [...current, ...page.items] : page.items));
+        setResponseNextCursor(page.nextCursor);
+        setResponseStats(await getOperationsFormResponseStats(selectedForm.id, formScope));
+      } catch (failure) {
+        setError(errorMessage(failure, onSessionExpired));
+      } finally {
+        setResponsesLoading(false);
+      }
+    },
+    [
+      capabilities?.canReadResponses,
+      formScope,
+      onSessionExpired,
+      responseFrom,
+      responseSearch,
+      responseStatusFilter,
+      responseTo,
+      searchFieldId,
+      selectedForm,
+    ],
+  );
+
+  useEffect(() => {
+    if (view !== 'responses' || activeTab !== 'responses' || !selectedForm) return;
+    if (initialResponseLoadKey.current === selectedForm.id) return;
+    initialResponseLoadKey.current = selectedForm.id;
+    void loadResponses(false);
+  }, [activeTab, loadResponses, selectedForm, view]);
 
   async function openResponses() {
-    setActiveTab('responses');
-    setSelectedResponse(null);
-    await loadResponses(false);
+    if (!selectedForm || (draftDirty && !(await saveDraftNow()))) return;
+    router.push(`/forms/responses?formId=${encodeURIComponent(selectedForm.id)}`);
   }
 
   async function openResponse(responseId: string, revealSensitive = false) {
@@ -1041,12 +1082,22 @@ export function OperationsForms({
         <div>
           <p className={styles.eyebrow}>مدیریت مشتریان · فرم‌ساز</p>
           <h2 id="operations-forms-heading">
-            {selectedForm && definition ? definition.title || 'فرم بدون عنوان' : 'فرم‌ها'}
+            {selectedForm && definition
+              ? definition.title || 'فرم بدون عنوان'
+              : view === 'responses'
+                ? 'پاسخ‌های فرم'
+                : view === 'branches'
+                  ? 'مقایسه‌ی پاسخ شعب'
+                  : 'فهرست فرم‌ها'}
           </h2>
           <p>
             {selectedForm
               ? `نسخه‌ی منتشرشده: ${selectedForm.currentVersion ?? 'هنوز منتشر نشده'}`
-              : 'پیش‌نویس‌ها جدا از نسخه‌های منتشرشده ذخیره می‌شوند؛ هر انتشار نسخه‌ی تازه‌ای می‌سازد.'}
+              : view === 'responses'
+                ? 'برای دیدن پاسخ‌ها، یک فرم از همین محدوده انتخاب کنید.'
+                : view === 'branches'
+                  ? 'نمایش تجمیعی است و متن پاسخ‌ها یا اطلاعات مشتری را نشان نمی‌دهد.'
+                  : 'پیش‌نویس‌ها جدا از نسخه‌های منتشرشده ذخیره می‌شوند؛ هر انتشار نسخه‌ی تازه‌ای می‌سازد.'}
           </p>
         </div>
         <div className={styles.actions}>
@@ -1088,7 +1139,8 @@ export function OperationsForms({
         </p>
       )}
 
-      {!selectedForm &&
+      {view === 'branches' &&
+        !selectedForm &&
         scope.type === 'organization' &&
         capabilities?.canReadResponses &&
         aggregateStats && (
@@ -1134,1191 +1186,788 @@ export function OperationsForms({
           </section>
         )}
 
-      <div
-        className={selectedForm && definition ? styles.editorWorkspace : styles.libraryWorkspace}
-      >
-        {!selectedForm || !definition ? (
-          <>
-            <section className={styles.libraryMain} aria-labelledby="forms-library-heading">
-              <div className={styles.libraryHeading}>
-                <div>
-                  <p className={styles.eyebrow}>کتابخانه‌ی فرم‌ها</p>
-                  <h3 id="forms-library-heading">فرم‌های این محدوده</h3>
-                  <p>پیش‌نویس‌ها ذخیره می‌شوند و هر انتشار یک نسخه‌ی جداگانه می‌سازد.</p>
-                </div>
-                <Badge tone="neutral">
-                  {forms.length.toLocaleString('fa-IR')}{' '}
-                  {formsNextCursor ? 'فرم در این صفحه' : 'فرم'}
-                </Badge>
-              </div>
-              <form
-                className={styles.libraryFilters}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setFormQuery(formQueryDraft.trim());
+      {view === 'responses' && (!selectedForm || !definition) && (
+        <Surface className={styles.emptyState} aria-labelledby="response-form-picker-title">
+          <h3 id="response-form-picker-title">انتخاب فرم</h3>
+          {loading ? (
+            <p role="status">در حال دریافت فرم‌های محدوده…</p>
+          ) : !capabilities?.canRead ? (
+            <p>برای مشاهده‌ی فرم‌ها مجوز forms.read لازم است.</p>
+          ) : forms.length === 0 ? (
+            <p>فرم فعالی در این محدوده پیدا نشد.</p>
+          ) : (
+            <label>
+              فرم موردنظر
+              <select
+                defaultValue=""
+                onChange={(event) => {
+                  const form = forms.find((item) => item.id === event.currentTarget.value);
+                  if (form) void openForm(form.id, form, 'responses');
                 }}
               >
-                <label>
-                  جست‌وجو در فرم‌ها
-                  <input
-                    type="search"
-                    value={formQueryDraft}
-                    onChange={(event) => setFormQueryDraft(event.target.value)}
-                    maxLength={120}
-                    placeholder="عنوان فرم را بنویسید"
-                  />
-                </label>
-                <label>
-                  وضعیت
-                  <select
-                    value={formStatusFilter}
-                    onChange={(event) => setFormStatusFilter(event.target.value as FormStatus | '')}
-                  >
-                    <option value="">همه‌ی وضعیت‌ها</option>
-                    {Object.entries(formStatusLabels).map(([status, label]) => (
-                      <option key={status} value={status}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className={styles.libraryFilterActions}>
-                  <Button type="submit" tone="secondary" disabled={loading}>
-                    جست‌وجو
-                  </Button>
-                  {(formQuery || formStatusFilter) && (
-                    <Button
-                      type="button"
-                      tone="ghost"
-                      disabled={loading}
-                      onClick={() => {
-                        setFormQueryDraft('');
-                        setFormQuery('');
-                        setFormStatusFilter('');
-                      }}
-                    >
-                      پاک‌کردن فیلترها
-                    </Button>
-                  )}
-                </div>
-              </form>
+                <option value="">انتخاب فرم</option>
+                {forms.map((form) => (
+                  <option key={form.id} value={form.id}>
+                    {form.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </Surface>
+      )}
 
-              {!capabilities?.canRead && !loading ? (
-                <div className={styles.emptyState} role="status">
-                  <span className={styles.emptyIcon} aria-hidden="true">
-                    ◎
-                  </span>
-                  <h4>دسترسی نمایش فرم‌ها فعال نیست</h4>
-                  <p>برای مشاهده‌ی فرم‌های این محدوده، مجوز forms.read لازم است.</p>
+      {view !== 'branches' && !(view === 'responses' && (!selectedForm || !definition)) && (
+        <div
+          className={selectedForm && definition ? styles.editorWorkspace : styles.libraryWorkspace}
+        >
+          {!selectedForm || !definition ? (
+            <>
+              <section className={styles.libraryMain} aria-labelledby="forms-library-heading">
+                <div className={styles.libraryHeading}>
+                  <div>
+                    <p className={styles.eyebrow}>کتابخانه‌ی فرم‌ها</p>
+                    <h3 id="forms-library-heading">فرم‌های این محدوده</h3>
+                    <p>پیش‌نویس‌ها ذخیره می‌شوند و هر انتشار یک نسخه‌ی جداگانه می‌سازد.</p>
+                  </div>
+                  <Badge tone="neutral">
+                    {forms.length.toLocaleString('fa-IR')}{' '}
+                    {formsNextCursor ? 'فرم در این صفحه' : 'فرم'}
+                  </Badge>
                 </div>
-              ) : loading ? (
-                <div
-                  className={styles.formCardGrid}
-                  aria-label="در حال دریافت فرم‌ها"
-                  aria-busy="true"
+                <form
+                  className={styles.libraryFilters}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    setFormQuery(formQueryDraft.trim());
+                  }}
                 >
-                  {Array.from({ length: 4 }, (_, index) => (
-                    <div className={styles.formSkeleton} key={index}>
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  ))}
-                  <p className={styles.srOnly} role="status">
-                    در حال دریافت فرم‌ها…
-                  </p>
-                </div>
-              ) : forms.length === 0 ? (
-                <div className={styles.emptyState}>
-                  <span className={styles.emptyIcon} aria-hidden="true">
-                    ▤
-                  </span>
-                  <h4>
-                    {formQuery || formStatusFilter
-                      ? 'فرمی با این فیلترها پیدا نشد'
-                      : 'هنوز فرمی ساخته نشده'}
-                  </h4>
-                  <p>
-                    {formQuery || formStatusFilter
-                      ? 'عبارت جست‌وجو یا وضعیت انتخاب‌شده را تغییر دهید.'
-                      : 'برای شروع، یک پیش‌نویس خالی بسازید یا از یکی از قالب‌های در دسترس استفاده کنید.'}
-                  </p>
-                  {(formQuery || formStatusFilter) && (
+                  <label>
+                    جست‌وجو در فرم‌ها
+                    <input
+                      type="search"
+                      value={formQueryDraft}
+                      onChange={(event) => setFormQueryDraft(event.target.value)}
+                      maxLength={120}
+                      placeholder="عنوان فرم را بنویسید"
+                    />
+                  </label>
+                  <label>
+                    وضعیت
+                    <select
+                      value={formStatusFilter}
+                      onChange={(event) =>
+                        setFormStatusFilter(event.target.value as FormStatus | '')
+                      }
+                    >
+                      <option value="">همه‌ی وضعیت‌ها</option>
+                      {Object.entries(formStatusLabels).map(([status, label]) => (
+                        <option key={status} value={status}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className={styles.libraryFilterActions}>
+                    <Button type="submit" tone="secondary" disabled={loading}>
+                      جست‌وجو
+                    </Button>
+                    {(formQuery || formStatusFilter) && (
+                      <Button
+                        type="button"
+                        tone="ghost"
+                        disabled={loading}
+                        onClick={() => {
+                          setFormQueryDraft('');
+                          setFormQuery('');
+                          setFormStatusFilter('');
+                        }}
+                      >
+                        پاک‌کردن فیلترها
+                      </Button>
+                    )}
+                  </div>
+                </form>
+
+                {!capabilities?.canRead && !loading ? (
+                  <div className={styles.emptyState} role="status">
+                    <span className={styles.emptyIcon} aria-hidden="true">
+                      ◎
+                    </span>
+                    <h4>دسترسی نمایش فرم‌ها فعال نیست</h4>
+                    <p>برای مشاهده‌ی فرم‌های این محدوده، مجوز forms.read لازم است.</p>
+                  </div>
+                ) : loading ? (
+                  <div
+                    className={styles.formCardGrid}
+                    aria-label="در حال دریافت فرم‌ها"
+                    aria-busy="true"
+                  >
+                    {Array.from({ length: 4 }, (_, index) => (
+                      <div className={styles.formSkeleton} key={index}>
+                        <span />
+                        <span />
+                        <span />
+                      </div>
+                    ))}
+                    <p className={styles.srOnly} role="status">
+                      در حال دریافت فرم‌ها…
+                    </p>
+                  </div>
+                ) : forms.length === 0 ? (
+                  <div className={styles.emptyState}>
+                    <span className={styles.emptyIcon} aria-hidden="true">
+                      ▤
+                    </span>
+                    <h4>
+                      {formQuery || formStatusFilter
+                        ? 'فرمی با این فیلترها پیدا نشد'
+                        : 'هنوز فرمی ساخته نشده'}
+                    </h4>
+                    <p>
+                      {formQuery || formStatusFilter
+                        ? 'عبارت جست‌وجو یا وضعیت انتخاب‌شده را تغییر دهید.'
+                        : 'برای شروع، یک پیش‌نویس خالی بسازید یا از یکی از قالب‌های در دسترس استفاده کنید.'}
+                    </p>
+                    {(formQuery || formStatusFilter) && (
+                      <Button
+                        type="button"
+                        tone="ghost"
+                        onClick={() => {
+                          setFormQueryDraft('');
+                          setFormQuery('');
+                          setFormStatusFilter('');
+                        }}
+                      >
+                        نمایش همه‌ی فرم‌ها
+                      </Button>
+                    )}
+                    {!formQuery && !formStatusFilter && capabilities?.canManage && (
+                      <a className={styles.inlineLink} href="#forms-create-card">
+                        رفتن به ساخت فرم
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  <ul className={styles.formCardGrid} aria-label="فرم‌های ذخیره‌شده">
+                    {forms.map((form) => {
+                      const branch = branches.find(
+                        (item) =>
+                          item.scope.type === 'branch' && item.scope.branchId === form.branchId,
+                      )?.branch;
+                      return (
+                        <li key={form.id}>
+                          <button
+                            type="button"
+                            className={styles.formCard}
+                            onClick={() => void openForm(form.id)}
+                          >
+                            <span className={styles.formCardTop}>
+                              <Badge
+                                tone={
+                                  form.status === 'published'
+                                    ? 'success'
+                                    : form.status === 'paused'
+                                      ? 'warning'
+                                      : 'neutral'
+                                }
+                              >
+                                {formStatusLabels[form.status]}
+                              </Badge>
+                              <span className={styles.formCardArrow} aria-hidden="true">
+                                ←
+                              </span>
+                            </span>
+                            <strong className={styles.formCardTitle}>{form.title}</strong>
+                            <span className={styles.formCardDescription}>
+                              {form.description || 'بدون توضیح'}
+                            </span>
+                            <span className={styles.formCardMeta}>
+                              <span>{branch?.name ?? 'محدوده‌ی فعلی'}</span>
+                              <span>{form.responseCount.toLocaleString('fa-IR')} پاسخ</span>
+                            </span>
+                            <span className={styles.formCardMeta}>
+                              <span>
+                                {form.currentVersion
+                                  ? 'نسخه‌ی ' + form.currentVersion.toLocaleString('fa-IR')
+                                  : 'هنوز منتشر نشده'}
+                              </span>
+                              <time dateTime={form.createdAt}>
+                                {new Date(form.createdAt).toLocaleDateString('fa-IR')}
+                              </time>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {error && !loading && (
+                  <Button type="button" tone="secondary" onClick={() => void retryRefreshForms()}>
+                    تلاش دوباره
+                  </Button>
+                )}
+                {formsNextCursor && !loading && (
+                  <div className={styles.loadMoreRow}>
                     <Button
                       type="button"
                       tone="ghost"
-                      onClick={() => {
-                        setFormQueryDraft('');
-                        setFormQuery('');
-                        setFormStatusFilter('');
-                      }}
+                      disabled={formsLoadingMore}
+                      onClick={() => void loadMoreForms()}
                     >
-                      نمایش همه‌ی فرم‌ها
+                      {formsLoadingMore ? 'در حال دریافت…' : 'فرم‌های بیشتر'}
                     </Button>
-                  )}
-                  {!formQuery && !formStatusFilter && capabilities?.canManage && (
-                    <a className={styles.inlineLink} href="#forms-create-card">
-                      رفتن به ساخت فرم
-                    </a>
-                  )}
-                </div>
-              ) : (
-                <ul className={styles.formCardGrid} aria-label="فرم‌های ذخیره‌شده">
-                  {forms.map((form) => {
-                    const branch = branches.find(
-                      (item) =>
-                        item.scope.type === 'branch' && item.scope.branchId === form.branchId,
-                    )?.branch;
-                    return (
-                      <li key={form.id}>
-                        <button
-                          type="button"
-                          className={styles.formCard}
-                          onClick={() => void openForm(form.id)}
-                        >
-                          <span className={styles.formCardTop}>
-                            <Badge
-                              tone={
-                                form.status === 'published'
-                                  ? 'success'
-                                  : form.status === 'paused'
-                                    ? 'warning'
-                                    : 'neutral'
-                              }
-                            >
-                              {formStatusLabels[form.status]}
-                            </Badge>
-                            <span className={styles.formCardArrow} aria-hidden="true">
-                              ←
-                            </span>
-                          </span>
-                          <strong className={styles.formCardTitle}>{form.title}</strong>
-                          <span className={styles.formCardDescription}>
-                            {form.description || 'بدون توضیح'}
-                          </span>
-                          <span className={styles.formCardMeta}>
-                            <span>{branch?.name ?? 'محدوده‌ی فعلی'}</span>
-                            <span>{form.responseCount.toLocaleString('fa-IR')} پاسخ</span>
-                          </span>
-                          <span className={styles.formCardMeta}>
-                            <span>
-                              {form.currentVersion
-                                ? 'نسخه‌ی ' + form.currentVersion.toLocaleString('fa-IR')
-                                : 'هنوز منتشر نشده'}
-                            </span>
-                            <time dateTime={form.createdAt}>
-                              {new Date(form.createdAt).toLocaleDateString('fa-IR')}
-                            </time>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              {error && !loading && (
-                <Button type="button" tone="secondary" onClick={() => void retryRefreshForms()}>
-                  تلاش دوباره
-                </Button>
-              )}
-              {formsNextCursor && !loading && (
-                <div className={styles.loadMoreRow}>
-                  <Button
-                    type="button"
-                    tone="ghost"
-                    disabled={formsLoadingMore}
-                    onClick={() => void loadMoreForms()}
-                  >
-                    {formsLoadingMore ? 'در حال دریافت…' : 'فرم‌های بیشتر'}
-                  </Button>
-                </div>
-              )}
-            </section>
+                  </div>
+                )}
+              </section>
 
-            <aside
-              className={styles.createCard}
-              id="forms-create-card"
-              aria-labelledby="forms-create-heading"
-            >
-              {loading ? (
-                <div className={styles.emptyState} role="status">
-                  <span className={styles.createIcon} aria-hidden="true">
-                    ＋
-                  </span>
-                  <p>در حال آماده‌سازی ساخت فرم…</p>
-                </div>
-              ) : capabilities?.canManage ? (
-                <form className={styles.createForm} onSubmit={(event) => void createForm(event)}>
-                  <div className={styles.createCardHeading}>
+              <aside
+                className={styles.createCard}
+                id="forms-create-card"
+                aria-labelledby="forms-create-heading"
+              >
+                {loading ? (
+                  <div className={styles.emptyState} role="status">
                     <span className={styles.createIcon} aria-hidden="true">
                       ＋
                     </span>
-                    <div>
-                      <p className={styles.eyebrow}>شروع تازه</p>
-                      <h3 id="forms-create-heading">ساخت فرم</h3>
-                    </div>
+                    <p>در حال آماده‌سازی ساخت فرم…</p>
                   </div>
-                  <p className={styles.helper}>
-                    یک عنوان و محدوده انتخاب کنید؛ پیش‌نویس پس از ساخت در ویرایشگر باز می‌شود.
-                  </p>
-                  {scope.type === 'organization' ? (
-                    <label>
-                      شعبه
-                      <select
-                        required
-                        value={branchId}
-                        onChange={(event) => setBranchId(event.target.value)}
-                      >
-                        <option value="">انتخاب شعبه</option>
-                        {branches.map((item) =>
-                          item.scope.type === 'branch' ? (
-                            <option key={item.scope.branchId} value={item.scope.branchId}>
-                              {item.branch?.name ?? item.scope.branchId}
-                            </option>
-                          ) : null,
-                        )}
-                      </select>
-                    </label>
-                  ) : (
-                    <p className={styles.scopeChip}>
-                      شعبه: {branches[0]?.branch?.name ?? 'محدوده‌ی فعلی'}
-                    </p>
-                  )}
-                  <label>
-                    عنوان فرم
-                    <input
-                      required
-                      value={newTitle}
-                      onChange={(event) => setNewTitle(event.target.value)}
-                      maxLength={160}
-                      placeholder="مثلاً ثبت‌نام کارگاه نقاشی"
-                    />
-                  </label>
-                  <fieldset className={styles.templatePicker}>
-                    <legend>از کجا شروع کنیم؟</legend>
-                    <label className={styles.templateChoice}>
-                      <input
-                        type="radio"
-                        name="forms-template"
-                        value=""
-                        checked={!selectedTemplateId}
-                        onChange={() => setSelectedTemplateId('')}
-                      />
-                      <span>
-                        <strong>فرم خالی</strong>
-                        <small>ساختار و پرسش‌ها را خودتان اضافه کنید.</small>
+                ) : capabilities?.canManage ? (
+                  <form className={styles.createForm} onSubmit={(event) => void createForm(event)}>
+                    <div className={styles.createCardHeading}>
+                      <span className={styles.createIcon} aria-hidden="true">
+                        ＋
                       </span>
-                    </label>
-                    {templates
-                      .filter((item) => item.enabled)
-                      .map((template) => (
-                        <label className={styles.templateChoice} key={template.id}>
-                          <input
-                            type="radio"
-                            name="forms-template"
-                            value={template.id}
-                            checked={selectedTemplateId === template.id}
-                            onChange={() => setSelectedTemplateId(template.id)}
-                          />
-                          <span>
-                            <strong>{template.name}</strong>
-                            <small>
-                              {template.description ||
-                                template.definition.pages.length.toLocaleString('fa-IR') + ' صفحه'}
-                            </small>
-                          </span>
-                        </label>
-                      ))}
-                    {templates.filter((item) => item.enabled).length === 0 && (
-                      <p className={styles.helper}>قالب فعالی در این محدوده ثبت نشده است.</p>
+                      <div>
+                        <p className={styles.eyebrow}>شروع تازه</p>
+                        <h3 id="forms-create-heading">ساخت فرم</h3>
+                      </div>
+                    </div>
+                    <p className={styles.helper}>
+                      یک عنوان و محدوده انتخاب کنید؛ پیش‌نویس پس از ساخت در ویرایشگر باز می‌شود.
+                    </p>
+                    {scope.type === 'organization' ? (
+                      <label>
+                        شعبه
+                        <select
+                          required
+                          value={branchId}
+                          onChange={(event) => setBranchId(event.target.value)}
+                        >
+                          <option value="">انتخاب شعبه</option>
+                          {branches.map((item) =>
+                            item.scope.type === 'branch' ? (
+                              <option key={item.scope.branchId} value={item.scope.branchId}>
+                                {item.branch?.name ?? item.scope.branchId}
+                              </option>
+                            ) : null,
+                          )}
+                        </select>
+                      </label>
+                    ) : (
+                      <p className={styles.scopeChip}>
+                        شعبه: {branches[0]?.branch?.name ?? 'محدوده‌ی فعلی'}
+                      </p>
                     )}
-                  </fieldset>
-                  <Button type="submit" disabled={saving || !branchId || !newTitle.trim()}>
-                    {saving ? 'در حال ساخت…' : 'ساخت پیش‌نویس'}
-                  </Button>
-                </form>
-              ) : (
-                <div className={styles.emptyState}>
-                  <span className={styles.createIcon} aria-hidden="true">
-                    ＋
-                  </span>
-                  <h3 id="forms-create-heading">ساخت فرم</h3>
-                  <p>برای ایجاد یا ویرایش فرم، مجوز forms.manage لازم است.</p>
-                </div>
-              )}
-            </aside>
-          </>
-        ) : (
-          <>
-            <div className={styles.editorToolbar}>
-              <div className={styles.editorIdentity}>
-                <Button
-                  type="button"
-                  tone="ghost"
-                  disabled={saving}
-                  onClick={() => void returnToLibrary()}
-                >
-                  بازگشت به فرم‌ها
-                </Button>
-                <div>
-                  <p className={styles.eyebrow}>
-                    {branches.find(
-                      (item) =>
-                        item.scope.type === 'branch' &&
-                        item.scope.branchId === selectedForm.branchId,
-                    )?.branch?.name ?? 'فرم محدوده‌ی فعلی'}
-                  </p>
-                  <h3>{definition.title || selectedForm.title}</h3>
-                </div>
-              </div>
-              <div className={styles.editorToolbarActions}>
-                <Badge tone={draftDirty ? 'warning' : saving ? 'neutral' : 'success'}>
-                  {draftDirty ? 'تغییر ذخیره‌نشده' : saving ? 'در حال ذخیره' : 'ذخیره شد'}
-                </Badge>
-                <Button
-                  type="button"
-                  tone="ghost"
-                  disabled={saving || !undoStack.length || !capabilities?.canManage}
-                  onClick={undo}
-                >
-                  واگرد
-                </Button>
-                <Button
-                  type="button"
-                  tone="ghost"
-                  disabled={saving || !redoStack.length || !capabilities?.canManage}
-                  onClick={redo}
-                >
-                  ازنو
-                </Button>
-                <Button
-                  type="button"
-                  tone="secondary"
-                  disabled={saving || !draftDirty || !capabilities?.canManage}
-                  onClick={() => void saveDraftNow()}
-                >
-                  ذخیره‌ی پیش‌نویس
-                </Button>
-                <Button
-                  type="button"
-                  tone="ghost"
-                  disabled={saving || !capabilities?.canManage}
-                  onClick={() => void duplicateForm()}
-                >
-                  ساخت نسخه
-                </Button>
-              </div>
-            </div>
-
-            <nav className={styles.editorNav} aria-label="بخش‌های ویرایش فرم">
-              <Button
-                type="button"
-                tone={activeTab === 'builder' ? 'primary' : 'ghost'}
-                aria-current={activeTab === 'builder' ? 'page' : undefined}
-                onClick={() => setActiveTab('builder')}
-              >
-                ساختار فرم
-              </Button>
-              <Button
-                type="button"
-                tone={activeTab === 'settings' ? 'primary' : 'ghost'}
-                aria-current={activeTab === 'settings' ? 'page' : undefined}
-                onClick={() => setActiveTab('settings')}
-              >
-                تنظیمات و انتشار
-              </Button>
-              <Button
-                type="button"
-                tone={activeTab === 'preview' ? 'primary' : 'ghost'}
-                aria-current={activeTab === 'preview' ? 'page' : undefined}
-                onClick={() => setActiveTab('preview')}
-              >
-                پیش‌نمایش
-              </Button>
-              <Button
-                type="button"
-                tone={activeTab === 'responses' ? 'primary' : 'ghost'}
-                aria-current={activeTab === 'responses' ? 'page' : undefined}
-                disabled={!capabilities?.canReadResponses}
-                onClick={() => void openResponses()}
-              >
-                پاسخ‌ها
-              </Button>
-            </nav>
-
-            {validationIssues.length > 0 && (
-              <section
-                className={styles.validationSummary}
-                aria-labelledby="form-validation-heading"
-              >
-                <h4 id="form-validation-heading">موارد لازم برای تکمیل فرم</h4>
-                <ul>
-                  {validationIssues.map((item, index) => (
-                    <li key={index + '-' + item}>
-                      {validationIssueDetails[index]?.pageId ? (
-                        <button type="button" onClick={() => openValidationIssue(index)}>
-                          {item}
-                        </button>
-                      ) : (
-                        <span>{item}</span>
+                    <label>
+                      عنوان فرم
+                      <input
+                        required
+                        value={newTitle}
+                        onChange={(event) => setNewTitle(event.target.value)}
+                        maxLength={160}
+                        placeholder="مثلاً ثبت‌نام کارگاه نقاشی"
+                      />
+                    </label>
+                    <fieldset className={styles.templatePicker}>
+                      <legend>از کجا شروع کنیم؟</legend>
+                      <label className={styles.templateChoice}>
+                        <input
+                          type="radio"
+                          name="forms-template"
+                          value=""
+                          checked={!selectedTemplateId}
+                          onChange={() => setSelectedTemplateId('')}
+                        />
+                        <span>
+                          <strong>فرم خالی</strong>
+                          <small>ساختار و پرسش‌ها را خودتان اضافه کنید.</small>
+                        </span>
+                      </label>
+                      {templates
+                        .filter((item) => item.enabled)
+                        .map((template) => (
+                          <label className={styles.templateChoice} key={template.id}>
+                            <input
+                              type="radio"
+                              name="forms-template"
+                              value={template.id}
+                              checked={selectedTemplateId === template.id}
+                              onChange={() => setSelectedTemplateId(template.id)}
+                            />
+                            <span>
+                              <strong>{template.name}</strong>
+                              <small>
+                                {template.description ||
+                                  template.definition.pages.length.toLocaleString('fa-IR') +
+                                    ' صفحه'}
+                              </small>
+                            </span>
+                          </label>
+                        ))}
+                      {templates.filter((item) => item.enabled).length === 0 && (
+                        <p className={styles.helper}>قالب فعالی در این محدوده ثبت نشده است.</p>
                       )}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {activeTab === 'builder' ? (
-              <div className={styles.builderGrid}>
-                <main className={styles.builderCanvas} aria-label="ساختار فرم">
-                  <section className={styles.formMetaCard} aria-labelledby="form-meta-heading">
-                    <div className={styles.sectionHeading}>
-                      <div>
-                        <h4 id="form-meta-heading">معرفی فرم</h4>
-                        <p>عنوان فرم و متنی که پاسخ‌دهنده پیش از شروع می‌بیند.</p>
-                      </div>
-                      <Badge tone="neutral">
-                        {totalFieldCount.toLocaleString('fa-IR')} از ۱۰۰ پرسش
-                      </Badge>
-                    </div>
-                    <fieldset
-                      disabled={!capabilities?.canManage || selectedForm.status === 'archived'}
-                      className={styles.formMetaFields}
-                    >
-                      <label>
-                        عنوان فرم
-                        <input
-                          value={definition.title}
-                          onChange={(event) =>
-                            commitDefinition((current) => ({
-                              ...current,
-                              title: event.target.value,
-                            }))
-                          }
-                          maxLength={160}
-                        />
-                      </label>
-                      <label>
-                        توضیح فرم
-                        <textarea
-                          rows={2}
-                          value={definition.description}
-                          onChange={(event) =>
-                            commitDefinition((current) => ({
-                              ...current,
-                              description: event.target.value,
-                            }))
-                          }
-                          maxLength={1500}
-                        />
-                      </label>
-                      <details className={styles.formCopyDetails}>
-                        <summary>متن خوش‌آمدگویی و پیام پس از ثبت</summary>
-                        <div className={styles.twoColumns}>
-                          <label>
-                            عنوان خوش‌آمدگویی
-                            <input
-                              value={definition.welcomeTitle}
-                              onChange={(event) =>
-                                commitDefinition((current) => ({
-                                  ...current,
-                                  welcomeTitle: event.target.value,
-                                }))
-                              }
-                              maxLength={160}
-                            />
-                          </label>
-                          <label>
-                            پیام خوش‌آمدگویی
-                            <textarea
-                              rows={2}
-                              value={definition.welcomeMessage}
-                              onChange={(event) =>
-                                commitDefinition((current) => ({
-                                  ...current,
-                                  welcomeMessage: event.target.value,
-                                }))
-                              }
-                              maxLength={1000}
-                            />
-                          </label>
-                          <label>
-                            پیام پس از ثبت
-                            <textarea
-                              rows={2}
-                              value={definition.successMessage}
-                              onChange={(event) =>
-                                commitDefinition((current) => ({
-                                  ...current,
-                                  successMessage: event.target.value,
-                                }))
-                              }
-                              maxLength={1000}
-                            />
-                          </label>
-                        </div>
-                      </details>
-                      <details className={styles.formCopyDetails}>
-                        <summary>ظاهر کلی فرم و کارت‌ها</summary>
-                        <div className={styles.themeForm}>
-                          <div className={styles.twoColumns}>
-                            <label>
-                              رنگ اصلی
-                              <input
-                                type="color"
-                                value={definition.theme.primaryColor}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: { ...current.theme, primaryColor: event.target.value },
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              رنگ تأکیدی
-                              <input
-                                type="color"
-                                value={definition.theme.accentColor}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: { ...current.theme, accentColor: event.target.value },
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              پس‌زمینه‌ی فرم
-                              <input
-                                type="color"
-                                value={definition.theme.backgroundColor}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: {
-                                      ...current.theme,
-                                      backgroundColor: event.target.value,
-                                    },
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              سطح فیلدها
-                              <input
-                                type="color"
-                                value={definition.theme.surfaceColor}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: { ...current.theme, surfaceColor: event.target.value },
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              فونت
-                              <select
-                                value={definition.theme.font}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: {
-                                      ...current.theme,
-                                      font: event.target.value as FormDefinition['theme']['font'],
-                                    },
-                                  }))
-                                }
-                              >
-                                <option value="estedad">استعداد</option>
-                                <option value="vazirmatn">وزیرمتن</option>
-                              </select>
-                            </label>
-                            <label>
-                              چیدمان
-                              <select
-                                value={definition.theme.layout}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: {
-                                      ...current.theme,
-                                      layout: event.target
-                                        .value as FormDefinition['theme']['layout'],
-                                    },
-                                  }))
-                                }
-                              >
-                                <option value="paged">مرحله‌ای</option>
-                                <option value="single">یک‌صفحه‌ای</option>
-                              </select>
-                            </label>
-                            <label>
-                              تراکم فیلدها
-                              <select
-                                value={definition.theme.density}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: {
-                                      ...current.theme,
-                                      density: event.target
-                                        .value as FormDefinition['theme']['density'],
-                                    },
-                                  }))
-                                }
-                              >
-                                <option value="comfortable">معمولی</option>
-                                <option value="compact">فشرده</option>
-                              </select>
-                            </label>
-                            <label>
-                              سبک دکمه‌ها
-                              <select
-                                value={definition.theme.buttonStyle}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: {
-                                      ...current.theme,
-                                      buttonStyle: event.target
-                                        .value as FormDefinition['theme']['buttonStyle'],
-                                    },
-                                  }))
-                                }
-                              >
-                                <option value="solid">پررنگ</option>
-                                <option value="outlined">خط‌دار</option>
-                              </select>
-                            </label>
-                          </div>
-                          <label>
-                            حداکثر عرض کارت
-                            <select
-                              value={definition.theme.cardStyle.maxWidth}
-                              onChange={(event) =>
-                                commitDefinition((current) => ({
-                                  ...current,
-                                  theme: {
-                                    ...current.theme,
-                                    cardStyle: {
-                                      ...current.theme.cardStyle,
-                                      maxWidth: event.target
-                                        .value as FormDefinition['theme']['cardStyle']['maxWidth'],
-                                    },
-                                  },
-                                }))
-                              }
-                            >
-                              <option value="narrow">باریک</option>
-                              <option value="medium">متوسط</option>
-                              <option value="wide">عریض</option>
-                              <option value="full">تمام‌عرض</option>
-                            </select>
-                          </label>
-                          <div className={styles.twoColumns}>
-                            <label>
-                              فاصله‌ی داخلی کارت
-                              <input
-                                type="number"
-                                min="8"
-                                max="40"
-                                value={definition.theme.cardStyle.padding}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: {
-                                      ...current.theme,
-                                      cardStyle: {
-                                        ...current.theme.cardStyle,
-                                        padding: Number(event.target.value),
-                                      },
-                                    },
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              فاصله‌ی پرسش‌ها
-                              <input
-                                type="number"
-                                min="6"
-                                max="32"
-                                value={definition.theme.cardStyle.gap}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: {
-                                      ...current.theme,
-                                      cardStyle: {
-                                        ...current.theme.cardStyle,
-                                        gap: Number(event.target.value),
-                                      },
-                                    },
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              گردی کارت
-                              <input
-                                type="number"
-                                min="0"
-                                max="36"
-                                value={definition.theme.cardStyle.radius}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: {
-                                      ...current.theme,
-                                      cardStyle: {
-                                        ...current.theme.cardStyle,
-                                        radius: Number(event.target.value),
-                                      },
-                                    },
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label>
-                              سایه
-                              <select
-                                value={definition.theme.cardStyle.shadow}
-                                onChange={(event) =>
-                                  commitDefinition((current) => ({
-                                    ...current,
-                                    theme: {
-                                      ...current.theme,
-                                      cardStyle: {
-                                        ...current.theme.cardStyle,
-                                        shadow: event.target
-                                          .value as FormDefinition['theme']['cardStyle']['shadow'],
-                                      },
-                                    },
-                                  }))
-                                }
-                              >
-                                <option value="none">بدون سایه</option>
-                                <option value="soft">ملایم</option>
-                                <option value="raised">برجسته</option>
-                              </select>
-                            </label>
-                          </div>
-                          <label className={styles.checkbox}>
-                            <input
-                              type="checkbox"
-                              checked={definition.theme.showProgress}
-                              onChange={(event) =>
-                                commitDefinition((current) => ({
-                                  ...current,
-                                  theme: { ...current.theme, showProgress: event.target.checked },
-                                }))
-                              }
-                            />
-                            نمایش پیشرفت پاسخ‌گویی
-                          </label>
-                        </div>
-                      </details>
                     </fieldset>
-                  </section>
-
-                  <section className={styles.formMetaCard} aria-labelledby="journey-pages-heading">
-                    <div className={styles.sectionHeading}>
-                      <div>
-                        <h4 id="journey-pages-heading">صفحه‌های شروع و پایان</h4>
-                        <p>
-                          این صفحه‌ها جدا از پرسش‌ها هستند؛ پایان فقط پس از ثبت موفق نمایش داده
-                          می‌شود.
-                        </p>
-                      </div>
-                    </div>
-                    <div className={styles.twoColumns}>
-                      <label className={styles.checkbox}>
-                        <input
-                          type="checkbox"
-                          checked={definition.pages.some((page) => page.kind === 'start')}
-                          disabled={
-                            !capabilities?.canManage ||
-                            selectedForm.status === 'archived' ||
-                            (!definition.pages.some((page) => page.kind === 'start') &&
-                              definition.pages.length >= 20)
-                          }
-                          onChange={(event) => {
-                            const enabled = event.target.checked;
-                            if (
-                              !enabled &&
-                              !window.confirm(
-                                'صفحه‌ی شروع حذف شود؟ فرم از نخستین پرسش آغاز خواهد شد.',
-                              )
-                            )
-                              return;
-                            const next = toggleJourneyPage(definition, 'start', enabled);
-                            commitDefinition(() => next);
-                            const active = next.pages.find((page) => page.id === activePageId);
-                            if (!active) setActivePageId(next.pages[0]?.id ?? null);
-                          }}
-                        />
-                        صفحه‌ی شروع فعال باشد
-                      </label>
-                      <label className={styles.checkbox}>
-                        <input
-                          type="checkbox"
-                          checked={definition.pages.some((page) => page.kind === 'end')}
-                          disabled={
-                            !capabilities?.canManage ||
-                            selectedForm.status === 'archived' ||
-                            (!definition.pages.some((page) => page.kind === 'end') &&
-                              definition.pages.length >= 20)
-                          }
-                          onChange={(event) => {
-                            const enabled = event.target.checked;
-                            if (
-                              !enabled &&
-                              !window.confirm(
-                                'صفحه‌ی پایان حذف شود؟ پس از ثبت، پیام موفقیت عمومی نمایش داده می‌شود.',
-                              )
-                            )
-                              return;
-                            const next = toggleJourneyPage(definition, 'end', enabled);
-                            commitDefinition(() => next);
-                            const active = next.pages.find((page) => page.id === activePageId);
-                            if (!active) setActivePageId(next.pages[0]?.id ?? null);
-                          }}
-                        />
-                        صفحه‌ی پایان فعال باشد
-                      </label>
-                    </div>
-                  </section>
-
-                  <section className={styles.pageBuilder} aria-labelledby="form-pages-heading">
-                    <div className={styles.sectionHeading}>
-                      <div>
-                        <h4 id="form-pages-heading">صفحه‌ها و پرسش‌ها</h4>
-                        <p>
-                          صفحه‌ی فعال را انتخاب کنید و ترتیب را با دسته‌گیره یا دکمه‌های جابه‌جایی
-                          تغییر دهید.
-                        </p>
-                      </div>
+                    <Button type="submit" disabled={saving || !branchId || !newTitle.trim()}>
+                      {saving ? 'در حال ساخت…' : 'ساخت پیش‌نویس'}
+                    </Button>
+                  </form>
+                ) : (
+                  <div className={styles.emptyState}>
+                    <span className={styles.createIcon} aria-hidden="true">
+                      ＋
+                    </span>
+                    <h3 id="forms-create-heading">ساخت فرم</h3>
+                    <p>برای ایجاد یا ویرایش فرم، مجوز forms.manage لازم است.</p>
+                  </div>
+                )}
+              </aside>
+            </>
+          ) : (
+            <>
+              <div className={styles.editorToolbar}>
+                <div className={styles.editorIdentity}>
+                  <Button
+                    type="button"
+                    tone="ghost"
+                    disabled={saving}
+                    onClick={() =>
+                      view === 'responses' ? router.push('/forms') : void returnToLibrary()
+                    }
+                  >
+                    بازگشت به فرم‌ها
+                  </Button>
+                  <div>
+                    <p className={styles.eyebrow}>
+                      {branches.find(
+                        (item) =>
+                          item.scope.type === 'branch' &&
+                          item.scope.branchId === selectedForm.branchId,
+                      )?.branch?.name ?? 'فرم محدوده‌ی فعلی'}
+                    </p>
+                    <h3>{definition.title || selectedForm.title}</h3>
+                  </div>
+                </div>
+                <div className={styles.editorToolbarActions}>
+                  <Badge
+                    tone={
+                      view === 'responses'
+                        ? 'neutral'
+                        : draftDirty
+                          ? 'warning'
+                          : saving
+                            ? 'neutral'
+                            : 'success'
+                    }
+                  >
+                    {view === 'responses'
+                      ? 'فهرست پاسخ‌ها'
+                      : draftDirty
+                        ? 'تغییر ذخیره‌نشده'
+                        : saving
+                          ? 'در حال ذخیره'
+                          : 'ذخیره شد'}
+                  </Badge>
+                  {view !== 'responses' && (
+                    <>
+                      <Button
+                        type="button"
+                        tone="ghost"
+                        disabled={saving || !undoStack.length || !capabilities?.canManage}
+                        onClick={undo}
+                      >
+                        واگرد
+                      </Button>
+                      <Button
+                        type="button"
+                        tone="ghost"
+                        disabled={saving || !redoStack.length || !capabilities?.canManage}
+                        onClick={redo}
+                      >
+                        ازنو
+                      </Button>
                       <Button
                         type="button"
                         tone="secondary"
-                        disabled={
-                          !capabilities?.canManage ||
-                          selectedForm.status === 'archived' ||
-                          definition.pages.length >= 20
-                        }
-                        onClick={() => {
-                          const next = addPage(definition);
-                          const page = [...next.pages]
-                            .reverse()
-                            .find((item) => item.kind === 'questions');
-                          commitDefinition(() => next);
-                          setActivePageId(page?.id ?? null);
-                          setPreviewPageId(page?.id);
-                          setSelectedFieldId(null);
-                        }}
+                        disabled={saving || !draftDirty || !capabilities?.canManage}
+                        onClick={() => void saveDraftNow()}
                       >
-                        افزودن صفحه
+                        ذخیره‌ی پیش‌نویس
                       </Button>
-                    </div>
-                    <div className={styles.pageTabList} role="group" aria-label="انتخاب صفحه">
-                      {definition.pages.map((page, pageIndex) => (
-                        <div
-                          className={styles.pageTabItem}
-                          key={page.id}
-                          onDragOver={(event) => {
-                            if (
-                              event.dataTransfer.types.includes('application/x-funtino-page-index')
-                            )
-                              event.preventDefault();
-                          }}
-                          onDrop={(event) => {
-                            if (
-                              !event.dataTransfer.types.includes('application/x-funtino-page-index')
-                            )
-                              return;
-                            event.preventDefault();
-                            const from = Number(
-                              event.dataTransfer.getData('application/x-funtino-page-index'),
-                            );
-                            if (
-                              Number.isInteger(from) &&
-                              definition.pages[from]?.kind === 'questions' &&
-                              page.kind === 'questions'
-                            )
-                              moveActivePage(from, pageIndex);
-                          }}
-                        >
-                          <span
-                            className={styles.pageDragHandle}
-                            draggable={page.kind === 'questions'}
-                            aria-label={'جابجایی صفحه‌ی ' + page.title}
-                            title={
-                              page.kind === 'questions'
-                                ? 'برای جابه‌جایی بکشید'
-                                : 'جایگاه صفحه‌ی شروع و پایان ثابت است'
-                            }
-                            onDragStart={(event) => {
-                              event.dataTransfer.setData(
-                                'application/x-funtino-page-index',
-                                String(pageIndex),
-                              );
-                              event.dataTransfer.effectAllowed = 'move';
-                            }}
-                          >
-                            ⠿
-                          </span>
-                          <button
-                            type="button"
-                            className={
-                              activePage?.id === page.id ? styles.pageTabActive : styles.pageTab
-                            }
-                            aria-pressed={activePage?.id === page.id}
-                            onClick={() => {
-                              setActivePageId(page.id);
-                              setPreviewPageId(page.id);
-                              setSelectedFieldId(page.fields[0]?.id ?? null);
-                            }}
-                          >
-                            <span>
-                              {page.kind === 'start'
-                                ? 'شروع'
-                                : page.kind === 'end'
-                                  ? 'پایان'
-                                  : (pageIndex + 1).toLocaleString('fa-IR')}
-                            </span>
-                            <strong>{page.title || 'بدون عنوان'}</strong>
-                            <small>
-                              {page.kind === 'questions'
-                                ? page.fields.length.toLocaleString('fa-IR') + ' پرسش'
-                                : page.kind === 'start'
-                                  ? 'پیش از پاسخ‌گویی'
-                                  : 'پس از ثبت موفق'}
-                            </small>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    {activePage && activePageIndex >= 0 && (
-                      <section
-                        className={styles.activePagePanel}
-                        aria-labelledby="active-page-heading"
+                      <Button
+                        type="button"
+                        tone="ghost"
+                        disabled={saving || !capabilities?.canManage}
+                        onClick={() => void duplicateForm()}
                       >
-                        <div className={styles.activePageHeading}>
-                          <div>
-                            <p className={styles.eyebrow}>
-                              {activePage.kind === 'start'
-                                ? 'صفحه‌ی شروع'
-                                : activePage.kind === 'end'
-                                  ? 'صفحه‌ی پایان'
-                                  : 'صفحه‌ی پرسش ' + (activePageIndex + 1).toLocaleString('fa-IR')}
-                            </p>
-                            <h5 id="active-page-heading" tabIndex={-1}>
-                              {activePage.title || 'صفحه‌ی بدون عنوان'}
-                            </h5>
-                          </div>
-                          <div className={styles.inlineActions}>
-                            <Button
-                              type="button"
-                              tone="ghost"
-                              disabled={
-                                !capabilities?.canManage ||
-                                activePage.kind !== 'questions' ||
-                                definition.pages[activePageIndex - 1]?.kind !== 'questions'
-                              }
-                              aria-label="انتقال صفحه به بالا"
-                              onClick={() => moveActivePage(activePageIndex, activePageIndex - 1)}
-                            >
-                              ↑
-                            </Button>
-                            <Button
-                              type="button"
-                              tone="ghost"
-                              disabled={
-                                !capabilities?.canManage ||
-                                activePage.kind !== 'questions' ||
-                                definition.pages[activePageIndex + 1]?.kind !== 'questions'
-                              }
-                              aria-label="انتقال صفحه به پایین"
-                              onClick={() => moveActivePage(activePageIndex, activePageIndex + 1)}
-                            >
-                              ↓
-                            </Button>
-                            <Button
-                              type="button"
-                              tone="ghost"
-                              disabled={
-                                !capabilities?.canManage ||
-                                activePage.kind !== 'questions' ||
-                                selectedForm.status === 'archived'
-                              }
-                              onClick={() => {
-                                const next = removePage(definition, activePageIndex);
-                                commitDefinition(() => next);
-                                const nextPage =
-                                  next.pages[Math.min(activePageIndex, next.pages.length - 1)];
-                                setActivePageId(nextPage?.id ?? null);
-                                setSelectedFieldId(nextPage?.fields[0]?.id ?? null);
-                              }}
-                            >
-                              حذف صفحه
-                            </Button>
-                          </div>
+                        ساخت نسخه
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {view !== 'responses' && (
+                <nav className={styles.editorNav} aria-label="بخش‌های ویرایش فرم">
+                  <Button
+                    type="button"
+                    tone={activeTab === 'builder' ? 'primary' : 'ghost'}
+                    aria-current={activeTab === 'builder' ? 'page' : undefined}
+                    onClick={() => setActiveTab('builder')}
+                  >
+                    ساختار فرم
+                  </Button>
+                  <Button
+                    type="button"
+                    tone={activeTab === 'settings' ? 'primary' : 'ghost'}
+                    aria-current={activeTab === 'settings' ? 'page' : undefined}
+                    onClick={() => setActiveTab('settings')}
+                  >
+                    تنظیمات و انتشار
+                  </Button>
+                  <Button
+                    type="button"
+                    tone={activeTab === 'preview' ? 'primary' : 'ghost'}
+                    aria-current={activeTab === 'preview' ? 'page' : undefined}
+                    onClick={() => setActiveTab('preview')}
+                  >
+                    پیش‌نمایش
+                  </Button>
+                  <Button
+                    type="button"
+                    tone={activeTab === 'responses' ? 'primary' : 'ghost'}
+                    aria-current={activeTab === 'responses' ? 'page' : undefined}
+                    disabled={!capabilities?.canReadResponses}
+                    onClick={() => void openResponses()}
+                  >
+                    پاسخ‌ها
+                  </Button>
+                </nav>
+              )}
+
+              {validationIssues.length > 0 && (
+                <section
+                  className={styles.validationSummary}
+                  aria-labelledby="form-validation-heading"
+                >
+                  <h4 id="form-validation-heading">موارد لازم برای تکمیل فرم</h4>
+                  <ul>
+                    {validationIssues.map((item, index) => (
+                      <li key={index + '-' + item}>
+                        {validationIssueDetails[index]?.pageId ? (
+                          <button type="button" onClick={() => openValidationIssue(index)}>
+                            {item}
+                          </button>
+                        ) : (
+                          <span>{item}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+              {activeTab === 'builder' ? (
+                <div className={styles.builderGrid}>
+                  <main className={styles.builderCanvas} aria-label="ساختار فرم">
+                    <section className={styles.formMetaCard} aria-labelledby="form-meta-heading">
+                      <div className={styles.sectionHeading}>
+                        <div>
+                          <h4 id="form-meta-heading">معرفی فرم</h4>
+                          <p>عنوان فرم و متنی که پاسخ‌دهنده پیش از شروع می‌بیند.</p>
                         </div>
-                        <fieldset
-                          disabled={!capabilities?.canManage || selectedForm.status === 'archived'}
-                          className={styles.pageMetaFields}
-                        >
-                          <label>
-                            عنوان صفحه
-                            <input
-                              value={activePage.title}
-                              onChange={(event) =>
-                                commitDefinition((current) =>
-                                  updatePage(current, activePageIndex, {
-                                    title: event.target.value,
-                                  }),
-                                )
-                              }
-                              maxLength={160}
-                            />
-                          </label>
-                          <details className={styles.formCopyDetails}>
-                            <summary>توضیح و شرط نمایش صفحه</summary>
+                        <Badge tone="neutral">
+                          {totalFieldCount.toLocaleString('fa-IR')} از ۱۰۰ پرسش
+                        </Badge>
+                      </div>
+                      <fieldset
+                        disabled={!capabilities?.canManage || selectedForm.status === 'archived'}
+                        className={styles.formMetaFields}
+                      >
+                        <label>
+                          عنوان فرم
+                          <input
+                            value={definition.title}
+                            onChange={(event) =>
+                              commitDefinition((current) => ({
+                                ...current,
+                                title: event.target.value,
+                              }))
+                            }
+                            maxLength={160}
+                          />
+                        </label>
+                        <label>
+                          توضیح فرم
+                          <textarea
+                            rows={2}
+                            value={definition.description}
+                            onChange={(event) =>
+                              commitDefinition((current) => ({
+                                ...current,
+                                description: event.target.value,
+                              }))
+                            }
+                            maxLength={1500}
+                          />
+                        </label>
+                        <details className={styles.formCopyDetails}>
+                          <summary>متن خوش‌آمدگویی و پیام پس از ثبت</summary>
+                          <div className={styles.twoColumns}>
                             <label>
-                              توضیح صفحه
+                              عنوان خوش‌آمدگویی
+                              <input
+                                value={definition.welcomeTitle}
+                                onChange={(event) =>
+                                  commitDefinition((current) => ({
+                                    ...current,
+                                    welcomeTitle: event.target.value,
+                                  }))
+                                }
+                                maxLength={160}
+                              />
+                            </label>
+                            <label>
+                              پیام خوش‌آمدگویی
                               <textarea
                                 rows={2}
-                                value={activePage.description}
+                                value={definition.welcomeMessage}
                                 onChange={(event) =>
-                                  commitDefinition((current) =>
-                                    updatePage(current, activePageIndex, {
-                                      description: event.target.value,
-                                    }),
-                                  )
+                                  commitDefinition((current) => ({
+                                    ...current,
+                                    welcomeMessage: event.target.value,
+                                  }))
                                 }
                                 maxLength={1000}
                               />
                             </label>
-                            {activePage.kind === 'questions' && (
-                              <PageConditionEditor
-                                definition={definition}
-                                pageIndex={activePageIndex}
-                                condition={activePage.condition}
-                                onChange={(condition) =>
-                                  commitDefinition((current) =>
-                                    updatePage(current, activePageIndex, { condition }),
-                                  )
-                                }
-                              />
-                            )}
-                          </details>
-                          <details className={styles.formCopyDetails}>
-                            <summary>پس‌زمینه و کارت این صفحه</summary>
                             <label>
-                              رنگ پس‌زمینه‌ی صفحه
-                              <input
-                                type="color"
-                                value={
-                                  activePage.backgroundColor ?? definition.theme.backgroundColor
-                                }
+                              پیام پس از ثبت
+                              <textarea
+                                rows={2}
+                                value={definition.successMessage}
                                 onChange={(event) =>
-                                  commitDefinition((current) =>
-                                    updatePage(current, activePageIndex, {
-                                      backgroundColor: event.target.value,
-                                    }),
-                                  )
+                                  commitDefinition((current) => ({
+                                    ...current,
+                                    successMessage: event.target.value,
+                                  }))
                                 }
+                                maxLength={1000}
                               />
                             </label>
-                            <div className={styles.inlineActions}>
-                              <span className={styles.helper}>
-                                {activePage.cardStyle
-                                  ? 'ظاهر اختصاصی همین صفحه فعال است.'
-                                  : 'تنظیم‌های کارت از ظاهر کلی فرم به ارث می‌رسند.'}
-                              </span>
-                              {activePage.cardStyle && (
-                                <Button
-                                  type="button"
-                                  tone="ghost"
-                                  onClick={() =>
-                                    commitDefinition((current) =>
-                                      updatePage(current, activePageIndex, {
-                                        cardStyle: undefined,
-                                      }),
-                                    )
-                                  }
-                                >
-                                  بازنشانی به ظاهر کلی
-                                </Button>
-                              )}
-                            </div>
+                          </div>
+                        </details>
+                        <details className={styles.formCopyDetails}>
+                          <summary>ظاهر کلی فرم و کارت‌ها</summary>
+                          <div className={styles.themeForm}>
                             <div className={styles.twoColumns}>
                               <label>
-                                عرض کارت
-                                <select
-                                  value={
-                                    activePage.cardStyle?.maxWidth ??
-                                    definition.theme.cardStyle.maxWidth
-                                  }
-                                  onChange={(event) =>
-                                    commitDefinition((current) =>
-                                      updatePage(current, activePageIndex, {
-                                        cardStyle: {
-                                          ...current.pages[activePageIndex]!.cardStyle,
-                                          maxWidth: event.target
-                                            .value as FormDefinition['theme']['cardStyle']['maxWidth'],
-                                        },
-                                      }),
-                                    )
-                                  }
-                                >
-                                  <option value="narrow">باریک</option>
-                                  <option value="medium">متوسط</option>
-                                  <option value="wide">عریض</option>
-                                  <option value="full">تمام‌عرض</option>
-                                </select>
-                              </label>
-                              <label>
-                                رنگ کارت
+                                رنگ اصلی
                                 <input
                                   type="color"
-                                  value={
-                                    activePage.cardStyle?.backgroundColor ??
-                                    definition.theme.cardStyle.backgroundColor
-                                  }
+                                  value={definition.theme.primaryColor}
                                   onChange={(event) =>
-                                    commitDefinition((current) =>
-                                      updatePage(current, activePageIndex, {
-                                        cardStyle: {
-                                          ...current.pages[activePageIndex]!.cardStyle,
-                                          backgroundColor: event.target.value,
-                                        },
-                                      }),
-                                    )
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: { ...current.theme, primaryColor: event.target.value },
+                                    }))
                                   }
                                 />
                               </label>
                               <label>
-                                فاصله‌ی داخلی
+                                رنگ تأکیدی
+                                <input
+                                  type="color"
+                                  value={definition.theme.accentColor}
+                                  onChange={(event) =>
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: { ...current.theme, accentColor: event.target.value },
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                پس‌زمینه‌ی فرم
+                                <input
+                                  type="color"
+                                  value={definition.theme.backgroundColor}
+                                  onChange={(event) =>
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: {
+                                        ...current.theme,
+                                        backgroundColor: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                سطح فیلدها
+                                <input
+                                  type="color"
+                                  value={definition.theme.surfaceColor}
+                                  onChange={(event) =>
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: { ...current.theme, surfaceColor: event.target.value },
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                فونت
+                                <select
+                                  value={definition.theme.font}
+                                  onChange={(event) =>
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: {
+                                        ...current.theme,
+                                        font: event.target.value as FormDefinition['theme']['font'],
+                                      },
+                                    }))
+                                  }
+                                >
+                                  <option value="estedad">استعداد</option>
+                                  <option value="vazirmatn">وزیرمتن</option>
+                                </select>
+                              </label>
+                              <label>
+                                چیدمان
+                                <select
+                                  value={definition.theme.layout}
+                                  onChange={(event) =>
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: {
+                                        ...current.theme,
+                                        layout: event.target
+                                          .value as FormDefinition['theme']['layout'],
+                                      },
+                                    }))
+                                  }
+                                >
+                                  <option value="paged">مرحله‌ای</option>
+                                  <option value="single">یک‌صفحه‌ای</option>
+                                </select>
+                              </label>
+                              <label>
+                                تراکم فیلدها
+                                <select
+                                  value={definition.theme.density}
+                                  onChange={(event) =>
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: {
+                                        ...current.theme,
+                                        density: event.target
+                                          .value as FormDefinition['theme']['density'],
+                                      },
+                                    }))
+                                  }
+                                >
+                                  <option value="comfortable">معمولی</option>
+                                  <option value="compact">فشرده</option>
+                                </select>
+                              </label>
+                              <label>
+                                سبک دکمه‌ها
+                                <select
+                                  value={definition.theme.buttonStyle}
+                                  onChange={(event) =>
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: {
+                                        ...current.theme,
+                                        buttonStyle: event.target
+                                          .value as FormDefinition['theme']['buttonStyle'],
+                                      },
+                                    }))
+                                  }
+                                >
+                                  <option value="solid">پررنگ</option>
+                                  <option value="outlined">خط‌دار</option>
+                                </select>
+                              </label>
+                            </div>
+                            <label>
+                              حداکثر عرض کارت
+                              <select
+                                value={definition.theme.cardStyle.maxWidth}
+                                onChange={(event) =>
+                                  commitDefinition((current) => ({
+                                    ...current,
+                                    theme: {
+                                      ...current.theme,
+                                      cardStyle: {
+                                        ...current.theme.cardStyle,
+                                        maxWidth: event.target
+                                          .value as FormDefinition['theme']['cardStyle']['maxWidth'],
+                                      },
+                                    },
+                                  }))
+                                }
+                              >
+                                <option value="narrow">باریک</option>
+                                <option value="medium">متوسط</option>
+                                <option value="wide">عریض</option>
+                                <option value="full">تمام‌عرض</option>
+                              </select>
+                            </label>
+                            <div className={styles.twoColumns}>
+                              <label>
+                                فاصله‌ی داخلی کارت
                                 <input
                                   type="number"
                                   min="8"
                                   max="40"
-                                  value={
-                                    activePage.cardStyle?.padding ??
-                                    definition.theme.cardStyle.padding
-                                  }
+                                  value={definition.theme.cardStyle.padding}
                                   onChange={(event) =>
-                                    commitDefinition((current) =>
-                                      updatePage(current, activePageIndex, {
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: {
+                                        ...current.theme,
                                         cardStyle: {
-                                          ...current.pages[activePageIndex]!.cardStyle,
+                                          ...current.theme.cardStyle,
                                           padding: Number(event.target.value),
                                         },
-                                      }),
-                                    )
+                                      },
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label>
+                                فاصله‌ی پرسش‌ها
+                                <input
+                                  type="number"
+                                  min="6"
+                                  max="32"
+                                  value={definition.theme.cardStyle.gap}
+                                  onChange={(event) =>
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: {
+                                        ...current.theme,
+                                        cardStyle: {
+                                          ...current.theme.cardStyle,
+                                          gap: Number(event.target.value),
+                                        },
+                                      },
+                                    }))
                                   }
                                 />
                               </label>
@@ -2328,846 +1977,1331 @@ export function OperationsForms({
                                   type="number"
                                   min="0"
                                   max="36"
-                                  value={
-                                    activePage.cardStyle?.radius ??
-                                    definition.theme.cardStyle.radius
-                                  }
+                                  value={definition.theme.cardStyle.radius}
                                   onChange={(event) =>
-                                    commitDefinition((current) =>
-                                      updatePage(current, activePageIndex, {
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: {
+                                        ...current.theme,
                                         cardStyle: {
-                                          ...current.pages[activePageIndex]!.cardStyle,
+                                          ...current.theme.cardStyle,
                                           radius: Number(event.target.value),
                                         },
-                                      }),
-                                    )
+                                      },
+                                    }))
                                   }
                                 />
                               </label>
                               <label>
-                                رنگ حاشیه
+                                سایه
+                                <select
+                                  value={definition.theme.cardStyle.shadow}
+                                  onChange={(event) =>
+                                    commitDefinition((current) => ({
+                                      ...current,
+                                      theme: {
+                                        ...current.theme,
+                                        cardStyle: {
+                                          ...current.theme.cardStyle,
+                                          shadow: event.target
+                                            .value as FormDefinition['theme']['cardStyle']['shadow'],
+                                        },
+                                      },
+                                    }))
+                                  }
+                                >
+                                  <option value="none">بدون سایه</option>
+                                  <option value="soft">ملایم</option>
+                                  <option value="raised">برجسته</option>
+                                </select>
+                              </label>
+                            </div>
+                            <label className={styles.checkbox}>
+                              <input
+                                type="checkbox"
+                                checked={definition.theme.showProgress}
+                                onChange={(event) =>
+                                  commitDefinition((current) => ({
+                                    ...current,
+                                    theme: { ...current.theme, showProgress: event.target.checked },
+                                  }))
+                                }
+                              />
+                              نمایش پیشرفت پاسخ‌گویی
+                            </label>
+                          </div>
+                        </details>
+                      </fieldset>
+                    </section>
+
+                    <section
+                      className={styles.formMetaCard}
+                      aria-labelledby="journey-pages-heading"
+                    >
+                      <div className={styles.sectionHeading}>
+                        <div>
+                          <h4 id="journey-pages-heading">صفحه‌های شروع و پایان</h4>
+                          <p>
+                            این صفحه‌ها جدا از پرسش‌ها هستند؛ پایان فقط پس از ثبت موفق نمایش داده
+                            می‌شود.
+                          </p>
+                        </div>
+                      </div>
+                      <div className={styles.twoColumns}>
+                        <label className={styles.checkbox}>
+                          <input
+                            type="checkbox"
+                            checked={definition.pages.some((page) => page.kind === 'start')}
+                            disabled={
+                              !capabilities?.canManage ||
+                              selectedForm.status === 'archived' ||
+                              (!definition.pages.some((page) => page.kind === 'start') &&
+                                definition.pages.length >= 20)
+                            }
+                            onChange={(event) => {
+                              const enabled = event.target.checked;
+                              if (
+                                !enabled &&
+                                !window.confirm(
+                                  'صفحه‌ی شروع حذف شود؟ فرم از نخستین پرسش آغاز خواهد شد.',
+                                )
+                              )
+                                return;
+                              const next = toggleJourneyPage(definition, 'start', enabled);
+                              commitDefinition(() => next);
+                              const active = next.pages.find((page) => page.id === activePageId);
+                              if (!active) setActivePageId(next.pages[0]?.id ?? null);
+                            }}
+                          />
+                          صفحه‌ی شروع فعال باشد
+                        </label>
+                        <label className={styles.checkbox}>
+                          <input
+                            type="checkbox"
+                            checked={definition.pages.some((page) => page.kind === 'end')}
+                            disabled={
+                              !capabilities?.canManage ||
+                              selectedForm.status === 'archived' ||
+                              (!definition.pages.some((page) => page.kind === 'end') &&
+                                definition.pages.length >= 20)
+                            }
+                            onChange={(event) => {
+                              const enabled = event.target.checked;
+                              if (
+                                !enabled &&
+                                !window.confirm(
+                                  'صفحه‌ی پایان حذف شود؟ پس از ثبت، پیام موفقیت عمومی نمایش داده می‌شود.',
+                                )
+                              )
+                                return;
+                              const next = toggleJourneyPage(definition, 'end', enabled);
+                              commitDefinition(() => next);
+                              const active = next.pages.find((page) => page.id === activePageId);
+                              if (!active) setActivePageId(next.pages[0]?.id ?? null);
+                            }}
+                          />
+                          صفحه‌ی پایان فعال باشد
+                        </label>
+                      </div>
+                    </section>
+
+                    <section className={styles.pageBuilder} aria-labelledby="form-pages-heading">
+                      <div className={styles.sectionHeading}>
+                        <div>
+                          <h4 id="form-pages-heading">صفحه‌ها و پرسش‌ها</h4>
+                          <p>
+                            صفحه‌ی فعال را انتخاب کنید و ترتیب را با دسته‌گیره یا دکمه‌های جابه‌جایی
+                            تغییر دهید.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          tone="secondary"
+                          disabled={
+                            !capabilities?.canManage ||
+                            selectedForm.status === 'archived' ||
+                            definition.pages.length >= 20
+                          }
+                          onClick={() => {
+                            const next = addPage(definition);
+                            const page = [...next.pages]
+                              .reverse()
+                              .find((item) => item.kind === 'questions');
+                            commitDefinition(() => next);
+                            setActivePageId(page?.id ?? null);
+                            setPreviewPageId(page?.id);
+                            setSelectedFieldId(null);
+                          }}
+                        >
+                          افزودن صفحه
+                        </Button>
+                      </div>
+                      <div className={styles.pageTabList} role="group" aria-label="انتخاب صفحه">
+                        {definition.pages.map((page, pageIndex) => (
+                          <div
+                            className={styles.pageTabItem}
+                            key={page.id}
+                            onDragOver={(event) => {
+                              if (
+                                event.dataTransfer.types.includes(
+                                  'application/x-funtino-page-index',
+                                )
+                              )
+                                event.preventDefault();
+                            }}
+                            onDrop={(event) => {
+                              if (
+                                !event.dataTransfer.types.includes(
+                                  'application/x-funtino-page-index',
+                                )
+                              )
+                                return;
+                              event.preventDefault();
+                              const from = Number(
+                                event.dataTransfer.getData('application/x-funtino-page-index'),
+                              );
+                              if (
+                                Number.isInteger(from) &&
+                                definition.pages[from]?.kind === 'questions' &&
+                                page.kind === 'questions'
+                              )
+                                moveActivePage(from, pageIndex);
+                            }}
+                          >
+                            <span
+                              className={styles.pageDragHandle}
+                              draggable={page.kind === 'questions'}
+                              aria-label={'جابجایی صفحه‌ی ' + page.title}
+                              title={
+                                page.kind === 'questions'
+                                  ? 'برای جابه‌جایی بکشید'
+                                  : 'جایگاه صفحه‌ی شروع و پایان ثابت است'
+                              }
+                              onDragStart={(event) => {
+                                event.dataTransfer.setData(
+                                  'application/x-funtino-page-index',
+                                  String(pageIndex),
+                                );
+                                event.dataTransfer.effectAllowed = 'move';
+                              }}
+                            >
+                              ⠿
+                            </span>
+                            <button
+                              type="button"
+                              className={
+                                activePage?.id === page.id ? styles.pageTabActive : styles.pageTab
+                              }
+                              aria-pressed={activePage?.id === page.id}
+                              onClick={() => {
+                                setActivePageId(page.id);
+                                setPreviewPageId(page.id);
+                                setSelectedFieldId(page.fields[0]?.id ?? null);
+                              }}
+                            >
+                              <span>
+                                {page.kind === 'start'
+                                  ? 'شروع'
+                                  : page.kind === 'end'
+                                    ? 'پایان'
+                                    : (pageIndex + 1).toLocaleString('fa-IR')}
+                              </span>
+                              <strong>{page.title || 'بدون عنوان'}</strong>
+                              <small>
+                                {page.kind === 'questions'
+                                  ? page.fields.length.toLocaleString('fa-IR') + ' پرسش'
+                                  : page.kind === 'start'
+                                    ? 'پیش از پاسخ‌گویی'
+                                    : 'پس از ثبت موفق'}
+                              </small>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      {activePage && activePageIndex >= 0 && (
+                        <section
+                          className={styles.activePagePanel}
+                          aria-labelledby="active-page-heading"
+                        >
+                          <div className={styles.activePageHeading}>
+                            <div>
+                              <p className={styles.eyebrow}>
+                                {activePage.kind === 'start'
+                                  ? 'صفحه‌ی شروع'
+                                  : activePage.kind === 'end'
+                                    ? 'صفحه‌ی پایان'
+                                    : 'صفحه‌ی پرسش ' +
+                                      (activePageIndex + 1).toLocaleString('fa-IR')}
+                              </p>
+                              <h5 id="active-page-heading" tabIndex={-1}>
+                                {activePage.title || 'صفحه‌ی بدون عنوان'}
+                              </h5>
+                            </div>
+                            <div className={styles.inlineActions}>
+                              <Button
+                                type="button"
+                                tone="ghost"
+                                disabled={
+                                  !capabilities?.canManage ||
+                                  activePage.kind !== 'questions' ||
+                                  definition.pages[activePageIndex - 1]?.kind !== 'questions'
+                                }
+                                aria-label="انتقال صفحه به بالا"
+                                onClick={() => moveActivePage(activePageIndex, activePageIndex - 1)}
+                              >
+                                ↑
+                              </Button>
+                              <Button
+                                type="button"
+                                tone="ghost"
+                                disabled={
+                                  !capabilities?.canManage ||
+                                  activePage.kind !== 'questions' ||
+                                  definition.pages[activePageIndex + 1]?.kind !== 'questions'
+                                }
+                                aria-label="انتقال صفحه به پایین"
+                                onClick={() => moveActivePage(activePageIndex, activePageIndex + 1)}
+                              >
+                                ↓
+                              </Button>
+                              <Button
+                                type="button"
+                                tone="ghost"
+                                disabled={
+                                  !capabilities?.canManage ||
+                                  activePage.kind !== 'questions' ||
+                                  selectedForm.status === 'archived'
+                                }
+                                onClick={() => {
+                                  const next = removePage(definition, activePageIndex);
+                                  commitDefinition(() => next);
+                                  const nextPage =
+                                    next.pages[Math.min(activePageIndex, next.pages.length - 1)];
+                                  setActivePageId(nextPage?.id ?? null);
+                                  setSelectedFieldId(nextPage?.fields[0]?.id ?? null);
+                                }}
+                              >
+                                حذف صفحه
+                              </Button>
+                            </div>
+                          </div>
+                          <fieldset
+                            disabled={
+                              !capabilities?.canManage || selectedForm.status === 'archived'
+                            }
+                            className={styles.pageMetaFields}
+                          >
+                            <label>
+                              عنوان صفحه
+                              <input
+                                value={activePage.title}
+                                onChange={(event) =>
+                                  commitDefinition((current) =>
+                                    updatePage(current, activePageIndex, {
+                                      title: event.target.value,
+                                    }),
+                                  )
+                                }
+                                maxLength={160}
+                              />
+                            </label>
+                            <details className={styles.formCopyDetails}>
+                              <summary>توضیح و شرط نمایش صفحه</summary>
+                              <label>
+                                توضیح صفحه
+                                <textarea
+                                  rows={2}
+                                  value={activePage.description}
+                                  onChange={(event) =>
+                                    commitDefinition((current) =>
+                                      updatePage(current, activePageIndex, {
+                                        description: event.target.value,
+                                      }),
+                                    )
+                                  }
+                                  maxLength={1000}
+                                />
+                              </label>
+                              {activePage.kind === 'questions' && (
+                                <PageConditionEditor
+                                  definition={definition}
+                                  pageIndex={activePageIndex}
+                                  condition={activePage.condition}
+                                  onChange={(condition) =>
+                                    commitDefinition((current) =>
+                                      updatePage(current, activePageIndex, { condition }),
+                                    )
+                                  }
+                                />
+                              )}
+                            </details>
+                            <details className={styles.formCopyDetails}>
+                              <summary>پس‌زمینه و کارت این صفحه</summary>
+                              <label>
+                                رنگ پس‌زمینه‌ی صفحه
                                 <input
                                   type="color"
                                   value={
-                                    activePage.cardStyle?.borderColor ??
-                                    definition.theme.cardStyle.borderColor
+                                    activePage.backgroundColor ?? definition.theme.backgroundColor
                                   }
                                   onChange={(event) =>
                                     commitDefinition((current) =>
                                       updatePage(current, activePageIndex, {
-                                        cardStyle: {
-                                          ...current.pages[activePageIndex]!.cardStyle,
-                                          borderColor: event.target.value,
-                                        },
+                                        backgroundColor: event.target.value,
                                       }),
                                     )
                                   }
                                 />
                               </label>
-                              <label>
-                                ضخامت حاشیه
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max="4"
-                                  value={
-                                    activePage.cardStyle?.borderWidth ??
-                                    definition.theme.cardStyle.borderWidth
-                                  }
-                                  onChange={(event) =>
-                                    commitDefinition((current) =>
-                                      updatePage(current, activePageIndex, {
-                                        cardStyle: {
-                                          ...current.pages[activePageIndex]!.cardStyle,
-                                          borderWidth: Number(event.target.value),
-                                        },
-                                      }),
-                                    )
-                                  }
-                                />
-                              </label>
-                            </div>
-                          </details>
-                        </fieldset>
+                              <div className={styles.inlineActions}>
+                                <span className={styles.helper}>
+                                  {activePage.cardStyle
+                                    ? 'ظاهر اختصاصی همین صفحه فعال است.'
+                                    : 'تنظیم‌های کارت از ظاهر کلی فرم به ارث می‌رسند.'}
+                                </span>
+                                {activePage.cardStyle && (
+                                  <Button
+                                    type="button"
+                                    tone="ghost"
+                                    onClick={() =>
+                                      commitDefinition((current) =>
+                                        updatePage(current, activePageIndex, {
+                                          cardStyle: undefined,
+                                        }),
+                                      )
+                                    }
+                                  >
+                                    بازنشانی به ظاهر کلی
+                                  </Button>
+                                )}
+                              </div>
+                              <div className={styles.twoColumns}>
+                                <label>
+                                  عرض کارت
+                                  <select
+                                    value={
+                                      activePage.cardStyle?.maxWidth ??
+                                      definition.theme.cardStyle.maxWidth
+                                    }
+                                    onChange={(event) =>
+                                      commitDefinition((current) =>
+                                        updatePage(current, activePageIndex, {
+                                          cardStyle: {
+                                            ...current.pages[activePageIndex]!.cardStyle,
+                                            maxWidth: event.target
+                                              .value as FormDefinition['theme']['cardStyle']['maxWidth'],
+                                          },
+                                        }),
+                                      )
+                                    }
+                                  >
+                                    <option value="narrow">باریک</option>
+                                    <option value="medium">متوسط</option>
+                                    <option value="wide">عریض</option>
+                                    <option value="full">تمام‌عرض</option>
+                                  </select>
+                                </label>
+                                <label>
+                                  رنگ کارت
+                                  <input
+                                    type="color"
+                                    value={
+                                      activePage.cardStyle?.backgroundColor ??
+                                      definition.theme.cardStyle.backgroundColor
+                                    }
+                                    onChange={(event) =>
+                                      commitDefinition((current) =>
+                                        updatePage(current, activePageIndex, {
+                                          cardStyle: {
+                                            ...current.pages[activePageIndex]!.cardStyle,
+                                            backgroundColor: event.target.value,
+                                          },
+                                        }),
+                                      )
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  فاصله‌ی داخلی
+                                  <input
+                                    type="number"
+                                    min="8"
+                                    max="40"
+                                    value={
+                                      activePage.cardStyle?.padding ??
+                                      definition.theme.cardStyle.padding
+                                    }
+                                    onChange={(event) =>
+                                      commitDefinition((current) =>
+                                        updatePage(current, activePageIndex, {
+                                          cardStyle: {
+                                            ...current.pages[activePageIndex]!.cardStyle,
+                                            padding: Number(event.target.value),
+                                          },
+                                        }),
+                                      )
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  گردی کارت
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="36"
+                                    value={
+                                      activePage.cardStyle?.radius ??
+                                      definition.theme.cardStyle.radius
+                                    }
+                                    onChange={(event) =>
+                                      commitDefinition((current) =>
+                                        updatePage(current, activePageIndex, {
+                                          cardStyle: {
+                                            ...current.pages[activePageIndex]!.cardStyle,
+                                            radius: Number(event.target.value),
+                                          },
+                                        }),
+                                      )
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  رنگ حاشیه
+                                  <input
+                                    type="color"
+                                    value={
+                                      activePage.cardStyle?.borderColor ??
+                                      definition.theme.cardStyle.borderColor
+                                    }
+                                    onChange={(event) =>
+                                      commitDefinition((current) =>
+                                        updatePage(current, activePageIndex, {
+                                          cardStyle: {
+                                            ...current.pages[activePageIndex]!.cardStyle,
+                                            borderColor: event.target.value,
+                                          },
+                                        }),
+                                      )
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  ضخامت حاشیه
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="4"
+                                    value={
+                                      activePage.cardStyle?.borderWidth ??
+                                      definition.theme.cardStyle.borderWidth
+                                    }
+                                    onChange={(event) =>
+                                      commitDefinition((current) =>
+                                        updatePage(current, activePageIndex, {
+                                          cardStyle: {
+                                            ...current.pages[activePageIndex]!.cardStyle,
+                                            borderWidth: Number(event.target.value),
+                                          },
+                                        }),
+                                      )
+                                    }
+                                  />
+                                </label>
+                              </div>
+                            </details>
+                          </fieldset>
 
-                        <section
-                          className={styles.formMetaCard}
-                          aria-labelledby="page-media-heading"
-                        >
-                          <div className={styles.sectionHeading}>
-                            <div>
-                              <h6 id="page-media-heading">رسانه و پس‌زمینه‌ی تصویری</h6>
-                              <p>
-                                بارگذاری و کتابخانه‌ی رسانه تا انتخاب زیرساخت امن ذخیره‌سازی و
-                                دانلود غیرفعال‌اند.
+                          <section
+                            className={styles.formMetaCard}
+                            aria-labelledby="page-media-heading"
+                          >
+                            <div className={styles.sectionHeading}>
+                              <div>
+                                <h6 id="page-media-heading">رسانه و پس‌زمینه‌ی تصویری</h6>
+                                <p>
+                                  بارگذاری و کتابخانه‌ی رسانه تا انتخاب زیرساخت امن ذخیره‌سازی و
+                                  دانلود غیرفعال‌اند.
+                                </p>
+                              </div>
+                            </div>
+                            <div className={styles.inlineActions}>
+                              <Button
+                                type="button"
+                                tone="ghost"
+                                disabled
+                                aria-describedby="page-media-limit"
+                              >
+                                بارگذاری تصویر یا ویدیو
+                              </Button>
+                              <p id="page-media-limit" className={styles.helper}>
+                                فایل یا preview ساختگی ذخیره نمی‌شود؛ رنگ پس‌زمینه و تنظیم‌های کارت
+                                همین صفحه فعال‌اند.
                               </p>
                             </div>
-                          </div>
-                          <div className={styles.inlineActions}>
-                            <Button
-                              type="button"
-                              tone="ghost"
-                              disabled
-                              aria-describedby="page-media-limit"
-                            >
-                              بارگذاری تصویر یا ویدیو
-                            </Button>
-                            <p id="page-media-limit" className={styles.helper}>
-                              فایل یا preview ساختگی ذخیره نمی‌شود؛ رنگ پس‌زمینه و تنظیم‌های کارت
-                              همین صفحه فعال‌اند.
-                            </p>
-                          </div>
-                        </section>
+                          </section>
 
-                        {activePage.kind === 'questions' ? (
-                          <div className={styles.fieldBuilder}>
-                            <section className={styles.fieldListPanel} aria-label="پرسش‌های صفحه">
-                              <div className={styles.sectionHeading}>
-                                <div>
-                                  <h6>پرسش‌های این صفحه</h6>
-                                  <p>یک پرسش را انتخاب کنید تا تنظیماتش در پنل کناری باز شود.</p>
+                          {activePage.kind === 'questions' ? (
+                            <div className={styles.fieldBuilder}>
+                              <section className={styles.fieldListPanel} aria-label="پرسش‌های صفحه">
+                                <div className={styles.sectionHeading}>
+                                  <div>
+                                    <h6>پرسش‌های این صفحه</h6>
+                                    <p>یک پرسش را انتخاب کنید تا تنظیماتش در پنل کناری باز شود.</p>
+                                  </div>
+                                  <Badge tone="neutral">
+                                    {activePage.fields.length.toLocaleString('fa-IR')}
+                                  </Badge>
                                 </div>
-                                <Badge tone="neutral">
-                                  {activePage.fields.length.toLocaleString('fa-IR')}
-                                </Badge>
-                              </div>
-                              {activePage.fields.length === 0 ? (
-                                <p className={styles.emptyFieldList}>
-                                  هنوز پرسشی در این صفحه نیست؛ از فهرست نوع پرسش‌ها یک مورد اضافه
-                                  کنید.
-                                </p>
-                              ) : (
-                                <ul className={styles.fieldList}>
-                                  {activePage.fields.map((field, fieldIndex) => (
-                                    <li
-                                      className={styles.fieldListItem}
-                                      key={field.id}
-                                      onDragOver={(event) => {
-                                        if (
-                                          event.dataTransfer.types.includes(
-                                            'application/x-funtino-field-index',
+                                {activePage.fields.length === 0 ? (
+                                  <p className={styles.emptyFieldList}>
+                                    هنوز پرسشی در این صفحه نیست؛ از فهرست نوع پرسش‌ها یک مورد اضافه
+                                    کنید.
+                                  </p>
+                                ) : (
+                                  <ul className={styles.fieldList}>
+                                    {activePage.fields.map((field, fieldIndex) => (
+                                      <li
+                                        className={styles.fieldListItem}
+                                        key={field.id}
+                                        onDragOver={(event) => {
+                                          if (
+                                            event.dataTransfer.types.includes(
+                                              'application/x-funtino-field-index',
+                                            )
                                           )
-                                        )
+                                            event.preventDefault();
+                                        }}
+                                        onDrop={(event) => {
+                                          if (
+                                            !event.dataTransfer.types.includes(
+                                              'application/x-funtino-field-index',
+                                            )
+                                          )
+                                            return;
                                           event.preventDefault();
-                                      }}
-                                      onDrop={(event) => {
-                                        if (
-                                          !event.dataTransfer.types.includes(
-                                            'application/x-funtino-field-index',
-                                          )
-                                        )
-                                          return;
-                                        event.preventDefault();
-                                        const from = Number(
-                                          event.dataTransfer.getData(
-                                            'application/x-funtino-field-index',
-                                          ),
-                                        );
-                                        if (Number.isInteger(from))
-                                          moveActiveField(from, fieldIndex);
-                                      }}
-                                    >
-                                      <span
-                                        className={styles.dragHandle}
-                                        draggable
-                                        aria-hidden="true"
-                                        title="برای جابه‌جایی بکشید"
-                                        onDragStart={(event) => {
-                                          event.dataTransfer.setData(
-                                            'application/x-funtino-field-index',
-                                            String(fieldIndex),
+                                          const from = Number(
+                                            event.dataTransfer.getData(
+                                              'application/x-funtino-field-index',
+                                            ),
                                           );
-                                          event.dataTransfer.effectAllowed = 'move';
+                                          if (Number.isInteger(from))
+                                            moveActiveField(from, fieldIndex);
                                         }}
                                       >
-                                        ⠿
-                                      </span>
-                                      <button
-                                        type="button"
-                                        className={
-                                          selectedField?.id === field.id
-                                            ? styles.fieldSelectActive
-                                            : styles.fieldSelect
-                                        }
-                                        aria-pressed={selectedField?.id === field.id}
-                                        onClick={() => setSelectedFieldId(field.id)}
-                                      >
-                                        <span className={styles.fieldSelectTop}>
-                                          <Badge tone="neutral">{fieldLabels[field.type]}</Badge>
-                                          {field.required && <small>الزامی</small>}
-                                          {field.sensitive && <small>حساس</small>}
-                                        </span>
-                                        <strong>{field.label || 'پرسش بدون برچسب'}</strong>
-                                        {field.description && <span>{field.description}</span>}
-                                      </button>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                              <div
-                                className={styles.liveAnnouncement}
-                                aria-live="polite"
-                                aria-atomic="true"
-                              >
-                                {reorderAnnouncement}
-                              </div>
-                            </section>
-                            <aside
-                              className={styles.fieldInspector}
-                              aria-label="تنظیمات پرسش انتخاب‌شده"
-                            >
-                              {selectedField && selectedFieldIndex >= 0 ? (
-                                <FieldEditor
-                                  field={selectedField}
-                                  pageIndex={activePageIndex}
-                                  fieldIndex={selectedFieldIndex}
-                                  definition={definition}
-                                  disabled={
-                                    !capabilities?.canManage || selectedForm.status === 'archived'
-                                  }
-                                  onUpdate={(patch) =>
-                                    commitDefinition((current) =>
-                                      updateField(
-                                        current,
-                                        activePageIndex,
-                                        selectedFieldIndex,
-                                        patch,
-                                      ),
-                                    )
-                                  }
-                                  onMove={(to) => moveActiveField(selectedFieldIndex, to)}
-                                  onDuplicate={() =>
-                                    commitDefinition((current) =>
-                                      duplicateField(current, activePageIndex, selectedFieldIndex),
-                                    )
-                                  }
-                                  onDelete={() => {
-                                    const next = removeField(definition, selectedField.id);
-                                    commitDefinition(() => next);
-                                    setSelectedFieldId(
-                                      activePage.fields[Math.max(0, selectedFieldIndex - 1)]?.id ??
-                                        null,
-                                    );
-                                  }}
-                                />
-                              ) : (
-                                <div className={styles.inspectorEmpty}>
-                                  <span aria-hidden="true">⚙</span>
-                                  <h6>پرسشی انتخاب نشده</h6>
-                                  <p>
-                                    برای ویرایش برچسب، گزینه‌ها، شرط‌ها و اعتبارسنجی، یک پرسش را
-                                    انتخاب کنید.
-                                  </p>
-                                </div>
-                              )}
-                            </aside>
-                            <section
-                              className={styles.fieldPalette}
-                              aria-labelledby="field-palette-heading"
-                            >
-                              <div className={styles.sectionHeading}>
-                                <div>
-                                  <h6 id="field-palette-heading">افزودن پرسش</h6>
-                                  <p>
-                                    {totalFieldCount >= 100
-                                      ? 'حداکثر ۱۰۰ پرسش برای هر فرم مجاز است.'
-                                      : 'نوع داده را از دسته‌ی مناسب انتخاب کنید.'}
-                                  </p>
-                                </div>
-                                <Badge tone="neutral">
-                                  {totalFieldCount.toLocaleString('fa-IR')} / ۱۰۰
-                                </Badge>
-                              </div>
-                              <fieldset
-                                disabled={
-                                  !capabilities?.canManage ||
-                                  selectedForm.status === 'archived' ||
-                                  totalFieldCount >= 100
-                                }
-                                className={styles.fieldGroups}
-                              >
-                                {fieldGroups.map((group) => (
-                                  <div className={styles.fieldGroup} key={group.label}>
-                                    <h6>{group.label}</h6>
-                                    <div className={styles.fieldTypeGrid}>
-                                      {group.types.map((type) => (
-                                        <Button
-                                          key={type}
-                                          type="button"
-                                          tone="ghost"
-                                          onClick={() => {
-                                            const next = addField(
-                                              definition,
-                                              activePageIndex,
-                                              type,
+                                        <span
+                                          className={styles.dragHandle}
+                                          draggable
+                                          aria-hidden="true"
+                                          title="برای جابه‌جایی بکشید"
+                                          onDragStart={(event) => {
+                                            event.dataTransfer.setData(
+                                              'application/x-funtino-field-index',
+                                              String(fieldIndex),
                                             );
-                                            const field =
-                                              next.pages[activePageIndex]?.fields.at(-1);
-                                            commitDefinition(() => next);
-                                            setSelectedFieldId(field?.id ?? null);
+                                            event.dataTransfer.effectAllowed = 'move';
                                           }}
                                         >
-                                          {fieldLabels[type]}
-                                        </Button>
-                                      ))}
-                                    </div>
+                                          ⠿
+                                        </span>
+                                        <button
+                                          type="button"
+                                          className={
+                                            selectedField?.id === field.id
+                                              ? styles.fieldSelectActive
+                                              : styles.fieldSelect
+                                          }
+                                          aria-pressed={selectedField?.id === field.id}
+                                          onClick={() => setSelectedFieldId(field.id)}
+                                        >
+                                          <span className={styles.fieldSelectTop}>
+                                            <Badge tone="neutral">{fieldLabels[field.type]}</Badge>
+                                            {field.required && <small>الزامی</small>}
+                                            {field.sensitive && <small>حساس</small>}
+                                          </span>
+                                          <strong>{field.label || 'پرسش بدون برچسب'}</strong>
+                                          {field.description && <span>{field.description}</span>}
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                                <div
+                                  className={styles.liveAnnouncement}
+                                  aria-live="polite"
+                                  aria-atomic="true"
+                                >
+                                  {reorderAnnouncement}
+                                </div>
+                              </section>
+                              <aside
+                                className={styles.fieldInspector}
+                                aria-label="تنظیمات پرسش انتخاب‌شده"
+                              >
+                                {selectedField && selectedFieldIndex >= 0 ? (
+                                  <FieldEditor
+                                    field={selectedField}
+                                    pageIndex={activePageIndex}
+                                    fieldIndex={selectedFieldIndex}
+                                    definition={definition}
+                                    disabled={
+                                      !capabilities?.canManage || selectedForm.status === 'archived'
+                                    }
+                                    onUpdate={(patch) =>
+                                      commitDefinition((current) =>
+                                        updateField(
+                                          current,
+                                          activePageIndex,
+                                          selectedFieldIndex,
+                                          patch,
+                                        ),
+                                      )
+                                    }
+                                    onMove={(to) => moveActiveField(selectedFieldIndex, to)}
+                                    onDuplicate={() =>
+                                      commitDefinition((current) =>
+                                        duplicateField(
+                                          current,
+                                          activePageIndex,
+                                          selectedFieldIndex,
+                                        ),
+                                      )
+                                    }
+                                    onDelete={() => {
+                                      const next = removeField(definition, selectedField.id);
+                                      commitDefinition(() => next);
+                                      setSelectedFieldId(
+                                        activePage.fields[Math.max(0, selectedFieldIndex - 1)]
+                                          ?.id ?? null,
+                                      );
+                                    }}
+                                  />
+                                ) : (
+                                  <div className={styles.inspectorEmpty}>
+                                    <span aria-hidden="true">⚙</span>
+                                    <h6>پرسشی انتخاب نشده</h6>
+                                    <p>
+                                      برای ویرایش برچسب، گزینه‌ها، شرط‌ها و اعتبارسنجی، یک پرسش را
+                                      انتخاب کنید.
+                                    </p>
                                   </div>
-                                ))}
-                              </fieldset>
-                              <p className={styles.helper}>
-                                بارگذاری فایل یا تصویر، امضا و محاسبه‌ی خودکار تا آماده‌شدن قرارداد
-                                ذخیره‌سازی و دانلود در دسترس نیست.
-                              </p>
-                            </section>
-                          </div>
-                        ) : (
-                          <p className={styles.emptyFieldList}>
-                            {activePage.kind === 'start'
-                              ? 'این صفحه فقط معرفی فرم را نشان می‌دهد و دکمه‌ی «شروع فرم» دارد.'
-                              : 'این صفحه پس از ثبت موفق نمایش داده می‌شود و دکمه‌ی مرحله‌ی بعد ندارد.'}
-                          </p>
-                        )}
-                      </section>
-                    )}
-                  </section>
-                </main>
-                <aside className={styles.builderAside}>
-                  <div className={styles.builderAsideCard}>
-                    <Badge
-                      tone={
-                        selectedForm.status === 'published'
-                          ? 'success'
-                          : selectedForm.status === 'paused'
-                            ? 'warning'
-                            : 'neutral'
-                      }
-                    >
-                      {formStatusLabels[selectedForm.status]}
-                    </Badge>
-                    <h4>نسخه‌ی منتشرشده</h4>
-                    <strong>
-                      {selectedForm.currentVersion
-                        ? selectedForm.currentVersion.toLocaleString('fa-IR')
-                        : 'هنوز نسخه‌ای منتشر نشده'}
-                    </strong>
-                    {selectedForm.publishedAt && (
-                      <time dateTime={selectedForm.publishedAt}>
-                        آخرین انتشار:{' '}
-                        {new Date(selectedForm.publishedAt).toLocaleDateString('fa-IR')}
-                      </time>
-                    )}
-                    <p>تغییرهای پیش‌نویس با انتشار بعدی به نسخه‌ی تازه تبدیل می‌شوند.</p>
-                    <Button type="button" tone="secondary" onClick={() => setActiveTab('preview')}>
-                      دیدن پیش‌نمایش
-                    </Button>
-                  </div>
-                  <div className={styles.builderAsideCard}>
-                    <h4>راهنمای وضعیت</h4>
-                    <p>
-                      تغییرها پس از مکث کوتاه خودکار ذخیره می‌شوند. انتشار به دلیل ثبت‌شده نیاز
-                      دارد.
-                    </p>
-                    {!capabilities?.canManage && (
-                      <p className={styles.helper}>برای ویرایش مجوز forms.manage لازم است.</p>
-                    )}
-                    {!capabilities?.canPublish && (
-                      <p className={styles.helper}>برای انتشار مجوز forms.publish لازم است.</p>
-                    )}
-                  </div>
-                </aside>
-              </div>
-            ) : activeTab === 'settings' ? (
-              <div className={styles.settingsWorkspace}>
-                <section className={styles.themeSettings} aria-labelledby="form-theme-heading">
-                  <div className={styles.sectionHeading}>
-                    <div>
-                      <h4 id="form-theme-heading">ظاهر و تجربه‌ی فرم</h4>
-                      <p>این تنظیم‌ها روی پیش‌نمایش و نسخه‌ی بعدی فرم اعمال می‌شوند.</p>
+                                )}
+                              </aside>
+                              <section
+                                className={styles.fieldPalette}
+                                aria-labelledby="field-palette-heading"
+                              >
+                                <div className={styles.sectionHeading}>
+                                  <div>
+                                    <h6 id="field-palette-heading">افزودن پرسش</h6>
+                                    <p>
+                                      {totalFieldCount >= 100
+                                        ? 'حداکثر ۱۰۰ پرسش برای هر فرم مجاز است.'
+                                        : 'نوع داده را از دسته‌ی مناسب انتخاب کنید.'}
+                                    </p>
+                                  </div>
+                                  <Badge tone="neutral">
+                                    {totalFieldCount.toLocaleString('fa-IR')} / ۱۰۰
+                                  </Badge>
+                                </div>
+                                <fieldset
+                                  disabled={
+                                    !capabilities?.canManage ||
+                                    selectedForm.status === 'archived' ||
+                                    totalFieldCount >= 100
+                                  }
+                                  className={styles.fieldGroups}
+                                >
+                                  {fieldGroups.map((group) => (
+                                    <div className={styles.fieldGroup} key={group.label}>
+                                      <h6>{group.label}</h6>
+                                      <div className={styles.fieldTypeGrid}>
+                                        {group.types.map((type) => (
+                                          <Button
+                                            key={type}
+                                            type="button"
+                                            tone="ghost"
+                                            onClick={() => {
+                                              const next = addField(
+                                                definition,
+                                                activePageIndex,
+                                                type,
+                                              );
+                                              const field =
+                                                next.pages[activePageIndex]?.fields.at(-1);
+                                              commitDefinition(() => next);
+                                              setSelectedFieldId(field?.id ?? null);
+                                            }}
+                                          >
+                                            {fieldLabels[type]}
+                                          </Button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </fieldset>
+                                <p className={styles.helper}>
+                                  بارگذاری فایل یا تصویر، امضا و محاسبه‌ی خودکار تا آماده‌شدن
+                                  قرارداد ذخیره‌سازی و دانلود در دسترس نیست.
+                                </p>
+                              </section>
+                            </div>
+                          ) : (
+                            <p className={styles.emptyFieldList}>
+                              {activePage.kind === 'start'
+                                ? 'این صفحه فقط معرفی فرم را نشان می‌دهد و دکمه‌ی «شروع فرم» دارد.'
+                                : 'این صفحه پس از ثبت موفق نمایش داده می‌شود و دکمه‌ی مرحله‌ی بعد ندارد.'}
+                            </p>
+                          )}
+                        </section>
+                      )}
+                    </section>
+                  </main>
+                  <aside className={styles.builderAside}>
+                    <div className={styles.builderAsideCard}>
+                      <Badge
+                        tone={
+                          selectedForm.status === 'published'
+                            ? 'success'
+                            : selectedForm.status === 'paused'
+                              ? 'warning'
+                              : 'neutral'
+                        }
+                      >
+                        {formStatusLabels[selectedForm.status]}
+                      </Badge>
+                      <h4>نسخه‌ی منتشرشده</h4>
+                      <strong>
+                        {selectedForm.currentVersion
+                          ? selectedForm.currentVersion.toLocaleString('fa-IR')
+                          : 'هنوز نسخه‌ای منتشر نشده'}
+                      </strong>
+                      {selectedForm.publishedAt && (
+                        <time dateTime={selectedForm.publishedAt}>
+                          آخرین انتشار:{' '}
+                          {new Date(selectedForm.publishedAt).toLocaleDateString('fa-IR')}
+                        </time>
+                      )}
+                      <p>تغییرهای پیش‌نویس با انتشار بعدی به نسخه‌ی تازه تبدیل می‌شوند.</p>
+                      <Button
+                        type="button"
+                        tone="secondary"
+                        onClick={() => setActiveTab('preview')}
+                      >
+                        دیدن پیش‌نمایش
+                      </Button>
                     </div>
-                  </div>
-                  <fieldset
-                    disabled={!capabilities?.canManage || selectedForm.status === 'archived'}
-                    className={styles.settingsFields}
-                  >
-                    <div className={styles.twoColumns}>
-                      <label>
-                        رنگ اصلی
-                        <input
-                          type="color"
-                          value={definition.theme.primaryColor}
-                          onChange={(event) =>
-                            commitDefinition((current) => ({
-                              ...current,
-                              theme: { ...current.theme, primaryColor: event.target.value },
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        رنگ تأکیدی
-                        <input
-                          type="color"
-                          value={definition.theme.accentColor}
-                          onChange={(event) =>
-                            commitDefinition((current) => ({
-                              ...current,
-                              theme: { ...current.theme, accentColor: event.target.value },
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        پس‌زمینه
-                        <input
-                          type="color"
-                          value={definition.theme.backgroundColor}
-                          onChange={(event) =>
-                            commitDefinition((current) => ({
-                              ...current,
-                              theme: { ...current.theme, backgroundColor: event.target.value },
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        سطح کارت
-                        <input
-                          type="color"
-                          value={definition.theme.surfaceColor}
-                          onChange={(event) =>
-                            commitDefinition((current) => ({
-                              ...current,
-                              theme: { ...current.theme, surfaceColor: event.target.value },
-                            }))
-                          }
-                        />
-                      </label>
-                      <label>
-                        فونت فرم
-                        <select
-                          value={definition.theme.font}
-                          onChange={(event) =>
-                            commitDefinition((current) => ({
-                              ...current,
-                              theme: {
-                                ...current.theme,
-                                font: event.target.value as FormDefinition['theme']['font'],
-                              },
-                            }))
-                          }
-                        >
-                          <option value="estedad">استعداد</option>
-                          <option value="vazirmatn">وزیرمتن</option>
-                        </select>
-                      </label>
-                      <label>
-                        گردی گوشه‌ها
-                        <select
-                          value={definition.theme.cornerStyle}
-                          onChange={(event) =>
-                            commitDefinition((current) => ({
-                              ...current,
-                              theme: {
-                                ...current.theme,
-                                cornerStyle: event.target
-                                  .value as FormDefinition['theme']['cornerStyle'],
-                              },
-                            }))
-                          }
-                        >
-                          <option value="soft">ملایم</option>
-                          <option value="rounded">گرد</option>
-                          <option value="pill">کپسولی</option>
-                        </select>
-                      </label>
-                      <label>
-                        چیدمان
-                        <select
-                          value={definition.theme.layout}
-                          onChange={(event) =>
-                            commitDefinition((current) => ({
-                              ...current,
-                              theme: {
-                                ...current.theme,
-                                layout: event.target.value as FormDefinition['theme']['layout'],
-                              },
-                            }))
-                          }
-                        >
-                          <option value="paged">مرحله‌ای</option>
-                          <option value="single">یک‌صفحه‌ای</option>
-                        </select>
-                      </label>
-                      <label className={styles.checkbox}>
-                        <input
-                          type="checkbox"
-                          checked={definition.theme.showProgress}
-                          onChange={(event) =>
-                            commitDefinition((current) => ({
-                              ...current,
-                              theme: { ...current.theme, showProgress: event.target.checked },
-                            }))
-                          }
-                        />
-                        نمایش نوار پیشرفت
-                      </label>
-                    </div>
-                  </fieldset>
-                </section>
-                <section className={styles.settingsCard} aria-labelledby="form-settings-heading">
-                  <div className={styles.sectionHeading}>
-                    <div>
-                      <h4 id="form-settings-heading">دسترسی و زمان‌بندی</h4>
-                      <p>تنظیم‌های دسترسی پیش از انتشار یا توقف قابل تغییرند.</p>
-                    </div>
-                  </div>
-                  <fieldset
-                    disabled={!capabilities?.canManage || selectedForm.status === 'archived'}
-                    className={styles.settingsFields}
-                  >
-                    <div className={styles.twoColumns}>
-                      <label>
-                        دسترسی پاسخ‌گویی
-                        <select
-                          value={settingsDraft.accessMode}
-                          onChange={(event) =>
-                            setSettingsDraft({
-                              ...settingsDraft,
-                              accessMode: event.target.value as FormSettingsDraft['accessMode'],
-                            })
-                          }
-                        >
-                          <option value="guest">بدون ورود</option>
-                          <option value="optional_auth">ورود اختیاری</option>
-                          <option value="auth_required">ورود الزامی</option>
-                        </select>
-                      </label>
-                      <label className={styles.checkbox}>
-                        <input
-                          type="checkbox"
-                          checked={settingsDraft.linkEnabled}
-                          onChange={(event) =>
-                            setSettingsDraft({
-                              ...settingsDraft,
-                              linkEnabled: event.target.checked,
-                            })
-                          }
-                        />
-                        فعال‌بودن پیوند عمومی
-                      </label>
-                      <label>
-                        شروع دسترسی
-                        <DateTimePickerField
-                          value={settingsDraft.startsAt}
-                          onChange={(startsAt) => setSettingsDraft({ ...settingsDraft, startsAt })}
-                          title="زمان شروع دسترسی"
-                        />
-                      </label>
-                      <label>
-                        پایان دسترسی
-                        <DateTimePickerField
-                          value={settingsDraft.endsAt}
-                          onChange={(endsAt) => setSettingsDraft({ ...settingsDraft, endsAt })}
-                          title="زمان پایان دسترسی"
-                        />
-                      </label>
-                      <label>
-                        سقف پاسخ‌ها
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
-                          value={settingsDraft.responseLimit}
-                          onChange={(event) =>
-                            setSettingsDraft({
-                              ...settingsDraft,
-                              responseLimit: event.target.value,
-                            })
-                          }
-                          placeholder="بدون سقف"
-                        />
-                      </label>
-                    </div>
-                  </fieldset>
-                  {settingsDirty && (
-                    <p className={styles.helper} role="status">
-                      تنظیم‌های دسترسی ذخیره نشده‌اند؛ پیش از انتشار آن‌ها را ذخیره کنید.
-                    </p>
-                  )}
-                  <Button
-                    type="button"
-                    tone="secondary"
-                    disabled={
-                      saving ||
-                      !settingsDirty ||
-                      !capabilities?.canManage ||
-                      selectedForm.status === 'archived'
-                    }
-                    onClick={() => void saveSettings()}
-                  >
-                    ذخیره‌ی تنظیمات دسترسی
-                  </Button>
-                  <div className={styles.sharePanel}>
-                    <div>
-                      <h5>پیوند فرم</h5>
+                    <div className={styles.builderAsideCard}>
+                      <h4>راهنمای وضعیت</h4>
                       <p>
-                        {selectedForm.status === 'published' && selectedForm.linkEnabled
-                          ? 'فرم منتشر شده و پیوند عمومی فعال است.'
-                          : 'برای فعال‌شدن پیوند، فرم را منتشر کنید و دسترسی عمومی را روشن بگذارید.'}
+                        تغییرها پس از مکث کوتاه خودکار ذخیره می‌شوند. انتشار به دلیل ثبت‌شده نیاز
+                        دارد.
                       </p>
+                      {!capabilities?.canManage && (
+                        <p className={styles.helper}>برای ویرایش مجوز forms.manage لازم است.</p>
+                      )}
+                      {!capabilities?.canPublish && (
+                        <p className={styles.helper}>برای انتشار مجوز forms.publish لازم است.</p>
+                      )}
                     </div>
+                  </aside>
+                </div>
+              ) : activeTab === 'settings' ? (
+                <div className={styles.settingsWorkspace}>
+                  <section className={styles.themeSettings} aria-labelledby="form-theme-heading">
+                    <div className={styles.sectionHeading}>
+                      <div>
+                        <h4 id="form-theme-heading">ظاهر و تجربه‌ی فرم</h4>
+                        <p>این تنظیم‌ها روی پیش‌نمایش و نسخه‌ی بعدی فرم اعمال می‌شوند.</p>
+                      </div>
+                    </div>
+                    <fieldset
+                      disabled={!capabilities?.canManage || selectedForm.status === 'archived'}
+                      className={styles.settingsFields}
+                    >
+                      <div className={styles.twoColumns}>
+                        <label>
+                          رنگ اصلی
+                          <input
+                            type="color"
+                            value={definition.theme.primaryColor}
+                            onChange={(event) =>
+                              commitDefinition((current) => ({
+                                ...current,
+                                theme: { ...current.theme, primaryColor: event.target.value },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          رنگ تأکیدی
+                          <input
+                            type="color"
+                            value={definition.theme.accentColor}
+                            onChange={(event) =>
+                              commitDefinition((current) => ({
+                                ...current,
+                                theme: { ...current.theme, accentColor: event.target.value },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          پس‌زمینه
+                          <input
+                            type="color"
+                            value={definition.theme.backgroundColor}
+                            onChange={(event) =>
+                              commitDefinition((current) => ({
+                                ...current,
+                                theme: { ...current.theme, backgroundColor: event.target.value },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          سطح کارت
+                          <input
+                            type="color"
+                            value={definition.theme.surfaceColor}
+                            onChange={(event) =>
+                              commitDefinition((current) => ({
+                                ...current,
+                                theme: { ...current.theme, surfaceColor: event.target.value },
+                              }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          فونت فرم
+                          <select
+                            value={definition.theme.font}
+                            onChange={(event) =>
+                              commitDefinition((current) => ({
+                                ...current,
+                                theme: {
+                                  ...current.theme,
+                                  font: event.target.value as FormDefinition['theme']['font'],
+                                },
+                              }))
+                            }
+                          >
+                            <option value="estedad">استعداد</option>
+                            <option value="vazirmatn">وزیرمتن</option>
+                          </select>
+                        </label>
+                        <label>
+                          گردی گوشه‌ها
+                          <select
+                            value={definition.theme.cornerStyle}
+                            onChange={(event) =>
+                              commitDefinition((current) => ({
+                                ...current,
+                                theme: {
+                                  ...current.theme,
+                                  cornerStyle: event.target
+                                    .value as FormDefinition['theme']['cornerStyle'],
+                                },
+                              }))
+                            }
+                          >
+                            <option value="soft">ملایم</option>
+                            <option value="rounded">گرد</option>
+                            <option value="pill">کپسولی</option>
+                          </select>
+                        </label>
+                        <label>
+                          چیدمان
+                          <select
+                            value={definition.theme.layout}
+                            onChange={(event) =>
+                              commitDefinition((current) => ({
+                                ...current,
+                                theme: {
+                                  ...current.theme,
+                                  layout: event.target.value as FormDefinition['theme']['layout'],
+                                },
+                              }))
+                            }
+                          >
+                            <option value="paged">مرحله‌ای</option>
+                            <option value="single">یک‌صفحه‌ای</option>
+                          </select>
+                        </label>
+                        <label className={styles.checkbox}>
+                          <input
+                            type="checkbox"
+                            checked={definition.theme.showProgress}
+                            onChange={(event) =>
+                              commitDefinition((current) => ({
+                                ...current,
+                                theme: { ...current.theme, showProgress: event.target.checked },
+                              }))
+                            }
+                          />
+                          نمایش نوار پیشرفت
+                        </label>
+                      </div>
+                    </fieldset>
+                  </section>
+                  <section className={styles.settingsCard} aria-labelledby="form-settings-heading">
+                    <div className={styles.sectionHeading}>
+                      <div>
+                        <h4 id="form-settings-heading">دسترسی و زمان‌بندی</h4>
+                        <p>تنظیم‌های دسترسی پیش از انتشار یا توقف قابل تغییرند.</p>
+                      </div>
+                    </div>
+                    <fieldset
+                      disabled={!capabilities?.canManage || selectedForm.status === 'archived'}
+                      className={styles.settingsFields}
+                    >
+                      <div className={styles.twoColumns}>
+                        <label>
+                          دسترسی پاسخ‌گویی
+                          <select
+                            value={settingsDraft.accessMode}
+                            onChange={(event) =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                accessMode: event.target.value as FormSettingsDraft['accessMode'],
+                              })
+                            }
+                          >
+                            <option value="guest">بدون ورود</option>
+                            <option value="optional_auth">ورود اختیاری</option>
+                            <option value="auth_required">ورود الزامی</option>
+                          </select>
+                        </label>
+                        <label className={styles.checkbox}>
+                          <input
+                            type="checkbox"
+                            checked={settingsDraft.linkEnabled}
+                            onChange={(event) =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                linkEnabled: event.target.checked,
+                              })
+                            }
+                          />
+                          فعال‌بودن پیوند عمومی
+                        </label>
+                        <label>
+                          شروع دسترسی
+                          <DateTimePickerField
+                            value={settingsDraft.startsAt}
+                            onChange={(startsAt) =>
+                              setSettingsDraft({ ...settingsDraft, startsAt })
+                            }
+                            title="زمان شروع دسترسی"
+                          />
+                        </label>
+                        <label>
+                          پایان دسترسی
+                          <DateTimePickerField
+                            value={settingsDraft.endsAt}
+                            onChange={(endsAt) => setSettingsDraft({ ...settingsDraft, endsAt })}
+                            title="زمان پایان دسترسی"
+                          />
+                        </label>
+                        <label>
+                          سقف پاسخ‌ها
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={settingsDraft.responseLimit}
+                            onChange={(event) =>
+                              setSettingsDraft({
+                                ...settingsDraft,
+                                responseLimit: event.target.value,
+                              })
+                            }
+                            placeholder="بدون سقف"
+                          />
+                        </label>
+                      </div>
+                    </fieldset>
+                    {settingsDirty && (
+                      <p className={styles.helper} role="status">
+                        تنظیم‌های دسترسی ذخیره نشده‌اند؛ پیش از انتشار آن‌ها را ذخیره کنید.
+                      </p>
+                    )}
                     <Button
                       type="button"
-                      tone="ghost"
-                      disabled={selectedForm.status !== 'published' || !selectedForm.linkEnabled}
-                      onClick={() => void copyPublicLink()}
+                      tone="secondary"
+                      disabled={
+                        saving ||
+                        !settingsDirty ||
+                        !capabilities?.canManage ||
+                        selectedForm.status === 'archived'
+                      }
+                      onClick={() => void saveSettings()}
                     >
-                      کپی پیوند عمومی
+                      ذخیره‌ی تنظیمات دسترسی
                     </Button>
-                  </div>
-                  <label className={styles.reason}>
-                    دلیل (برای بایگانی اجباری است؛ برای انتشار و توقف اختیاری)
-                    <input
-                      value={reason}
-                      onChange={(event) => setReason(event.target.value)}
-                      maxLength={500}
-                    />
-                  </label>
-                  <div className={styles.publishPanel}>
-                    <div>
-                      <h5>انتشار و وضعیت فرم</h5>
-                      <p>
-                        هر انتشار نسخه‌ی تغییرناپذیر می‌سازد؛ دلیل در سابقه‌ی مدیریتی ثبت می‌شود.
+                    <div className={styles.sharePanel}>
+                      <div>
+                        <h5>پیوند فرم</h5>
+                        <p>
+                          {selectedForm.status === 'published' && selectedForm.linkEnabled
+                            ? 'فرم منتشر شده و پیوند عمومی فعال است.'
+                            : 'برای فعال‌شدن پیوند، فرم را منتشر کنید و دسترسی عمومی را روشن بگذارید.'}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        tone="ghost"
+                        disabled={selectedForm.status !== 'published' || !selectedForm.linkEnabled}
+                        onClick={() => void copyPublicLink()}
+                      >
+                        کپی پیوند عمومی
+                      </Button>
+                    </div>
+                    <label className={styles.reason}>
+                      دلیل (برای بایگانی اجباری است؛ برای انتشار و توقف اختیاری)
+                      <input
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                        maxLength={500}
+                      />
+                    </label>
+                    <div className={styles.publishPanel}>
+                      <div>
+                        <h5>انتشار و وضعیت فرم</h5>
+                        <p>
+                          هر انتشار نسخه‌ی تغییرناپذیر می‌سازد؛ دلیل در سابقه‌ی مدیریتی ثبت می‌شود.
+                        </p>
+                      </div>
+                      <div className={styles.inlineActions}>
+                        <Button
+                          type="button"
+                          disabled={saving || settingsDirty || !capabilities?.canPublish}
+                          onClick={requestPublish}
+                        >
+                          {selectedForm.currentVersion ? 'انتشار نسخه‌ی تازه' : 'انتشار فرم'}
+                        </Button>
+                        {selectedForm.status === 'published' && (
+                          <Button
+                            type="button"
+                            tone="secondary"
+                            disabled={saving || !capabilities?.canPublish}
+                            onClick={() => void changeFormState('pause')}
+                          >
+                            توقف فرم
+                          </Button>
+                        )}
+                        {selectedForm.status !== 'archived' && (
+                          <Button
+                            type="button"
+                            tone="ghost"
+                            disabled={
+                              saving || !capabilities?.canPublish || reason.trim().length < 8
+                            }
+                            onClick={() => void changeFormState('archive')}
+                          >
+                            بایگانی
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {selectedForm.status === 'archived' && (
+                      <p className={styles.helper}>فرم بایگانی‌شده قابل ویرایش نیست.</p>
+                    )}
+                    {!capabilities?.canManage && (
+                      <p className={styles.helper}>برای ویرایش فرم مجوز forms.manage لازم است.</p>
+                    )}
+                    {!capabilities?.canPublish && (
+                      <p className={styles.helper}>
+                        برای انتشار یا تغییر وضعیت مجوز forms.publish لازم است.
                       </p>
+                    )}
+                  </section>
+                  {capabilities?.canManageTemplates && (
+                    <form
+                      className={styles.templateSave}
+                      onSubmit={(event) => void createTemplate(event)}
+                    >
+                      <div>
+                        <h4>ذخیره به‌عنوان قالب</h4>
+                        <p>از ساختار فعلی، یک قالب برای محدوده‌ی همین شعبه بسازید.</p>
+                      </div>
+                      <label>
+                        نام قالب
+                        <input
+                          required
+                          value={templateName}
+                          onChange={(event) => setTemplateName(event.target.value)}
+                          maxLength={120}
+                        />
+                      </label>
+                      <label>
+                        توضیح
+                        <textarea
+                          rows={2}
+                          value={templateDescription}
+                          onChange={(event) => setTemplateDescription(event.target.value)}
+                          maxLength={500}
+                        />
+                      </label>
+                      <Button
+                        type="submit"
+                        tone="ghost"
+                        disabled={
+                          saving || !templateName.trim() || selectedForm.status === 'archived'
+                        }
+                      >
+                        ذخیره‌ی قالب
+                      </Button>
+                    </form>
+                  )}
+                </div>
+              ) : activeTab === 'preview' ? (
+                <div className={styles.previewWorkspace}>
+                  <div className={styles.previewHeading}>
+                    <div>
+                      <p className={styles.eyebrow}>پیش‌نمایش تعاملی</p>
+                      <h4>نمای پاسخ‌دهنده</h4>
+                      <p>پاسخ‌ها فقط در همین پیش‌نمایش نگه داشته می‌شوند و ارسال نمی‌شوند.</p>
                     </div>
                     <div className={styles.inlineActions}>
                       <Button
                         type="button"
-                        disabled={saving || settingsDirty || !capabilities?.canPublish}
-                        onClick={requestPublish}
+                        tone={previewViewport === 'desktop' ? 'primary' : 'ghost'}
+                        aria-pressed={previewViewport === 'desktop'}
+                        onClick={() => setPreviewViewport('desktop')}
                       >
-                        {selectedForm.currentVersion ? 'انتشار نسخه‌ی تازه' : 'انتشار فرم'}
+                        نمای دسکتاپ
                       </Button>
-                      {selectedForm.status === 'published' && (
-                        <Button
-                          type="button"
-                          tone="secondary"
-                          disabled={saving || !capabilities?.canPublish}
-                          onClick={() => void changeFormState('pause')}
-                        >
-                          توقف فرم
-                        </Button>
-                      )}
-                      {selectedForm.status !== 'archived' && (
-                        <Button
-                          type="button"
-                          tone="ghost"
-                          disabled={saving || !capabilities?.canPublish || reason.trim().length < 8}
-                          onClick={() => void changeFormState('archive')}
-                        >
-                          بایگانی
-                        </Button>
-                      )}
+                      <Button
+                        type="button"
+                        tone={previewViewport === 'tablet' ? 'primary' : 'ghost'}
+                        aria-pressed={previewViewport === 'tablet'}
+                        onClick={() => setPreviewViewport('tablet')}
+                      >
+                        نمای تبلت
+                      </Button>
+                      <Button
+                        type="button"
+                        tone={previewViewport === 'mobile' ? 'primary' : 'ghost'}
+                        aria-pressed={previewViewport === 'mobile'}
+                        onClick={() => setPreviewViewport('mobile')}
+                      >
+                        نمای موبایل
+                      </Button>
+                      <Button
+                        type="button"
+                        tone="ghost"
+                        onClick={() => {
+                          setPreviewAnswers({});
+                          setPreviewCompleted(false);
+                          setPreviewPageId(
+                            definition.pages.find((page) => page.kind === 'start')?.id ??
+                              definition.pages.find((page) => page.kind === 'questions')?.id,
+                          );
+                        }}
+                      >
+                        بازنشانی پاسخ‌ها
+                      </Button>
                     </div>
                   </div>
-                  {selectedForm.status === 'archived' && (
-                    <p className={styles.helper}>فرم بایگانی‌شده قابل ویرایش نیست.</p>
-                  )}
-                  {!capabilities?.canManage && (
-                    <p className={styles.helper}>برای ویرایش فرم مجوز forms.manage لازم است.</p>
-                  )}
-                  {!capabilities?.canPublish && (
-                    <p className={styles.helper}>
-                      برای انتشار یا تغییر وضعیت مجوز forms.publish لازم است.
-                    </p>
-                  )}
-                </section>
-                {capabilities?.canManageTemplates && (
-                  <form
-                    className={styles.templateSave}
-                    onSubmit={(event) => void createTemplate(event)}
+                  <div
+                    className={
+                      styles.previewFrame +
+                      (previewViewport === 'mobile'
+                        ? ' ' + styles.previewMobile
+                        : previewViewport === 'tablet'
+                          ? ' ' + styles.previewTablet
+                          : '')
+                    }
                   >
-                    <div>
-                      <h4>ذخیره به‌عنوان قالب</h4>
-                      <p>از ساختار فعلی، یک قالب برای محدوده‌ی همین شعبه بسازید.</p>
-                    </div>
-                    <label>
-                      نام قالب
-                      <input
-                        required
-                        value={templateName}
-                        onChange={(event) => setTemplateName(event.target.value)}
-                        maxLength={120}
-                      />
-                    </label>
-                    <label>
-                      توضیح
-                      <textarea
-                        rows={2}
-                        value={templateDescription}
-                        onChange={(event) => setTemplateDescription(event.target.value)}
-                        maxLength={500}
-                      />
-                    </label>
-                    <Button
-                      type="submit"
-                      tone="ghost"
-                      disabled={
-                        saving || !templateName.trim() || selectedForm.status === 'archived'
-                      }
-                    >
-                      ذخیره‌ی قالب
-                    </Button>
-                  </form>
-                )}
-              </div>
-            ) : activeTab === 'preview' ? (
-              <div className={styles.previewWorkspace}>
-                <div className={styles.previewHeading}>
-                  <div>
-                    <p className={styles.eyebrow}>پیش‌نمایش تعاملی</p>
-                    <h4>نمای پاسخ‌دهنده</h4>
-                    <p>پاسخ‌ها فقط در همین پیش‌نمایش نگه داشته می‌شوند و ارسال نمی‌شوند.</p>
-                  </div>
-                  <div className={styles.inlineActions}>
-                    <Button
-                      type="button"
-                      tone={previewViewport === 'desktop' ? 'primary' : 'ghost'}
-                      aria-pressed={previewViewport === 'desktop'}
-                      onClick={() => setPreviewViewport('desktop')}
-                    >
-                      نمای دسکتاپ
-                    </Button>
-                    <Button
-                      type="button"
-                      tone={previewViewport === 'tablet' ? 'primary' : 'ghost'}
-                      aria-pressed={previewViewport === 'tablet'}
-                      onClick={() => setPreviewViewport('tablet')}
-                    >
-                      نمای تبلت
-                    </Button>
-                    <Button
-                      type="button"
-                      tone={previewViewport === 'mobile' ? 'primary' : 'ghost'}
-                      aria-pressed={previewViewport === 'mobile'}
-                      onClick={() => setPreviewViewport('mobile')}
-                    >
-                      نمای موبایل
-                    </Button>
-                    <Button
-                      type="button"
-                      tone="ghost"
-                      onClick={() => {
-                        setPreviewAnswers({});
+                    <FormRenderer
+                      definition={definition}
+                      answers={previewAnswers}
+                      onAnswerChange={(id, value) => {
+                        setPreviewAnswers((current) => ({ ...current, [id]: value }));
                         setPreviewCompleted(false);
-                        setPreviewPageId(
-                          definition.pages.find((page) => page.kind === 'start')?.id ??
-                            definition.pages.find((page) => page.kind === 'questions')?.id,
-                        );
                       }}
-                    >
-                      بازنشانی پاسخ‌ها
-                    </Button>
+                      pageId={previewPageId}
+                      onPageIdChange={(id) => {
+                        setPreviewPageId(id);
+                        setActivePageId(id);
+                      }}
+                      completed={previewCompleted}
+                      onComplete={() => {
+                        setPreviewCompleted(true);
+                        const endPage = definition.pages.find((page) => page.kind === 'end');
+                        if (endPage) setActivePageId(endPage.id);
+                      }}
+                      mode="preview"
+                      fieldInputRenderers={formFieldInputRenderers}
+                    />
                   </div>
+                  <p className={styles.helper}>
+                    پیش‌نمایش از همین schema و renderer اپ مشتری استفاده می‌کند. ذخیره‌سازی رسانه تا
+                    انتخاب provider امن هنوز غیرفعال است.
+                  </p>
                 </div>
-                <div
-                  className={
-                    styles.previewFrame +
-                    (previewViewport === 'mobile'
-                      ? ' ' + styles.previewMobile
-                      : previewViewport === 'tablet'
-                        ? ' ' + styles.previewTablet
-                        : '')
+              ) : (
+                <ResponseManagement
+                  form={selectedForm}
+                  scope={formScope!}
+                  capabilities={capabilities}
+                  responses={responses}
+                  stats={responseStats}
+                  loading={responsesLoading}
+                  nextCursor={responseNextCursor}
+                  selectedResponse={selectedResponse}
+                  responseStatusFilter={responseStatusFilter}
+                  responseFrom={responseFrom}
+                  responseTo={responseTo}
+                  searchFieldId={searchFieldId}
+                  searchableFields={searchableFields}
+                  responseSearch={responseSearch}
+                  responseStatusDraft={responseStatusDraft}
+                  responseReason={responseReason}
+                  noteDraft={noteDraft}
+                  tagsDraft={tagsDraft}
+                  includeSensitive={includeSensitive}
+                  showSensitiveDetail={showSensitiveDetail}
+                  showStepUp={showStepUp}
+                  mfaStepUpUntil={mfaStepUpUntil}
+                  onMfaStepUp={(validUntil) => {
+                    setShowStepUp(false);
+                    onMfaStepUp(validUntil);
+                    void refreshForms();
+                  }}
+                  onSessionExpired={onSessionExpired}
+                  onLoadResponses={(cursor) =>
+                    void loadResponses(Boolean(cursor), cursor ?? undefined)
                   }
-                >
-                  <FormRenderer
-                    definition={definition}
-                    answers={previewAnswers}
-                    onAnswerChange={(id, value) => {
-                      setPreviewAnswers((current) => ({ ...current, [id]: value }));
-                      setPreviewCompleted(false);
-                    }}
-                    pageId={previewPageId}
-                    onPageIdChange={(id) => {
-                      setPreviewPageId(id);
-                      setActivePageId(id);
-                    }}
-                    completed={previewCompleted}
-                    onComplete={() => {
-                      setPreviewCompleted(true);
-                      const endPage = definition.pages.find((page) => page.kind === 'end');
-                      if (endPage) setActivePageId(endPage.id);
-                    }}
-                    mode="preview"
-                    fieldInputRenderers={formFieldInputRenderers}
-                  />
-                </div>
-                <p className={styles.helper}>
-                  پیش‌نمایش از همین schema و renderer اپ مشتری استفاده می‌کند. ذخیره‌سازی رسانه تا
-                  انتخاب provider امن هنوز غیرفعال است.
-                </p>
-              </div>
-            ) : (
-              <ResponseManagement
-                form={selectedForm}
-                scope={formScope!}
-                capabilities={capabilities}
-                responses={responses}
-                stats={responseStats}
-                loading={responsesLoading}
-                nextCursor={responseNextCursor}
-                selectedResponse={selectedResponse}
-                responseStatusFilter={responseStatusFilter}
-                responseFrom={responseFrom}
-                responseTo={responseTo}
-                searchFieldId={searchFieldId}
-                searchableFields={searchableFields}
-                responseSearch={responseSearch}
-                responseStatusDraft={responseStatusDraft}
-                responseReason={responseReason}
-                noteDraft={noteDraft}
-                tagsDraft={tagsDraft}
-                includeSensitive={includeSensitive}
-                showSensitiveDetail={showSensitiveDetail}
-                showStepUp={showStepUp}
-                mfaStepUpUntil={mfaStepUpUntil}
-                onMfaStepUp={(validUntil) => {
-                  setShowStepUp(false);
-                  onMfaStepUp(validUntil);
-                  void refreshForms();
-                }}
-                onSessionExpired={onSessionExpired}
-                onLoadResponses={(cursor) =>
-                  void loadResponses(Boolean(cursor), cursor ?? undefined)
-                }
-                onOpenResponse={(id, sensitive) => void openResponse(id, sensitive)}
-                onStatusFilter={setResponseStatusFilter}
-                onDateFilter={(from, to) => {
-                  setResponseFrom(from);
-                  setResponseTo(to);
-                }}
-                onSearchField={setSearchFieldId}
-                onSearch={setResponseSearch}
-                onResponseStatus={setResponseStatusDraft}
-                onResponseReason={setResponseReason}
-                onNote={setNoteDraft}
-                onTags={setTagsDraft}
-                onIncludeSensitive={setIncludeSensitive}
-                onShowStepUp={setShowStepUp}
-                onApplyFilters={() => void loadResponses(false)}
-                onExport={() => void exportCsv()}
-                onUpdateStatus={(event) => void updateResponseStatus(event)}
-                onCorrectResponse={(version, changes, reason) =>
-                  correctResponse(version, changes, reason)
-                }
-                onAddNote={(event) => void addNote(event)}
-                onSaveTags={() => void saveTags()}
-                saving={saving}
-              />
-            )}
-          </>
-        )}
-      </div>
+                  onOpenResponse={(id, sensitive) => void openResponse(id, sensitive)}
+                  onStatusFilter={setResponseStatusFilter}
+                  onDateFilter={(from, to) => {
+                    setResponseFrom(from);
+                    setResponseTo(to);
+                  }}
+                  onSearchField={setSearchFieldId}
+                  onSearch={setResponseSearch}
+                  onResponseStatus={setResponseStatusDraft}
+                  onResponseReason={setResponseReason}
+                  onNote={setNoteDraft}
+                  onTags={setTagsDraft}
+                  onIncludeSensitive={setIncludeSensitive}
+                  onShowStepUp={setShowStepUp}
+                  onApplyFilters={() => void loadResponses(false)}
+                  onExport={() => void exportCsv()}
+                  onUpdateStatus={(event) => void updateResponseStatus(event)}
+                  onCorrectResponse={(version, changes, reason) =>
+                    correctResponse(version, changes, reason)
+                  }
+                  onAddNote={(event) => void addNote(event)}
+                  onSaveTags={() => void saveTags()}
+                  saving={saving}
+                />
+              )}
+            </>
+          )}
+        </div>
+      )}
     </section>
   );
 }

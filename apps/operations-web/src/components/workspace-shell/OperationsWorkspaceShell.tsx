@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Button } from '@funtino/design-system';
 import {
   scopeKey,
@@ -11,6 +12,26 @@ import {
 import styles from './OperationsWorkspaceShell.module.css';
 
 export type WorkspaceSection =
+  | 'overview'
+  | 'branches'
+  | 'staff'
+  | 'invitationsReceived'
+  | 'invitationsIssued'
+  | 'devices'
+  | 'cardsInventory'
+  | 'cardsAssignments'
+  | 'family'
+  | 'familyMembers'
+  | 'familyInvitations'
+  | 'familyHistory'
+  | 'formsLibrary'
+  | 'formsResponses'
+  | 'formsBranches'
+  | 'reportsSummary'
+  | 'reportsBranches'
+  | 'reportsDaily';
+
+type NavigationIcon =
   | 'overview'
   | 'branches'
   | 'staff'
@@ -37,31 +58,121 @@ type Props = {
 const sectionLabels: Record<WorkspaceSection, string> = {
   overview: 'نمای کلی',
   branches: 'شعب',
-  staff: 'کارکنان و دسترسی‌ها',
-  devices: 'دستگاه‌ها و پایش',
-  cards: 'موجودی کارت‌ها',
-  family: 'خانواده‌ی مشتری',
-  reports: 'گزارش‌ها',
-  forms: 'فرم‌ها و پاسخ‌ها',
+  staff: 'کارکنان',
+  invitationsReceived: 'دعوت‌های دریافتی',
+  invitationsIssued: 'دعوت‌های صادرشده',
+  devices: 'دستگاه‌ها',
+  cardsInventory: 'موجودی کارت',
+  cardsAssignments: 'تخصیص کارت',
+  family: 'پشتیبانی خانواده',
+  familyMembers: 'اعضای خانواده',
+  familyInvitations: 'دعوت‌های خانواده',
+  familyHistory: 'تاریخچه‌ی خانواده',
+  formsLibrary: 'فهرست فرم‌ها',
+  formsResponses: 'پاسخ‌های فرم',
+  formsBranches: 'مقایسه‌ی پاسخ شعب',
+  reportsSummary: 'خلاصه‌ی گزارش',
+  reportsBranches: 'مقایسه‌ی شعب',
+  reportsDaily: 'روند روزانه',
 };
 
 const sectionDescriptions: Record<WorkspaceSection, string> = {
   overview: 'وضعیت شعب و سلامت دستگاه‌ها در محدودهٔ مجاز شما',
   branches: 'فهرست شعب فعال و وضعیت عملیاتی آن‌ها',
-  staff: 'دعوت‌ها، کارکنان و دسترسی‌های محدودهٔ فعلی',
-  devices: 'وضعیت دستگاه‌ها و پیگیری موارد نیازمند رسیدگی',
-  cards: 'موجودی کارت و تخصیص‌های مجاز شعبه',
-  family: 'مشاهده‌ی محدود خانواده‌ی مشتری در شعبه‌ی انتخاب‌شده',
-  reports: 'گزارش تجمیعی رویدادها و سلامت دستگاه‌ها',
-  forms: 'فرم‌های مجموعه و پاسخ‌های ثبت‌شده',
+  staff: 'اعضا و نقش‌های محدوده‌ی کاری جاری',
+  invitationsReceived: 'دعوت‌هایی که برای حساب شما فرستاده شده‌اند',
+  invitationsIssued: 'دعوت‌های کاری صادرشده در همین محدوده',
+  devices: 'فهرست دستگاه‌ها و وضعیت واقعی آن‌ها',
+  cardsInventory: 'موجودی فیزیکی کارت در شعبه‌ی انتخاب‌شده',
+  cardsAssignments: 'تخصیص و پیگیری کارت‌های خانواده در یک شعبه',
+  family: 'جست‌وجو و پشتیبانی محدود خانواده‌ی مشتری',
+  familyMembers: 'اعضای خانواده‌ی انتخاب‌شده پس از جست‌وجوی مجاز',
+  familyInvitations: 'وضعیت دعوت‌های خانواده‌ی انتخاب‌شده',
+  familyHistory: 'تغییرات ثبت‌شده برای خانواده‌ی انتخاب‌شده',
+  formsLibrary: 'فرم‌های ثبت‌شده در محدوده‌ی کاری جاری',
+  formsResponses: 'پاسخ‌های ثبت‌شده برای یک فرم انتخاب‌شده',
+  formsBranches: 'مقایسه‌ی تجمیعی پاسخ فرم‌ها بین شعب',
+  reportsSummary: 'نمای تجمیعی گزارش در بازه‌ی انتخاب‌شده',
+  reportsBranches: 'مقایسه‌ی گزارش مجموعه بین شعب',
+  reportsDaily: 'روند روزانه‌ی رویدادها در بازه‌ی انتخاب‌شده',
 };
 
 const navigationGroups: Array<{ id: string; label: string; sections: WorkspaceSection[] }> = [
-  { id: 'overview', label: 'پیشخوان', sections: ['overview', 'branches'] },
-  { id: 'management', label: 'مدیریت', sections: ['staff', 'family', 'forms'] },
-  { id: 'operations', label: 'عملیات', sections: ['devices', 'cards'] },
-  { id: 'monitoring', label: 'پایش', sections: ['reports'] },
+  { id: 'overview', label: 'پیشخوان', sections: ['overview'] },
+  {
+    id: 'structure-access',
+    label: 'ساختار و دسترسی',
+    sections: ['branches', 'staff', 'invitationsReceived', 'invitationsIssued'],
+  },
+  {
+    id: 'cards-devices',
+    label: 'کارت و تجهیزات',
+    sections: ['devices', 'cardsInventory', 'cardsAssignments'],
+  },
+  { id: 'forms', label: 'فرم‌ها', sections: ['formsLibrary', 'formsResponses', 'formsBranches'] },
+  {
+    id: 'reports',
+    label: 'گزارش‌ها',
+    sections: ['reportsSummary', 'reportsBranches', 'reportsDaily'],
+  },
+  {
+    id: 'support',
+    label: 'پشتیبانی خانواده',
+    sections: ['family', 'familyMembers', 'familyInvitations', 'familyHistory'],
+  },
 ];
+
+const sectionIcons: Record<WorkspaceSection, NavigationIcon> = {
+  overview: 'overview',
+  branches: 'branches',
+  staff: 'staff',
+  invitationsReceived: 'staff',
+  invitationsIssued: 'staff',
+  devices: 'devices',
+  cardsInventory: 'cards',
+  cardsAssignments: 'cards',
+  family: 'family',
+  familyMembers: 'family',
+  familyInvitations: 'family',
+  familyHistory: 'family',
+  formsLibrary: 'forms',
+  formsResponses: 'forms',
+  formsBranches: 'reports',
+  reportsSummary: 'reports',
+  reportsBranches: 'reports',
+  reportsDaily: 'reports',
+};
+
+const sectionHrefs: Record<WorkspaceSection, string> = {
+  overview: '/',
+  branches: '/branches',
+  staff: '/staff',
+  invitationsReceived: '/invitations/received',
+  invitationsIssued: '/invitations/issued',
+  devices: '/devices',
+  cardsInventory: '/cards/inventory',
+  cardsAssignments: '/cards/assignments',
+  family: '/family',
+  familyMembers: '/family/members',
+  familyInvitations: '/family/invitations',
+  familyHistory: '/family/history',
+  formsLibrary: '/forms',
+  formsResponses: '/forms/responses',
+  formsBranches: '/forms/branches',
+  reportsSummary: '/reports',
+  reportsBranches: '/reports/branches',
+  reportsDaily: '/reports/daily',
+};
+
+export function workspaceSectionFromPath(pathname: string): WorkspaceSection {
+  const path = pathname.replace(/\/$/, '') || '/';
+  const section = Object.entries(sectionHrefs).find(([, href]) => href === path)?.[0];
+  return (section as WorkspaceSection | undefined) ?? 'overview';
+}
+
+export function workspaceHref(section: WorkspaceSection) {
+  return sectionHrefs[section];
+}
 
 const expandedGroupsStorageKey = 'funtino-operations-sidebar-groups';
 
@@ -245,11 +356,6 @@ export function OperationsWorkspaceShell({
     };
   }, [scopeMenuOpen]);
 
-  function chooseSection(section: WorkspaceSection) {
-    onSectionChange(section);
-    setMobileOpen(false);
-  }
-
   function chooseScope(scope: OperationsScope) {
     setScopeMenuOpen(false);
     void onSelectScope(scope);
@@ -326,9 +432,15 @@ export function OperationsWorkspaceShell({
 
         <nav aria-label="بخش‌های پنل عملیات" className={styles.navigation}>
           {navigationGroups.map((group) => {
-            const sections = group.sections.filter(
-              (section) => section !== 'branches' || activeScope.scope.type === 'organization',
-            );
+            const sections = group.sections.filter((section) => {
+              if (section === 'branches' && activeScope.scope.type !== 'organization') return false;
+              if (
+                (section === 'formsBranches' || section === 'reportsBranches') &&
+                activeScope.scope.type !== 'organization'
+              )
+                return false;
+              return true;
+            });
             if (sections.length === 0) return null;
             const expanded = expandedGroups.includes(group.id);
             const visibleSections = expanded
@@ -360,20 +472,23 @@ export function OperationsWorkspaceShell({
                 </h2>
                 <div className={styles.navItems} id={`operations-nav-${group.id}`}>
                   {visibleSections.map((section) => (
-                    <button
+                    <Link
                       aria-current={activeSection === section ? 'page' : undefined}
                       className={`${styles.navItem} ${activeSection === section ? styles.navItemActive : ''}`}
                       data-nav-item
+                      href={sectionHrefs[section]}
                       key={section}
-                      onClick={() => chooseSection(section)}
+                      onClick={() => {
+                        onSectionChange(section);
+                        setMobileOpen(false);
+                      }}
                       title={collapsed ? sectionLabels[section] : undefined}
-                      type="button"
                     >
                       <span aria-hidden="true" className={styles.navIcon}>
-                        <Icon name={section} />
+                        <Icon name={sectionIcons[section]} />
                       </span>
                       <span className={styles.navLabel}>{sectionLabels[section]}</span>
-                    </button>
+                    </Link>
                   ))}
                 </div>
               </div>
@@ -553,7 +668,7 @@ function Icon({
   name,
 }: {
   name:
-    | WorkspaceSection
+    | NavigationIcon
     | 'organization'
     | 'branch'
     | 'check'

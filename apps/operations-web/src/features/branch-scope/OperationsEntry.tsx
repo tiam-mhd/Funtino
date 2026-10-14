@@ -1,22 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import Image from 'next/image';
+import { usePathname, useRouter } from 'next/navigation';
 import { Button, Surface } from '@funtino/design-system';
 import { ApiRequestError } from '../../lib/api/client';
-import { StaffAccessManager } from '../staff-access/StaffAccessManager';
 import { StaffInvitationInbox } from '../staff-access/StaffInvitationInbox';
-import { DeviceManagement } from '../devices/DeviceManagement';
-import { CardInventoryManagement } from '../cashier/CardInventoryManagement';
-import { OperationsReports } from '../reports/OperationsReports';
-import { OperationsForms } from '../forms/OperationsForms';
-import { OperationsOverview } from '../reports/OperationsOverview';
-import { OperationsBranchDirectory } from '../reports/OperationsBranchDirectory';
-import { CustomerFamilySupport } from '../customer-family/CustomerFamilySupport';
 import {
   OperationsWorkspaceShell,
-  type WorkspaceSection,
+  workspaceHref,
+  workspaceSectionFromPath,
 } from '../../components/workspace-shell/OperationsWorkspaceShell';
+import { OperationsWorkspaceProvider } from './OperationsWorkspaceContext';
 import {
   getOperationsScopes,
   getOperationsUser,
@@ -43,12 +38,13 @@ type View =
   | 'no-access'
   | 'unavailable';
 
-export function OperationsEntry() {
+export function OperationsEntry({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [view, setView] = useState<View>('loading');
   const [user, setUser] = useState<OperationsUser | null>(null);
   const [scopes, setScopes] = useState<OperationsScopeOption[]>([]);
   const [activeScope, setActiveScope] = useState<OperationsScopeOption | null>(null);
-  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceSection>('overview');
   const [mfaStepUpUntil, setMfaStepUpUntil] = useState<number | null>(null);
   const [phone, setPhone] = useState('');
   const [loginPhone, setLoginPhone] = useState('');
@@ -205,7 +201,6 @@ export function OperationsEntry() {
         if (existingIndex === -1) return [...current, selected];
         return current.map((item, index) => (index === existingIndex ? selected : item));
       });
-      setWorkspaceTab('overview');
       setView('active');
     } catch (failure) {
       if (failure instanceof ApiRequestError && failure.status === 401) {
@@ -268,6 +263,7 @@ export function OperationsEntry() {
     [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
     user?.phoneE164;
   const PageContainer = view === 'active' ? 'div' : 'main';
+  const activeSection = workspaceSectionFromPath(pathname);
 
   return (
     <PageContainer className={`${styles.page} ${view === 'active' ? styles.pageActive : ''}`}>
@@ -464,85 +460,33 @@ export function OperationsEntry() {
         )}
 
         {view === 'active' && activeScope && (
-          <OperationsWorkspaceShell
-            activeSection={workspaceTab}
-            activeScope={activeScope}
-            scopeOptions={scopes}
-            selectingScopeKey={selectingKey}
-            scopeError={error}
-            userLabel={userLabel || 'کاربر عملیاتی'}
-            logoutBusy={busy}
-            onLogout={() => void logout()}
-            onSectionChange={(section) => {
-              setError('');
-              setWorkspaceTab(section);
+          <OperationsWorkspaceProvider
+            value={{
+              activeScope,
+              scopeOptions: scopes,
+              mfaStepUpUntil,
+              onSessionExpired: resetToSignIn,
+              onSelectScope: chooseScope,
+              onMfaStepUp: setMfaStepUpUntil,
+              refreshScopesAfterInvitation,
+              navigate: (section) => router.push(workspaceHref(section)),
             }}
-            onSelectScope={chooseScope}
           >
-            {workspaceTab === 'overview' ? (
-              <OperationsOverview
-                key={scopeKey(activeScope.scope)}
-                scope={activeScope.scope}
-                scopeOption={activeScope}
-                onNavigate={setWorkspaceTab}
-                onSelectScope={chooseScope}
-                onSessionExpired={resetToSignIn}
-              />
-            ) : workspaceTab === 'branches' && activeScope.scope.type === 'organization' ? (
-              <OperationsBranchDirectory
-                key={scopeKey(activeScope.scope)}
-                scope={activeScope.scope}
-                scopeOption={activeScope}
-                onSelectScope={chooseScope}
-                onSessionExpired={resetToSignIn}
-              />
-            ) : workspaceTab === 'staff' ? (
-              <div className={styles.moduleStack}>
-                <StaffInvitationInbox
-                  onAccepted={refreshScopesAfterInvitation}
-                  onSessionExpired={resetToSignIn}
-                />
-                <StaffAccessManager onSessionExpired={resetToSignIn} scope={activeScope.scope} />
-              </div>
-            ) : workspaceTab === 'devices' ? (
-              <DeviceManagement
-                key={scopeKey(activeScope.scope)}
-                onSessionExpired={resetToSignIn}
-                scope={activeScope.scope}
-                scopeOption={activeScope}
-              />
-            ) : workspaceTab === 'cards' ? (
-              <CardInventoryManagement
-                key={scopeKey(activeScope.scope)}
-                onSessionExpired={resetToSignIn}
-                scope={activeScope.scope}
-                scopeOption={activeScope}
-              />
-            ) : workspaceTab === 'reports' ? (
-              <OperationsReports
-                key={scopeKey(activeScope.scope)}
-                mfaStepUpUntil={mfaStepUpUntil}
-                onMfaStepUp={setMfaStepUpUntil}
-                onSessionExpired={resetToSignIn}
-                scope={activeScope.scope}
-              />
-            ) : workspaceTab === 'family' ? (
-              <CustomerFamilySupport
-                key={scopeKey(activeScope.scope)}
-                scope={activeScope.scope}
-                scopeOptions={scopes}
-              />
-            ) : (
-              <OperationsForms
-                key={scopeKey(activeScope.scope)}
-                mfaStepUpUntil={mfaStepUpUntil}
-                onMfaStepUp={setMfaStepUpUntil}
-                onSessionExpired={resetToSignIn}
-                scope={activeScope.scope}
-                scopeOptions={scopes}
-              />
-            )}
-          </OperationsWorkspaceShell>
+            <OperationsWorkspaceShell
+              activeSection={activeSection}
+              activeScope={activeScope}
+              scopeOptions={scopes}
+              selectingScopeKey={selectingKey}
+              scopeError={error}
+              userLabel={userLabel || 'کاربر عملیاتی'}
+              logoutBusy={busy}
+              onLogout={() => void logout()}
+              onSectionChange={() => setError('')}
+              onSelectScope={chooseScope}
+            >
+              {children}
+            </OperationsWorkspaceShell>
+          </OperationsWorkspaceProvider>
         )}
 
         {view === 'no-access' && (

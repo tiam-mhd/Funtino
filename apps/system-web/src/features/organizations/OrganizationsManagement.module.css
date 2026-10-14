@@ -278,6 +278,40 @@
   gap: 12px;
 }
 
+.branchOrganizationPicker {
+  display: grid;
+  max-width: 520px;
+  gap: 6px;
+  margin-block: 0 16px;
+  color: var(--ft-ink-soft);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.branchOrganizationPicker select {
+  min-height: 44px;
+  border: 1px solid var(--ft-line);
+  border-radius: 10px;
+  padding: 0 12px;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  font: inherit;
+}
+
+.branchOrganizationPicker select:focus-visible {
+  outline: 2px solid #0ecfc1;
+  outline-offset: 2px;
+  outline-offset: 1px;
+}
+
+.organizationList[data-view='branches'] .organizationCard > .resourceHeader,
+.organizationList[data-view='branches'] .organizationCard > .metadata,
+.organizationList[data-view='branches'] .organizationCard > .actions,
+.organizationList[data-view='branches'] .organizationCard > .editor,
+.organizationList[data-view='branches'] .organizationCard > .confirmation {
+  display: none;
+}
+
 .organizationCard {
   min-width: 0;
   padding: clamp(14px, 2.2vw, 20px);

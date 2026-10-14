@@ -1,8 +1,12 @@
 'use client';
 
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Badge, Button, Surface } from '@funtino/design-system';
-import type { OperationsScope, OperationsScopeOption } from '../../lib/auth/operations-access';
+import {
+  scopeKey,
+  type OperationsScope,
+  type OperationsScopeOption,
+} from '../../lib/auth/operations-access';
 import { ApiRequestError } from '../../lib/api/client';
 import {
   lookupOperationsCustomerFamily,
@@ -10,12 +14,35 @@ import {
 } from '../../lib/api/customer-family-support';
 import styles from './CustomerFamilySupport.module.css';
 
+export type CustomerFamilyView = 'lookup' | 'members' | 'invitations' | 'history';
+
+const viewCopy: Record<CustomerFamilyView, { title: string; description: string }> = {
+  lookup: {
+    title: 'جست‌وجوی خانواده',
+    description: 'با شمارهٔ همراه کامل، خانواده‌های قابل مشاهده در محدودهٔ مجاز را پیدا کنید.',
+  },
+  members: {
+    title: 'اعضای خانواده',
+    description: 'فقط اعضای خانوادهٔ پیدا‌شده در این فهرست نمایش داده می‌شوند.',
+  },
+  invitations: {
+    title: 'دعوت‌های خانواده',
+    description: 'وضعیت دعوت‌های خانوادهٔ پیدا‌شده را جداگانه بررسی کنید.',
+  },
+  history: {
+    title: 'تاریخچهٔ خانواده',
+    description: 'تغییرات مجاز ثبت‌شده برای خانوادهٔ پیدا‌شده را جداگانه ببینید.',
+  },
+};
+
 export function CustomerFamilySupport({
   scope,
   scopeOptions,
+  view = 'lookup',
 }: {
   scope: OperationsScope;
   scopeOptions: OperationsScopeOption[];
+  view?: CustomerFamilyView;
 }) {
   const branches = useMemo(
     () =>
@@ -30,6 +57,12 @@ export function CustomerFamilySupport({
   const [items, setItems] = useState<OperationsFamilyResult[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const activeScopeKey = scopeKey(scope);
+
+  useEffect(() => {
+    setBranchId(scope.type === 'branch' ? scope.branchId : '');
+    setItems(null);
+  }, [activeScopeKey, scope]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -60,11 +93,8 @@ export function CustomerFamilySupport({
     <section className={styles.page} aria-labelledby="customer-family-title" aria-busy={loading}>
       <div className={styles.intro}>
         <span>مشاهده‌ی محدود و فقط‌خواندنی</span>
-        <h2 id="customer-family-title">اطلاعات خانواده‌ی مشتری</h2>
-        <p>
-          جست‌وجو فقط با شماره‌ی کامل انجام می‌شود. نتیجه‌ها به خانواده‌هایی محدودند که کارت فعال در
-          شعبه‌ی انتخاب‌شده دارند؛ این بخش امکان ویرایش یا خروجی‌گرفتن ندارد.
-        </p>
+        <h2 id="customer-family-title">{viewCopy[view].title}</h2>
+        <p>{viewCopy[view].description} این بخش فقط‌خواندنی است و خروجی‌گرفتن ندارد.</p>
       </div>
       <Surface className={styles.searchCard}>
         <form className={styles.form} onSubmit={submit}>
@@ -74,7 +104,10 @@ export function CustomerFamilySupport({
               <select
                 required
                 value={branchId}
-                onChange={(event) => setBranchId(event.currentTarget.value)}
+                onChange={(event) => {
+                  setBranchId(event.currentTarget.value);
+                  setItems(null);
+                }}
               >
                 <option value="">یک شعبه را انتخاب کن</option>
                 {branches.map((branch) => (
@@ -132,6 +165,12 @@ export function CustomerFamilySupport({
           <span className={styles.loadingSkeleton} aria-hidden="true" />
         </div>
       )}
+      {view !== 'lookup' && items === null && !loading && !error && (
+        <Surface className={styles.empty} role="status">
+          برای دیدن {viewCopy[view].title}، جست‌وجوی خانواده را با محدودهٔ مجاز و شمارهٔ همراه انجام
+          دهید.
+        </Surface>
+      )}
       {items !== null && !error && (
         <div className={styles.results} aria-live="polite">
           {!items.length ? (
@@ -143,35 +182,50 @@ export function CustomerFamilySupport({
               <Surface className={styles.household} key={household.householdId}>
                 <div className={styles.householdHeading}>
                   <div>
-                    <span>خانواده</span>
+                    <span>{view === 'lookup' ? 'خانوادهٔ پیدا‌شده' : 'خانواده'}</span>
                     <h3>{household.householdName}</h3>
                   </div>
-                  <Badge tone="neutral">{household.members.length} عضو</Badge>
+                  <Badge tone="neutral">
+                    {view === 'invitations'
+                      ? `${household.invitations.length.toLocaleString('fa-IR')} دعوت`
+                      : view === 'history'
+                        ? `${household.history.length.toLocaleString('fa-IR')} رویداد`
+                        : `${household.members.length.toLocaleString('fa-IR')} عضو`}
+                  </Badge>
                 </div>
-                <ul className={styles.memberList}>
-                  {household.members.map((member) => (
-                    <li key={member.id}>
-                      <div>
-                        <strong>{member.displayName}</strong>
-                        <span>{member.relationshipLabel}</span>
-                        <small>
-                          {member.isAccountLinked ? 'حساب فانتینو متصل' : 'بدون حساب متصل'}
-                        </small>
-                        {member.relationshipStatus === 'needs_review' &&
-                          member.legacyRelationship && (
-                            <small>نسبت قدیمی: {member.legacyRelationship}</small>
-                          )}
-                      </div>
-                      <Badge tone={member.isDependent ? 'info' : 'neutral'}>
-                        {member.isDependent ? 'وابسته' : 'بزرگسال'}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
-                {household.invitations.length > 0 && (
-                  <section className={styles.invitationHistory} aria-label="وضعیت دعوت‌های خانواده">
-                    <h4>دعوت‌های خانواده</h4>
+                {view === 'lookup' && (
+                  <p className={styles.privacy}>
+                    برای مشاهدهٔ جزئیات، صفحهٔ مربوط را از منوی پشتیبانی انتخاب کنید.
+                  </p>
+                )}
+                {view === 'members' &&
+                  (household.members.length ? (
                     <ul className={styles.memberList}>
+                      {household.members.map((member) => (
+                        <li key={member.id}>
+                          <div>
+                            <strong>{member.displayName}</strong>
+                            <span>{member.relationshipLabel}</span>
+                            <small>
+                              {member.isAccountLinked ? 'حساب فانتینو متصل' : 'بدون حساب متصل'}
+                            </small>
+                            {member.relationshipStatus === 'needs_review' &&
+                              member.legacyRelationship && (
+                                <small>نسبت قدیمی: {member.legacyRelationship}</small>
+                              )}
+                          </div>
+                          <Badge tone={member.isDependent ? 'info' : 'neutral'}>
+                            {member.isDependent ? 'وابسته' : 'بزرگسال'}
+                          </Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className={styles.privacy}>عضوی برای نمایش ثبت نشده است.</p>
+                  ))}
+                {view === 'invitations' &&
+                  (household.invitations.length ? (
+                    <ul className={styles.memberList} aria-label="دعوت‌های خانواده">
                       {household.invitations.map((invitation, index) => (
                         <li key={`${invitation.memberName}-${index}`}>
                           <div>
@@ -181,12 +235,12 @@ export function CustomerFamilySupport({
                         </li>
                       ))}
                     </ul>
-                  </section>
-                )}
-                <section className={styles.invitationHistory} aria-label="تاریخچه‌ی مجاز خانواده">
-                  <h4>تاریخچه‌ی تغییرات</h4>
-                  {household.history.length ? (
-                    <ul className={styles.memberList}>
+                  ) : (
+                    <p className={styles.privacy}>دعوتی برای نمایش ثبت نشده است.</p>
+                  ))}
+                {view === 'history' &&
+                  (household.history.length ? (
+                    <ul className={styles.memberList} aria-label="تاریخچهٔ خانواده">
                       {household.history.map((entry, index) => (
                         <li key={`${entry.createdAt}-${index}`}>
                           <div>
@@ -198,8 +252,7 @@ export function CustomerFamilySupport({
                     </ul>
                   ) : (
                     <p className={styles.privacy}>تغییری برای نمایش ثبت نشده است.</p>
-                  )}
-                </section>
+                  ))}
               </Surface>
             ))
           )}

@@ -14,9 +14,14 @@ import styles from './StaffAccessManager.module.css';
 type StaffInvitationInboxProps = {
   onAccepted: () => Promise<void>;
   onSessionExpired: () => void;
+  forceVisible?: boolean;
 };
 
-export function StaffInvitationInbox({ onAccepted, onSessionExpired }: StaffInvitationInboxProps) {
+export function StaffInvitationInbox({
+  onAccepted,
+  onSessionExpired,
+  forceVisible = false,
+}: StaffInvitationInboxProps) {
   const [invitations, setInvitations] = useState<MyStaffInvitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -75,7 +80,15 @@ export function StaffInvitationInbox({ onAccepted, onSessionExpired }: StaffInvi
     }
   }
 
-  if (!loading && invitations.length === 0 && !loadError && !actionError && !notice) return null;
+  if (
+    !forceVisible &&
+    !loading &&
+    invitations.length === 0 &&
+    !loadError &&
+    !actionError &&
+    !notice
+  )
+    return null;
 
   return (
     <Surface className={styles.inbox} aria-labelledby="my-staff-invitations-title">

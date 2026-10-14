@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Badge, Button, ClockTimePickerField, Surface } from '@funtino/design-system';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
+import { ManagementListPage } from '../../components/system-shell/ManagementListPage';
 import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
 import styles from './OrganizationsManagement.module.css';
 
@@ -55,6 +57,7 @@ function withoutReason<T extends { reason: string }>(
 type BranchPageState = {
   items: Branch[];
   nextCursor: string | null;
+  pageNumber: number;
   loading: boolean;
   error: string | null;
 };
@@ -172,9 +175,52 @@ function mergeById<T extends { id: string }>(...groups: T[][]): T[] {
   });
 }
 
-export function OrganizationsManagement() {
+export function OrganizationsManagement({
+  view = 'organizations',
+}: {
+  view?: 'organizations' | 'branches';
+}) {
+  const router = useRouter();
+  const pathname = usePathname() ?? '';
+  const searchParams = useSearchParams();
+  const locale = pathname.split('/')[1] || 'fa';
+  const organizationBasePath = `/${locale}/organizations`;
+  const branchesBasePath = `${organizationBasePath}/branches`;
+  const isBranchPath = pathname.includes('/organizations/branches');
+  const organizationRouteMatch = isBranchPath
+    ? null
+    : pathname.match(/\/organizations\/([^/]+)(?:\/(edit))?$/);
+  const branchRouteMatch = pathname.match(/\/organizations\/branches\/([^/]+)(?:\/(edit))?$/);
+  const organizationRouteMode = !isBranchPath
+    ? pathname.endsWith('/organizations/new')
+      ? 'create'
+      : organizationRouteMatch
+        ? organizationRouteMatch[2] === 'edit'
+          ? 'edit'
+          : 'details'
+        : 'list'
+    : 'list';
+  const organizationRouteId =
+    organizationRouteMode === 'edit' || organizationRouteMode === 'details'
+      ? decodeURIComponent(organizationRouteMatch?.[1] ?? '')
+      : '';
+  const branchRouteMode = isBranchPath
+    ? pathname.endsWith('/organizations/branches/new')
+      ? 'create'
+      : branchRouteMatch
+        ? branchRouteMatch[2] === 'edit'
+          ? 'edit'
+          : 'details'
+        : 'list'
+    : 'list';
+  const branchRouteId =
+    branchRouteMode === 'edit' || branchRouteMode === 'details'
+      ? decodeURIComponent(branchRouteMatch?.[1] ?? '')
+      : '';
+  const branchRouteOrganizationId = searchParams.get('organizationId') ?? '';
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [organizationCursor, setOrganizationCursor] = useState<string | null>(null);
+  const [organizationPageNumber, setOrganizationPageNumber] = useState(1);
   const [organizationsLoading, setOrganizationsLoading] = useState(true);
   const [organizationsLoaded, setOrganizationsLoaded] = useState(false);
   const [organizationsError, setOrganizationsError] = useState<string | null>(null);
@@ -182,6 +228,7 @@ export function OrganizationsManagement() {
     Record<string, BranchPageState>
   >({});
   const [expandedOrganizationId, setExpandedOrganizationId] = useState<string | null>(null);
+  const [branchOrganizationDraftId, setBranchOrganizationDraftId] = useState('');
   const [creatingOrganization, setCreatingOrganization] = useState(false);
   const [organizationDraft, setOrganizationDraft] =
     useState<OrganizationDraft>(emptyOrganizationDraft);
@@ -219,6 +266,7 @@ export function OrganizationsManagement() {
       );
       setOrganizations((current) => (append ? mergeById(current, page.items) : page.items));
       setOrganizationCursor(page.nextCursor);
+      setOrganizationPageNumber((current) => (append ? current + 1 : 1));
       setOrganizationsLoaded(true);
     } catch (error) {
       const failure = requestError(error);
@@ -238,6 +286,7 @@ export function OrganizationsManagement() {
         [organizationId]: {
           items: current[organizationId]?.items ?? [],
           nextCursor: current[organizationId]?.nextCursor ?? null,
+          pageNumber: current[organizationId]?.pageNumber ?? 1,
           loading: true,
           error: null,
         },
@@ -255,6 +304,7 @@ export function OrganizationsManagement() {
               ? mergeById(current[organizationId]?.items ?? [], page.items)
               : page.items,
             nextCursor: page.nextCursor,
+            pageNumber: append ? (current[organizationId]?.pageNumber ?? 1) + 1 : 1,
             loading: false,
             error: null,
           },
@@ -266,6 +316,7 @@ export function OrganizationsManagement() {
           [organizationId]: {
             items: current[organizationId]?.items ?? [],
             nextCursor: current[organizationId]?.nextCursor ?? null,
+            pageNumber: current[organizationId]?.pageNumber ?? 1,
             loading: false,
             error: failure.message,
           },
@@ -281,6 +332,95 @@ export function OrganizationsManagement() {
     void loadOrganizations();
   }, [loadOrganizations]);
 
+  useEffect(() => {
+    if (view !== 'branches' || organizations.length === 0) return;
+    const target =
+      organizations.find((organization) => organization.id === branchRouteOrganizationId) ??
+      organizations.find((organization) => organization.id === expandedOrganizationId) ??
+      organizations[0];
+    if (!target) return;
+    if (expandedOrganizationId !== target.id) setExpandedOrganizationId(target.id);
+    setBranchOrganizationDraftId(target.id);
+    if (!branchesByOrganization[target.id]) void loadBranches(target.id);
+  }, [
+    branchRouteOrganizationId,
+    branchesByOrganization,
+    expandedOrganizationId,
+    loadBranches,
+    organizations,
+    view,
+  ]);
+
+  useEffect(() => {
+    if (
+      organizationRouteMode !== 'edit' ||
+      !organizationsLoaded ||
+      editingOrganizationId === organizationRouteId
+    )
+      return;
+    const organization = organizations.find((item) => item.id === organizationRouteId);
+    if (!organization) return;
+    setCreatingOrganization(false);
+    setEditingOrganizationId(organization.id);
+    setOrganizationEditVersion(organization.version);
+    setOrganizationEditDraft({
+      name: organization.name,
+      slug: organization.slug,
+      timezone: organization.timezone,
+      reason: '',
+    });
+    setOrganizationEditKey(newIdempotencyKey());
+  }, [
+    editingOrganizationId,
+    organizationRouteId,
+    organizationRouteMode,
+    organizations,
+    organizationsLoaded,
+  ]);
+
+  useEffect(() => {
+    if (view !== 'branches') return;
+    const organizationId =
+      branchRouteOrganizationId || expandedOrganizationId || organizations[0]?.id || '';
+    if (!organizationId) return;
+    const organization = organizations.find((item) => item.id === organizationId);
+    if (branchRouteMode === 'create' && organization && creatingBranchFor !== organizationId) {
+      setBranchDraft(emptyBranchDraft(organization.timezone));
+      setBranchDraftKey(newIdempotencyKey());
+      setCreatingBranchFor(organizationId);
+      return;
+    }
+    if (branchRouteMode !== 'edit' || editingBranchId === branchRouteId) return;
+    const branch = branchesByOrganization[organizationId]?.items.find(
+      (item) => item.id === branchRouteId,
+    );
+    if (!branch) return;
+    const opening = emptyOpeningHours();
+    for (const day of days) opening[day.key] = branch.openingHours[day.key] ?? null;
+    setBranchEditDraft({
+      name: branch.name,
+      slug: branch.slug,
+      address: branch.address,
+      city: branch.city,
+      timezone: branch.timezone,
+      openingHours: opening,
+      reason: '',
+    });
+    setBranchEditKey(newIdempotencyKey());
+    setBranchEditVersion(branch.version);
+    setEditingBranchId(branch.id);
+  }, [
+    branchRouteId,
+    branchRouteMode,
+    branchRouteOrganizationId,
+    branchesByOrganization,
+    creatingBranchFor,
+    editingBranchId,
+    expandedOrganizationId,
+    organizations,
+    view,
+  ]);
+
   function openOrganizationCreate() {
     setEditingOrganizationId(null);
     setOrganizationEditVersion(null);
@@ -292,6 +432,7 @@ export function OrganizationsManagement() {
     setOrganizationDraftKey(newIdempotencyKey());
     setCreatingOrganization(true);
     setFeedback(null);
+    router.push(`${organizationBasePath}/new`);
   }
 
   function updateOrganizationDraft(field: keyof OrganizationDraft, value: string) {
@@ -299,7 +440,7 @@ export function OrganizationsManagement() {
     setOrganizationDraftKey(newIdempotencyKey());
   }
 
-  function beginOrganizationEdit(organization: Organization) {
+  function beginOrganizationEdit(organization: Organization, navigate = true) {
     setCreatingOrganization(false);
     setCreatingBranchFor(null);
     setEditingBranchId(null);
@@ -315,6 +456,8 @@ export function OrganizationsManagement() {
     });
     setOrganizationEditKey(newIdempotencyKey());
     setFeedback(null);
+    if (navigate)
+      router.push(`${organizationBasePath}/${encodeURIComponent(organization.id)}/edit`);
   }
 
   function updateOrganizationEdit(field: keyof OrganizationDraft, value: string) {
@@ -342,6 +485,7 @@ export function OrganizationsManagement() {
         kind: 'success',
         message: 'مجموعه ایجاد شد و وضعیت آن از سرویس مالک دریافت می‌شود.',
       });
+      router.push(organizationBasePath);
     } catch (error) {
       setFeedback(requestError(error, true));
     } finally {
@@ -378,6 +522,7 @@ export function OrganizationsManagement() {
       setEditingOrganizationId(null);
       setOrganizationEditVersion(null);
       setFeedback({ kind: 'success', message: 'اطلاعات مجموعه ذخیره شد.' });
+      router.push(organizationBasePath);
     } catch (error) {
       setFeedback(requestError(error));
     } finally {
@@ -396,6 +541,7 @@ export function OrganizationsManagement() {
     setEditingBranchId(null);
     setBranchEditVersion(null);
     setFeedback(null);
+    router.push(`${branchesBasePath}/new?organizationId=${encodeURIComponent(organization.id)}`);
   }
 
   function updateBranchDraft(field: Exclude<keyof BranchDraft, 'openingHours'>, value: string) {
@@ -434,6 +580,7 @@ export function OrganizationsManagement() {
         const existing = current[organization.id] ?? {
           items: [],
           nextCursor: null,
+          pageNumber: 1,
           loading: false,
           error: null,
         };
@@ -444,6 +591,7 @@ export function OrganizationsManagement() {
       });
       setCreatingBranchFor(null);
       setFeedback({ kind: 'success', message: 'شعبه ایجاد شد.' });
+      router.push(`${branchesBasePath}?organizationId=${encodeURIComponent(organization.id)}`);
     } catch (error) {
       setFeedback(requestError(error));
     } finally {
@@ -451,7 +599,7 @@ export function OrganizationsManagement() {
     }
   }
 
-  function beginBranchEdit(branch: Branch) {
+  function beginBranchEdit(branch: Branch, navigate = true) {
     setCreatingOrganization(false);
     setEditingOrganizationId(null);
     setOrganizationEditVersion(null);
@@ -472,6 +620,11 @@ export function OrganizationsManagement() {
     setEditingBranchId(branch.id);
     setCreatingBranchFor(null);
     setFeedback(null);
+    if (navigate) {
+      router.push(
+        `${branchesBasePath}/${encodeURIComponent(branch.id)}/edit?organizationId=${encodeURIComponent(branch.organizationId)}`,
+      );
+    }
   }
 
   function updateBranchEdit(field: Exclude<keyof BranchDraft, 'openingHours'>, value: string) {
@@ -522,6 +675,7 @@ export function OrganizationsManagement() {
       setEditingBranchId(null);
       setBranchEditVersion(null);
       setFeedback({ kind: 'success', message: 'اطلاعات شعبه ذخیره شد.' });
+      router.push(`${branchesBasePath}?organizationId=${encodeURIComponent(organizationId)}`);
     } catch (error) {
       setFeedback(requestError(error));
     } finally {
@@ -603,18 +757,61 @@ export function OrganizationsManagement() {
     }
   }
 
-  function expandOrganization(organizationId: string) {
-    if (expandedOrganizationId === organizationId) {
-      setExpandedOrganizationId(null);
-      return;
-    }
-    setExpandedOrganizationId(organizationId);
-    if (!branchesByOrganization[organizationId]) void loadBranches(organizationId);
-  }
-
   function reloadCurrentData() {
     void loadOrganizations();
     if (expandedOrganizationId) void loadBranches(expandedOrganizationId);
+  }
+
+  function goToPreviousOrganizationPage() {
+    setOrganizationPageNumber((current) => Math.max(1, current - 1));
+  }
+
+  async function goToNextOrganizationPage() {
+    if (organizationPageNumber * 25 < organizations.length) {
+      setOrganizationPageNumber((current) => current + 1);
+      return;
+    }
+    if (organizationCursor) await loadOrganizations(organizationCursor, true);
+  }
+
+  async function applyBranchOrganization() {
+    const selected = organizations.find(
+      (organization) => organization.id === branchOrganizationDraftId,
+    );
+    if (!selected) return false;
+    setExpandedOrganizationId(selected.id);
+    setBranchOrganizationDraftId(selected.id);
+    router.replace(`${branchesBasePath}?organizationId=${encodeURIComponent(selected.id)}`);
+    if (!branchesByOrganization[selected.id]) await loadBranches(selected.id);
+    return true;
+  }
+
+  async function goToNextBranchPage() {
+    const page = branchesByOrganization[expandedOrganizationId ?? ''];
+    if (!page || page.loading) return;
+    if (page.pageNumber * 25 < page.items.length) {
+      setBranchesByOrganization((current) => ({
+        ...current,
+        [expandedOrganizationId ?? '']: {
+          ...page,
+          pageNumber: page.pageNumber + 1,
+        },
+      }));
+      return;
+    }
+    if (page.nextCursor && expandedOrganizationId) {
+      await loadBranches(expandedOrganizationId, page.nextCursor, true);
+    }
+  }
+
+  function goToPreviousBranchPage() {
+    const organizationId = expandedOrganizationId ?? '';
+    const page = branchesByOrganization[organizationId];
+    if (!page || page.pageNumber <= 1) return;
+    setBranchesByOrganization((current) => ({
+      ...current,
+      [organizationId]: { ...page, pageNumber: page.pageNumber - 1 },
+    }));
   }
 
   const stale = Boolean(organizationsError && organizations.length > 0);
@@ -624,511 +821,743 @@ export function OrganizationsManagement() {
   const suspendedCount = organizations.filter(
     (organization) => organization.status === 'suspended',
   ).length;
+  const visibleOrganizations =
+    view === 'branches'
+      ? organizations.filter((organization) => organization.id === expandedOrganizationId)
+      : organizations.slice((organizationPageNumber - 1) * 25, organizationPageNumber * 25);
+  const selectedOrganization =
+    organizations.find((organization) => organization.id === expandedOrganizationId) ?? null;
+  const selectedBranchPage = selectedOrganization
+    ? branchesByOrganization[selectedOrganization.id]
+    : undefined;
+  const visibleBranches = selectedBranchPage
+    ? selectedBranchPage.items.slice(
+        (selectedBranchPage.pageNumber - 1) * 25,
+        selectedBranchPage.pageNumber * 25,
+      )
+    : [];
+  const routeOrganization = organizations.find((item) => item.id === organizationRouteId) ?? null;
+  const routeBranchOrganization =
+    organizations.find(
+      (item) => item.id === (branchRouteOrganizationId || expandedOrganizationId),
+    ) ?? null;
+  const routeBranchPage = routeBranchOrganization
+    ? branchesByOrganization[routeBranchOrganization.id]
+    : undefined;
+  const routeBranch = routeBranchPage?.items.find((item) => item.id === branchRouteId) ?? null;
+
+  if (organizationRouteMode !== 'list' || branchRouteMode !== 'list') {
+    const isBranchRoute = branchRouteMode !== 'list';
+    const routeTitle = isBranchRoute
+      ? branchRouteMode === 'create'
+        ? 'ایجاد شعبه'
+        : branchRouteMode === 'edit'
+          ? 'ویرایش شعبه'
+          : 'جزئیات شعبه'
+      : organizationRouteMode === 'create'
+        ? 'ایجاد مجموعه'
+        : organizationRouteMode === 'edit'
+          ? 'ویرایش مجموعه'
+          : 'جزئیات مجموعه';
+    return (
+      <main className={styles.app}>
+        <div className={styles.page}>
+          <SystemPageHeader
+            eyebrow="عملیات سامانه · ساختار سازمانی"
+            title={routeTitle}
+            description="اطلاعات از API مالک خوانده و تغییرات با کنترل نسخه و مجوز سرور ثبت می‌شوند."
+            actions={
+              <Button
+                type="button"
+                tone="secondary"
+                onClick={() =>
+                  router.push(
+                    isBranchRoute
+                      ? `${branchesBasePath}${branchRouteOrganizationId ? `?organizationId=${encodeURIComponent(branchRouteOrganizationId)}` : ''}`
+                      : organizationBasePath,
+                  )
+                }
+              >
+                بازگشت به فهرست
+              </Button>
+            }
+          />
+          {feedback && (
+            <div
+              className={feedback.kind === 'success' ? styles.success : styles.error}
+              role={feedback.kind === 'error' ? 'alert' : 'status'}
+            >
+              <span>{feedback.message}</span>
+              {feedback.showMfaLink && (
+                <a href={`/${locale}/security/mfa`}>بررسی تأیید دومرحله‌ای</a>
+              )}
+            </div>
+          )}
+          {isBranchRoute &&
+            branchRouteMode === 'create' &&
+            routeBranchOrganization &&
+            (routeBranchOrganization.status === 'active' ? (
+              <BranchEditor
+                title={`ایجاد شعبه برای ${routeBranchOrganization.name}`}
+                submitLabel="ایجاد شعبه"
+                draft={branchDraft}
+                busy={busyAction === `branch-create:${routeBranchOrganization.id}`}
+                idPrefix={`create-branch-${routeBranchOrganization.id}`}
+                onChange={updateBranchDraft}
+                onHoursChange={updateBranchDraftHours}
+                onCancel={() =>
+                  router.push(
+                    `${branchesBasePath}?organizationId=${encodeURIComponent(routeBranchOrganization.id)}`,
+                  )
+                }
+                onSubmit={(event) => void submitBranchCreate(event, routeBranchOrganization)}
+              />
+            ) : (
+              <p className={styles.notice} role="alert">
+                برای ایجاد شعبه، ابتدا مجموعه‌ی فعال انتخاب کنید.
+              </p>
+            ))}
+          {!isBranchRoute && organizationRouteMode === 'create' && (
+            <OrganizationEditor
+              title="ایجاد مجموعه‌ی جدید"
+              submitLabel="ایجاد مجموعه"
+              draft={organizationDraft}
+              busy={busyAction === 'organization-create'}
+              idPrefix="create-organization"
+              onChange={updateOrganizationDraft}
+              onCancel={() => router.push(organizationBasePath)}
+              onSubmit={submitOrganizationCreate}
+            />
+          )}
+          {!isBranchRoute && organizationRouteMode === 'edit' && routeOrganization && (
+            <OrganizationEditor
+              title={`ویرایش ${routeOrganization.name}`}
+              submitLabel="ذخیره‌ی تغییرات"
+              draft={organizationEditDraft}
+              busy={busyAction === `organization-edit:${routeOrganization.id}`}
+              idPrefix={`edit-organization-${routeOrganization.id}`}
+              onChange={updateOrganizationEdit}
+              onCancel={() => router.push(organizationBasePath)}
+              onSubmit={(event) => void submitOrganizationEdit(event, routeOrganization)}
+            />
+          )}
+          {!isBranchRoute && organizationRouteMode === 'details' && routeOrganization && (
+            <Surface className={styles.section}>
+              <h2>{routeOrganization.name}</h2>
+              <p>
+                <bdi>{routeOrganization.slug}</bdi> · <bdi>{routeOrganization.timezone}</bdi>
+              </p>
+              <p>
+                وضعیت:{' '}
+                <Badge tone={statusTone(routeOrganization.status)}>
+                  {statusLabel(routeOrganization.status)}
+                </Badge>
+              </p>
+              <p>
+                شناسه: <bdi>{routeOrganization.id}</bdi>
+              </p>
+              <p>نسخه: {routeOrganization.version.toLocaleString('fa-IR')}</p>
+              <p>
+                ایجاد: {formatDate(routeOrganization.createdAt)} · آخرین تغییر:{' '}
+                {formatDate(routeOrganization.updatedAt)}
+              </p>
+              {routeOrganization.status !== 'archived' && (
+                <Button type="button" onClick={() => beginOrganizationEdit(routeOrganization)}>
+                  ویرایش مجموعه
+                </Button>
+              )}
+            </Surface>
+          )}
+          {isBranchRoute &&
+            branchRouteMode === 'edit' &&
+            routeBranch &&
+            routeBranchOrganization && (
+              <BranchEditor
+                title={`ویرایش ${routeBranch.name}`}
+                submitLabel="ذخیره‌ی تغییرات"
+                draft={branchEditDraft}
+                busy={busyAction === `branch-edit:${routeBranch.id}`}
+                idPrefix={`edit-branch-${routeBranch.id}`}
+                onChange={updateBranchEdit}
+                onHoursChange={updateBranchEditHours}
+                onCancel={() =>
+                  router.push(
+                    `${branchesBasePath}?organizationId=${encodeURIComponent(routeBranchOrganization.id)}`,
+                  )
+                }
+                onSubmit={(event) =>
+                  void submitBranchEdit(event, routeBranchOrganization.id, routeBranch)
+                }
+              />
+            )}
+          {isBranchRoute &&
+            branchRouteMode === 'details' &&
+            routeBranch &&
+            routeBranchOrganization && (
+              <Surface className={styles.section}>
+                <h2>{routeBranch.name}</h2>
+                <p>
+                  {routeBranch.city} · <bdi>{routeBranch.slug}</bdi>
+                </p>
+                <p>{routeBranch.address}</p>
+                <p>
+                  مجموعه: {routeBranchOrganization.name} · منطقه‌ی زمانی:{' '}
+                  <bdi>{routeBranch.timezone}</bdi>
+                </p>
+                <p>
+                  وضعیت:{' '}
+                  <Badge tone={statusTone(routeBranch.status)}>
+                    {statusLabel(routeBranch.status)}
+                  </Badge>
+                </p>
+                <p>{openingHoursSummary(routeBranch.openingHours)}</p>
+                <p>
+                  شناسه: <bdi>{routeBranch.id}</bdi> · نسخه:{' '}
+                  {routeBranch.version.toLocaleString('fa-IR')}
+                </p>
+                <p>
+                  ایجاد: {formatDate(routeBranch.createdAt)} · آخرین تغییر:{' '}
+                  {formatDate(routeBranch.updatedAt)}
+                </p>
+                {routeBranch.status !== 'archived' &&
+                  routeBranchOrganization.status !== 'archived' && (
+                    <Button type="button" onClick={() => beginBranchEdit(routeBranch)}>
+                      ویرایش شعبه
+                    </Button>
+                  )}
+              </Surface>
+            )}
+          {((!isBranchRoute &&
+            (organizationRouteMode === 'edit' || organizationRouteMode === 'details') &&
+            !routeOrganization) ||
+            (isBranchRoute && branchRouteMode !== 'create' && !routeBranch)) && (
+            <Surface
+              className={styles.empty}
+              role={organizationsLoading || routeBranchPage?.loading ? 'status' : 'alert'}
+            >
+              {organizationsLoading || routeBranchPage?.loading ? (
+                <LoadingSkeleton label="در حال دریافت اطلاعات رکورد" rows={2} />
+              ) : (
+                'اطلاعات این رکورد در پاسخ فهرست مجاز موجود نیست. به فهرست برگردید و رکورد را از همان‌جا باز کنید.'
+              )}
+            </Surface>
+          )}
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className={styles.app}>
       <div className={styles.page}>
-        <SystemPageHeader
+        <ManagementListPage
           eyebrow="عملیات سامانه · ساختار سازمانی"
-          title="مجموعه‌ها و شعب"
-          description="مجموعه را ایجاد کنید، شعبه‌هایش را مدیریت کنید و وضعیت و آخرین نسخهٔ ثبت‌شده را ببینید."
-          actions={
+          title={view === 'branches' ? 'شعب' : 'مجموعه‌ها'}
+          description={
+            view === 'branches'
+              ? 'شعبه‌های یک مجموعه را ببینید و وضعیت یا اطلاعات عملیاتی آن‌ها را مدیریت کنید.'
+              : 'مجموعه‌ها را ثبت کنید و وضعیت و آخرین تغییرات هر مجموعه را پیگیری کنید.'
+          }
+          headerActions={
             <>
-              <Button
-                type="button"
-                tone="secondary"
-                onClick={reloadCurrentData}
-                disabled={
-                  organizationsLoading ||
-                  busyAction !== null ||
-                  creatingOrganization ||
-                  editingOrganizationId !== null ||
-                  statusTarget !== null
-                }
-              >
-                {organizationsLoading ? 'در حال دریافت…' : 'به‌روزرسانی'}
-              </Button>
-              <Button
-                type="button"
-                onClick={openOrganizationCreate}
-                disabled={busyAction !== null || organizationsLoading}
-              >
-                ایجاد مجموعه
-              </Button>
+              {view === 'organizations' && (
+                <Button
+                  type="button"
+                  onClick={openOrganizationCreate}
+                  disabled={busyAction !== null || organizationsLoading}
+                >
+                  ایجاد مجموعه
+                </Button>
+              )}
+              {view === 'branches' &&
+                selectedOrganization?.status === 'active' &&
+                selectedBranchPage && (
+                  <Button
+                    type="button"
+                    onClick={() => openBranchCreate(selectedOrganization)}
+                    disabled={busyAction !== null || selectedBranchPage.loading}
+                  >
+                    ایجاد شعبه
+                  </Button>
+                )}
             </>
           }
-        />
-
-        <div className={styles.policyNote} role="note">
-          <span aria-hidden="true">ⓘ</span>
-          <p>
-            همه‌ی عملیات در سرور با مجوز IAM، محدوده‌ی سازمان/شعبه، actor و نسخه‌ی رکورد کنترل و
-            ممیزی می‌شوند. دلیل اختیاری است؛ «تعلیق» قابل‌بازگشت است و آرشیوکردن از این صفحه انجام
-            نمی‌شود.
-          </p>
-        </div>
-
-        {organizationsLoaded && (
-          <div className={styles.summary} aria-label="خلاصه‌ی فهرست مجموعه‌ها">
-            <div>
-              <strong>{organizations.length.toLocaleString('fa-IR')}</strong>
-              <span>مجموعه در فهرست فعلی</span>
-            </div>
-            <div>
-              <strong>{activeCount.toLocaleString('fa-IR')}</strong>
-              <span>فعال</span>
-            </div>
-            <div>
-              <strong>{suspendedCount.toLocaleString('fa-IR')}</strong>
-              <span>تعلیق‌شده</span>
-            </div>
-          </div>
-        )}
-
-        {feedback && (
-          <div
-            className={feedback.kind === 'success' ? styles.success : styles.error}
-            role={feedback.kind === 'error' ? 'alert' : 'status'}
-          >
-            <span>{feedback.message}</span>
-            {feedback.showMfaLink && <a href="/fa/security/mfa">بررسی یا انجام تأیید دومرحله‌ای</a>}
-            {feedback.kind === 'error' &&
-              (feedback.message.includes('تازه') || feedback.message.includes('تغییر کرده')) && (
-                <button type="button" onClick={reloadCurrentData}>
-                  تازه‌سازی داده
-                </button>
-              )}
-          </div>
-        )}
-
-        {creatingOrganization && (
-          <OrganizationEditor
-            title="ایجاد مجموعه‌ی جدید"
-            submitLabel="ایجاد مجموعه"
-            draft={organizationDraft}
-            busy={busyAction === 'organization-create' || organizationsLoading}
-            idPrefix="create-organization"
-            onChange={updateOrganizationDraft}
-            onCancel={() => setCreatingOrganization(false)}
-            onSubmit={submitOrganizationCreate}
-          />
-        )}
-
-        <section
-          className={styles.section}
-          aria-labelledby="organizations-heading"
-          aria-busy={organizationsLoading}
+          toolbarActions={
+            <Button
+              type="button"
+              tone="ghost"
+              onClick={reloadCurrentData}
+              disabled={
+                organizationsLoading ||
+                busyAction !== null ||
+                creatingOrganization ||
+                editingOrganizationId !== null ||
+                statusTarget !== null
+              }
+            >
+              {organizationsLoading ? 'در حال دریافت…' : 'به‌روزرسانی'}
+            </Button>
+          }
+          filterTitle="انتخاب مجموعه برای مدیریت شعب"
+          filterDescription="فهرست شعب به یک مجموعه وابسته است؛ مجموعه‌ی موردنظر را انتخاب کنید."
+          filterFields={
+            view === 'branches' ? (
+              <label>
+                مجموعه
+                <select
+                  required
+                  value={branchOrganizationDraftId}
+                  onChange={(event) => setBranchOrganizationDraftId(event.currentTarget.value)}
+                  disabled={organizationsLoading || !organizations.length}
+                >
+                  <option value="">انتخاب مجموعه</option>
+                  {organizations.map((organization) => (
+                    <option key={organization.id} value={organization.id}>
+                      {organization.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : undefined
+          }
+          onOpenFilters={() => {
+            if (view === 'branches') setBranchOrganizationDraftId(expandedOrganizationId ?? '');
+          }}
+          onApplyFilters={view === 'branches' ? applyBranchOrganization : undefined}
+          appliedFilterCount={view === 'branches' && expandedOrganizationId ? 1 : 0}
+          filtersBusy={view === 'branches' && Boolean(selectedBranchPage?.loading)}
+          pagination={
+            view === 'organizations'
+              ? {
+                  page: organizationPageNumber,
+                  itemCount: visibleOrganizations.length,
+                  canGoPrevious: organizationPageNumber > 1,
+                  canGoNext:
+                    organizationPageNumber * 25 < organizations.length ||
+                    Boolean(organizationCursor),
+                  busy: organizationsLoading,
+                  onPrevious: goToPreviousOrganizationPage,
+                  onNext: () => void goToNextOrganizationPage(),
+                }
+              : selectedBranchPage
+                ? {
+                    page: selectedBranchPage.pageNumber,
+                    itemCount: visibleBranches.length,
+                    canGoPrevious: selectedBranchPage.pageNumber > 1,
+                    canGoNext:
+                      selectedBranchPage.pageNumber * 25 < selectedBranchPage.items.length ||
+                      Boolean(selectedBranchPage.nextCursor),
+                    busy: selectedBranchPage.loading,
+                    onPrevious: goToPreviousBranchPage,
+                    onNext: () => void goToNextBranchPage(),
+                  }
+                : undefined
+          }
         >
-          <div className={styles.sectionHeading}>
-            <div>
-              <p className={styles.eyebrow}>منبع: Organization &amp; Branch</p>
-              <h2 id="organizations-heading">فهرست مجموعه‌ها</h2>
-              {organizationsLoaded && (
-                <small>{organizations.length.toLocaleString('fa-IR')} مجموعه در فهرست فعلی</small>
-              )}
-            </div>
+          <div className={styles.policyNote} role="note">
+            <span aria-hidden="true">ⓘ</span>
+            <p>
+              همه‌ی عملیات در سرور با مجوز IAM، محدوده‌ی سازمان/شعبه، actor و نسخه‌ی رکورد کنترل و
+              ممیزی می‌شوند. دلیل اختیاری است؛ «تعلیق» قابل‌بازگشت است و آرشیوکردن از این صفحه انجام
+              نمی‌شود.
+            </p>
           </div>
 
-          {organizationsError && (
-            <div className={styles.error} role="alert">
-              <span>
-                {stale
-                  ? `نمایش داده‌ی آخرین دریافت؛ تازه نیست. ${organizationsError}`
-                  : organizationsError}
-              </span>
-              <button
-                type="button"
-                onClick={() => void loadOrganizations()}
-                disabled={organizationsLoading}
-              >
-                تلاش دوباره
-              </button>
-            </div>
-          )}
-          {organizationsLoading && organizations.length === 0 && (
-            <LoadingSkeleton label="در حال دریافت مجموعه‌ها" rows={4} />
-          )}
-          {!organizationsLoading && !organizationsError && organizations.length === 0 && (
-            <div className={styles.empty}>
-              <span className={styles.emptyIcon} aria-hidden="true">
-                ▦
-              </span>
-              <h3>هنوز مجموعه‌ای ثبت نشده است</h3>
-              <p>پس از ایجاد نخستین مجموعه، شعبه‌های آن را از همین صفحه مدیریت کنید.</p>
-              <Button
-                type="button"
-                onClick={openOrganizationCreate}
-                disabled={organizationsLoading}
-              >
-                ایجاد نخستین مجموعه
-              </Button>
+          {view === 'organizations' && organizationsLoaded && (
+            <div className={styles.summary} aria-label="خلاصه‌ی فهرست مجموعه‌ها">
+              <div>
+                <strong>{organizations.length.toLocaleString('fa-IR')}</strong>
+                <span>مجموعه در فهرست فعلی</span>
+              </div>
+              <div>
+                <strong>{activeCount.toLocaleString('fa-IR')}</strong>
+                <span>فعال</span>
+              </div>
+              <div>
+                <strong>{suspendedCount.toLocaleString('fa-IR')}</strong>
+                <span>تعلیق‌شده</span>
+              </div>
             </div>
           )}
 
-          <div className={styles.organizationList}>
-            {organizations.map((organization) => {
-              const branchPage = branchesByOrganization[organization.id];
-              const expanded = expandedOrganizationId === organization.id;
-              const editing = editingOrganizationId === organization.id;
-              const orgStatusPending =
-                statusTarget?.kind === 'organization' &&
-                statusTarget.organization.id === organization.id;
-              return (
-                <Surface className={styles.organizationCard} key={organization.id}>
-                  <div className={styles.resourceHeader}>
-                    <div className={styles.resourceTitle}>
-                      <span className={styles.resourceIcon} aria-hidden="true">
-                        ▦
-                      </span>
-                      <div>
-                        <h3>{organization.name}</h3>
-                        <p>
-                          <bdi>{organization.slug}</bdi> <span aria-hidden="true">·</span>{' '}
-                          <bdi>{organization.timezone}</bdi>
-                        </p>
-                      </div>
-                    </div>
-                    <Badge tone={statusTone(organization.status)}>
-                      {statusLabel(organization.status)}
-                    </Badge>
-                  </div>
-                  <div className={styles.metadata}>
-                    <span>
-                      شناسه <bdi>{organization.id}</bdi>
-                    </span>
-                    <span>نسخه {organization.version.toLocaleString('fa-IR')}</span>
-                    <span>
-                      آخرین تغییر{' '}
-                      <time dateTime={organization.updatedAt}>
-                        {formatDate(organization.updatedAt)}
-                      </time>
-                    </span>
-                  </div>
-                  <div className={styles.actions}>
-                    <Button
-                      type="button"
-                      tone="secondary"
-                      aria-expanded={expanded}
-                      aria-label={`${expanded ? 'بستن' : 'مشاهده‌ی'} شعبه‌های ${organization.name}`}
-                      onClick={() => expandOrganization(organization.id)}
-                    >
-                      {expanded ? 'بستن شعبه‌ها' : 'مشاهده‌ی شعبه‌ها'}
-                    </Button>
-                    {organization.status !== 'archived' && (
-                      <>
-                        <Button
-                          type="button"
-                          tone="ghost"
-                          onClick={() =>
-                            editing
-                              ? setEditingOrganizationId(null)
-                              : beginOrganizationEdit(organization)
-                          }
-                          disabled={busyAction !== null || organizationsLoading}
-                        >
-                          ویرایش مجموعه
-                        </Button>
-                        <Button
-                          type="button"
-                          tone={organization.status === 'active' ? 'danger' : 'secondary'}
-                          onClick={() =>
-                            openStatusConfirmation({
-                              kind: 'organization',
-                              organization,
-                              status: organization.status === 'active' ? 'suspended' : 'active',
-                            })
-                          }
-                          disabled={busyAction !== null || organizationsLoading}
-                        >
-                          {organization.status === 'active' ? 'تعلیق مجموعه' : 'فعال‌سازی مجدد'}
-                        </Button>
-                      </>
-                    )}
-                  </div>
+          {feedback && (
+            <div
+              className={feedback.kind === 'success' ? styles.success : styles.error}
+              role={feedback.kind === 'error' ? 'alert' : 'status'}
+            >
+              <span>{feedback.message}</span>
+              {feedback.showMfaLink && (
+                <a href="/fa/security/mfa">بررسی یا انجام تأیید دومرحله‌ای</a>
+              )}
+              {feedback.kind === 'error' &&
+                (feedback.message.includes('تازه') || feedback.message.includes('تغییر کرده')) && (
+                  <button type="button" onClick={reloadCurrentData}>
+                    تازه‌سازی داده
+                  </button>
+                )}
+            </div>
+          )}
 
-                  {editing && (
-                    <OrganizationEditor
-                      title={`ویرایش ${organization.name}`}
-                      submitLabel="ذخیره‌ی تغییرات"
-                      draft={organizationEditDraft}
-                      busy={
-                        busyAction === `organization-edit:${organization.id}` ||
-                        organizationsLoading
-                      }
-                      idPrefix={`edit-organization-${organization.id}`}
-                      onChange={updateOrganizationEdit}
-                      onCancel={() => setEditingOrganizationId(null)}
-                      onSubmit={(event) => void submitOrganizationEdit(event, organization)}
-                    />
-                  )}
-                  {orgStatusPending && statusTarget.kind === 'organization' && (
-                    <StatusConfirmation
-                      resourceLabel={`مجموعه‌ی «${organization.name}»`}
-                      nextStatus={statusTarget.status}
-                      reason={statusReason}
-                      busy={busyAction === `organization-status:${organization.id}`}
-                      onReasonChange={(value) => {
-                        setStatusReason(value);
-                        setStatusKey(newIdempotencyKey());
-                      }}
-                      onCancel={() => setStatusTarget(null)}
-                      onSubmit={submitStatusChange}
-                    />
-                  )}
+          <section
+            className={styles.section}
+            aria-labelledby={view === 'branches' ? 'branches-heading' : 'organizations-heading'}
+            aria-busy={organizationsLoading}
+          >
+            <div className={styles.sectionHeading}>
+              <div>
+                <p className={styles.eyebrow}>منبع: Organization &amp; Branch</p>
+                <h2 id={view === 'branches' ? 'branches-heading' : 'organizations-heading'}>
+                  {view === 'branches' ? 'فهرست شعب' : 'فهرست مجموعه‌ها'}
+                </h2>
+                {view === 'organizations' && organizationsLoaded && (
+                  <small>{organizations.length.toLocaleString('fa-IR')} مجموعه در فهرست فعلی</small>
+                )}
+              </div>
+            </div>
 
-                  {expanded && (
-                    <section
-                      id={`branches-${organization.id}`}
-                      className={styles.branchSection}
-                      aria-label={`شعبه‌های ${organization.name}`}
-                      aria-busy={branchPage?.loading ?? false}
-                    >
-                      <div className={styles.branchHeading}>
+            {view === 'branches' && selectedOrganization && (
+              <p className={styles.branchOrganizationPicker}>
+                مجموعه‌ی فعال: <strong>{selectedOrganization.name}</strong>
+              </p>
+            )}
+
+            {organizationsError && (
+              <div className={styles.error} role="alert">
+                <span>
+                  {stale
+                    ? `نمایش داده‌ی آخرین دریافت؛ تازه نیست. ${organizationsError}`
+                    : organizationsError}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void loadOrganizations()}
+                  disabled={organizationsLoading}
+                >
+                  تلاش دوباره
+                </button>
+              </div>
+            )}
+            {organizationsLoading && organizations.length === 0 && (
+              <LoadingSkeleton label="در حال دریافت مجموعه‌ها" rows={4} />
+            )}
+            {!organizationsLoading && !organizationsError && organizations.length === 0 && (
+              <div className={styles.empty}>
+                <span className={styles.emptyIcon} aria-hidden="true">
+                  ▦
+                </span>
+                <h3>هنوز مجموعه‌ای ثبت نشده است</h3>
+                <p>
+                  {view === 'branches'
+                    ? 'برای مدیریت شعب، ابتدا یک مجموعه در بخش مجموعه‌ها ثبت کنید.'
+                    : 'پس از ایجاد نخستین مجموعه، شعبه‌ها را از بخش مستقل «شعب» مدیریت کنید.'}
+                </p>
+                {view === 'organizations' && (
+                  <Button
+                    type="button"
+                    onClick={openOrganizationCreate}
+                    disabled={organizationsLoading}
+                  >
+                    ایجاد نخستین مجموعه
+                  </Button>
+                )}
+              </div>
+            )}
+
+            <div className={styles.organizationList} data-view={view}>
+              {visibleOrganizations.map((organization) => {
+                const branchPage = branchesByOrganization[organization.id];
+                const expanded = view === 'branches' || expandedOrganizationId === organization.id;
+                const orgStatusPending =
+                  statusTarget?.kind === 'organization' &&
+                  statusTarget.organization.id === organization.id;
+                return (
+                  <Surface className={styles.organizationCard} key={organization.id}>
+                    <div className={styles.resourceHeader}>
+                      <div className={styles.resourceTitle}>
+                        <span className={styles.resourceIcon} aria-hidden="true">
+                          ▦
+                        </span>
                         <div>
-                          <h4>شعبه‌ها</h4>
+                          <h3>{organization.name}</h3>
                           <p>
-                            {organization.status === 'suspended'
-                              ? 'مجموعه تعلیق است؛ شعبه‌ها در داده‌ی مالک وضعیت مستقل خود را دارند.'
-                              : 'وضعیت هر شعبه مستقیماً از سرویس مالک خوانده می‌شود.'}
+                            <bdi>{organization.slug}</bdi> <span aria-hidden="true">·</span>{' '}
+                            <bdi>{organization.timezone}</bdi>
                           </p>
                         </div>
-                        {organization.status === 'active' && (
+                      </div>
+                      <Badge tone={statusTone(organization.status)}>
+                        {statusLabel(organization.status)}
+                      </Badge>
+                    </div>
+                    <div className={styles.metadata}>
+                      <span>
+                        شناسه <bdi>{organization.id}</bdi>
+                      </span>
+                      <span>نسخه {organization.version.toLocaleString('fa-IR')}</span>
+                      <span>
+                        آخرین تغییر{' '}
+                        <time dateTime={organization.updatedAt}>
+                          {formatDate(organization.updatedAt)}
+                        </time>
+                      </span>
+                    </div>
+                    <div className={styles.actions}>
+                      <Button
+                        type="button"
+                        tone="ghost"
+                        onClick={() =>
+                          router.push(
+                            `${organizationBasePath}/${encodeURIComponent(organization.id)}`,
+                          )
+                        }
+                      >
+                        جزئیات
+                      </Button>
+                      <Button
+                        type="button"
+                        tone="secondary"
+                        aria-label={`مدیریت شعبه‌های ${organization.name}`}
+                        onClick={() => {
+                          setExpandedOrganizationId(organization.id);
+                          router.push(
+                            `${branchesBasePath}?organizationId=${encodeURIComponent(organization.id)}`,
+                          );
+                        }}
+                      >
+                        مدیریت شعب
+                      </Button>
+                      {organization.status !== 'archived' && (
+                        <>
                           <Button
                             type="button"
-                            onClick={() => openBranchCreate(organization)}
-                            disabled={busyAction !== null || !branchPage || branchPage.loading}
+                            tone="ghost"
+                            onClick={() => beginOrganizationEdit(organization)}
+                            disabled={busyAction !== null || organizationsLoading}
                           >
-                            ایجاد شعبه
+                            ویرایش مجموعه
                           </Button>
-                        )}
-                        {organization.status === 'suspended' && (
-                          <span className={styles.mutedNotice}>
-                            برای ایجاد شعبه، ابتدا مجموعه را فعال کنید.
-                          </span>
-                        )}
-                      </div>
-
-                      {creatingBranchFor === organization.id && (
-                        <BranchEditor
-                          title={`ایجاد شعبه برای ${organization.name}`}
-                          submitLabel="ایجاد شعبه"
-                          draft={branchDraft}
-                          busy={busyAction === `branch-create:${organization.id}`}
-                          idPrefix={`create-branch-${organization.id}`}
-                          onChange={updateBranchDraft}
-                          onHoursChange={updateBranchDraftHours}
-                          onCancel={() => setCreatingBranchFor(null)}
-                          onSubmit={(event) => void submitBranchCreate(event, organization)}
-                        />
-                      )}
-
-                      {branchPage?.loading && branchPage.items.length === 0 && (
-                        <div className={styles.loading} role="status">
-                          <span className={styles.spinner} aria-hidden="true" />
-                          در حال دریافت شعبه‌ها…
-                        </div>
-                      )}
-                      {branchPage?.loading && branchPage.items.length > 0 && (
-                        <p className={styles.refreshing} role="status">
-                          در حال به‌روزرسانی فهرست شعبه‌ها…
-                        </p>
-                      )}
-                      {branchPage?.error && (
-                        <div className={styles.error} role="alert">
-                          <span>
-                            {branchPage.items.length
-                              ? `فهرست شعبه‌ها تازه نیست. ${branchPage.error}`
-                              : branchPage.error}
-                          </span>
-                          <button
+                          <Button
                             type="button"
-                            onClick={() => void loadBranches(organization.id)}
-                            disabled={
-                              branchPage.loading ||
-                              busyAction !== null ||
-                              statusTarget !== null ||
-                              editingBranchId !== null
+                            tone={organization.status === 'active' ? 'danger' : 'secondary'}
+                            onClick={() =>
+                              openStatusConfirmation({
+                                kind: 'organization',
+                                organization,
+                                status: organization.status === 'active' ? 'suspended' : 'active',
+                              })
                             }
+                            disabled={busyAction !== null || organizationsLoading}
                           >
-                            تلاش دوباره
-                          </button>
-                        </div>
+                            {organization.status === 'active' ? 'تعلیق مجموعه' : 'فعال‌سازی مجدد'}
+                          </Button>
+                        </>
                       )}
-                      {branchPage &&
-                        !branchPage.loading &&
-                        !branchPage.error &&
-                        branchPage.items.length === 0 && (
-                          <p className={styles.branchEmpty}>
-                            برای این مجموعه شعبه‌ای ثبت نشده است.
+                    </div>
+
+                    {orgStatusPending && statusTarget.kind === 'organization' && (
+                      <StatusConfirmation
+                        resourceLabel={`مجموعه‌ی «${organization.name}»`}
+                        nextStatus={statusTarget.status}
+                        reason={statusReason}
+                        busy={busyAction === `organization-status:${organization.id}`}
+                        onReasonChange={(value) => {
+                          setStatusReason(value);
+                          setStatusKey(newIdempotencyKey());
+                        }}
+                        onCancel={() => setStatusTarget(null)}
+                        onSubmit={submitStatusChange}
+                      />
+                    )}
+
+                    {view === 'branches' && expanded && (
+                      <section
+                        id={`branches-${organization.id}`}
+                        className={styles.branchSection}
+                        aria-label={`شعبه‌های ${organization.name}`}
+                        aria-busy={branchPage?.loading ?? false}
+                      >
+                        <div className={styles.branchHeading}>
+                          <div>
+                            <h4>شعبه‌ها</h4>
+                            <p>
+                              {organization.status === 'suspended'
+                                ? 'مجموعه تعلیق است؛ شعبه‌ها در داده‌ی مالک وضعیت مستقل خود را دارند.'
+                                : 'وضعیت هر شعبه مستقیماً از سرویس مالک خوانده می‌شود.'}
+                            </p>
+                          </div>
+                          {organization.status === 'suspended' && (
+                            <span className={styles.mutedNotice}>
+                              برای ایجاد شعبه، ابتدا مجموعه را فعال کنید.
+                            </span>
+                          )}
+                        </div>
+
+                        {branchPage?.loading && branchPage.items.length === 0 && (
+                          <div className={styles.loading} role="status">
+                            <span className={styles.spinner} aria-hidden="true" />
+                            در حال دریافت شعبه‌ها…
+                          </div>
+                        )}
+                        {branchPage?.loading && branchPage.items.length > 0 && (
+                          <p className={styles.refreshing} role="status">
+                            در حال به‌روزرسانی فهرست شعبه‌ها…
                           </p>
                         )}
+                        {branchPage?.error && (
+                          <div className={styles.error} role="alert">
+                            <span>
+                              {branchPage.items.length
+                                ? `فهرست شعبه‌ها تازه نیست. ${branchPage.error}`
+                                : branchPage.error}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void loadBranches(organization.id)}
+                              disabled={
+                                branchPage.loading ||
+                                busyAction !== null ||
+                                statusTarget !== null ||
+                                editingBranchId !== null
+                              }
+                            >
+                              تلاش دوباره
+                            </button>
+                          </div>
+                        )}
+                        {branchPage &&
+                          !branchPage.loading &&
+                          !branchPage.error &&
+                          branchPage.items.length === 0 && (
+                            <p className={styles.branchEmpty}>
+                              برای این مجموعه شعبه‌ای ثبت نشده است.
+                            </p>
+                          )}
 
-                      <div className={styles.branchList}>
-                        {branchPage?.items.map((branch) => {
-                          const branchEditing = editingBranchId === branch.id;
-                          const branchStatusPending =
-                            statusTarget?.kind === 'branch' && statusTarget.branch.id === branch.id;
-                          return (
-                            <article className={styles.branchCard} key={branch.id}>
-                              <div className={styles.resourceHeader}>
-                                <div className={styles.resourceTitle}>
-                                  <span
-                                    className={`${styles.resourceIcon} ${styles.branchIcon}`}
-                                    aria-hidden="true"
-                                  >
-                                    ⌖
-                                  </span>
-                                  <div>
-                                    <h5>{branch.name}</h5>
-                                    <p>
-                                      <bdi>{branch.slug}</bdi> <span aria-hidden="true">·</span>{' '}
-                                      {branch.city}
-                                    </p>
+                        <div className={styles.branchList}>
+                          {visibleBranches.map((branch) => {
+                            const branchStatusPending =
+                              statusTarget?.kind === 'branch' &&
+                              statusTarget.branch.id === branch.id;
+                            return (
+                              <article className={styles.branchCard} key={branch.id}>
+                                <div className={styles.resourceHeader}>
+                                  <div className={styles.resourceTitle}>
+                                    <span
+                                      className={`${styles.resourceIcon} ${styles.branchIcon}`}
+                                      aria-hidden="true"
+                                    >
+                                      ⌖
+                                    </span>
+                                    <div>
+                                      <h5>{branch.name}</h5>
+                                      <p>
+                                        <bdi>{branch.slug}</bdi> <span aria-hidden="true">·</span>{' '}
+                                        {branch.city}
+                                      </p>
+                                    </div>
                                   </div>
+                                  <Badge tone={statusTone(branch.status)}>
+                                    {statusLabel(branch.status)}
+                                  </Badge>
                                 </div>
-                                <Badge tone={statusTone(branch.status)}>
-                                  {statusLabel(branch.status)}
-                                </Badge>
-                              </div>
-                              <div className={styles.branchDetails}>
-                                <p>{branch.address}</p>
-                                <span>
-                                  منطقه‌ی زمانی: <bdi>{branch.timezone}</bdi>
-                                </span>
-                                <span>
-                                  نسخه {branch.version.toLocaleString('fa-IR')} · آخرین تغییر{' '}
-                                  {formatDate(branch.updatedAt)}
-                                </span>
-                                <span>{openingHoursSummary(branch.openingHours)}</span>
-                              </div>
-                              {branch.status !== 'archived' &&
-                                organization.status !== 'archived' && (
-                                  <div className={styles.actions}>
-                                    <Button
-                                      type="button"
-                                      tone="ghost"
-                                      onClick={() =>
-                                        branchEditing
-                                          ? setEditingBranchId(null)
-                                          : beginBranchEdit(branch)
-                                      }
-                                      disabled={busyAction !== null || branchPage?.loading}
-                                    >
-                                      ویرایش شعبه
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      tone={branch.status === 'active' ? 'danger' : 'secondary'}
-                                      onClick={() =>
-                                        openStatusConfirmation({
-                                          kind: 'branch',
-                                          organizationId: organization.id,
-                                          branch,
-                                          status:
-                                            branch.status === 'active' ? 'suspended' : 'active',
-                                        })
-                                      }
-                                      disabled={
-                                        busyAction !== null ||
-                                        branchPage?.loading ||
-                                        (branch.status === 'suspended' &&
-                                          organization.status !== 'active')
-                                      }
-                                    >
-                                      {branch.status === 'active' ? 'تعلیق شعبه' : 'فعال‌سازی مجدد'}
-                                    </Button>
-                                  </div>
+                                <div className={styles.branchDetails}>
+                                  <p>{branch.address}</p>
+                                  <span>
+                                    منطقه‌ی زمانی: <bdi>{branch.timezone}</bdi>
+                                  </span>
+                                  <span>
+                                    نسخه {branch.version.toLocaleString('fa-IR')} · آخرین تغییر{' '}
+                                    {formatDate(branch.updatedAt)}
+                                  </span>
+                                  <span>{openingHoursSummary(branch.openingHours)}</span>
+                                </div>
+                                <div className={styles.actions}>
+                                  <Button
+                                    type="button"
+                                    tone="ghost"
+                                    onClick={() =>
+                                      router.push(
+                                        `${branchesBasePath}/${encodeURIComponent(branch.id)}?organizationId=${encodeURIComponent(organization.id)}`,
+                                      )
+                                    }
+                                  >
+                                    جزئیات
+                                  </Button>
+                                </div>
+                                {branch.status !== 'archived' &&
+                                  organization.status !== 'archived' && (
+                                    <div className={styles.actions}>
+                                      <Button
+                                        type="button"
+                                        tone="ghost"
+                                        onClick={() => beginBranchEdit(branch)}
+                                        disabled={busyAction !== null || branchPage?.loading}
+                                      >
+                                        ویرایش شعبه
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        tone={branch.status === 'active' ? 'danger' : 'secondary'}
+                                        onClick={() =>
+                                          openStatusConfirmation({
+                                            kind: 'branch',
+                                            organizationId: organization.id,
+                                            branch,
+                                            status:
+                                              branch.status === 'active' ? 'suspended' : 'active',
+                                          })
+                                        }
+                                        disabled={
+                                          busyAction !== null ||
+                                          branchPage?.loading ||
+                                          (branch.status === 'suspended' &&
+                                            organization.status !== 'active')
+                                        }
+                                      >
+                                        {branch.status === 'active'
+                                          ? 'تعلیق شعبه'
+                                          : 'فعال‌سازی مجدد'}
+                                      </Button>
+                                    </div>
+                                  )}
+                                {branch.status === 'suspended' &&
+                                  organization.status === 'suspended' && (
+                                    <p className={styles.mutedNotice}>
+                                      برای فعال‌سازی این شعبه، ابتدا مجموعه را فعال کنید.
+                                    </p>
+                                  )}
+                                {branchStatusPending && statusTarget.kind === 'branch' && (
+                                  <StatusConfirmation
+                                    resourceLabel={`شعبه‌ی «${branch.name}»`}
+                                    nextStatus={statusTarget.status}
+                                    reason={statusReason}
+                                    busy={busyAction === `branch-status:${branch.id}`}
+                                    onReasonChange={(value) => {
+                                      setStatusReason(value);
+                                      setStatusKey(newIdempotencyKey());
+                                    }}
+                                    onCancel={() => setStatusTarget(null)}
+                                    onSubmit={submitStatusChange}
+                                  />
                                 )}
-                              {branch.status === 'suspended' &&
-                                organization.status === 'suspended' && (
-                                  <p className={styles.mutedNotice}>
-                                    برای فعال‌سازی این شعبه، ابتدا مجموعه را فعال کنید.
-                                  </p>
-                                )}
-                              {branchEditing && (
-                                <BranchEditor
-                                  title={`ویرایش ${branch.name}`}
-                                  submitLabel="ذخیره‌ی تغییرات"
-                                  draft={branchEditDraft}
-                                  busy={
-                                    busyAction === `branch-edit:${branch.id}` ||
-                                    Boolean(branchPage?.loading)
-                                  }
-                                  idPrefix={`edit-branch-${branch.id}`}
-                                  onChange={updateBranchEdit}
-                                  onHoursChange={updateBranchEditHours}
-                                  onCancel={() => setEditingBranchId(null)}
-                                  onSubmit={(event) =>
-                                    void submitBranchEdit(event, organization.id, branch)
-                                  }
-                                />
-                              )}
-                              {branchStatusPending && statusTarget.kind === 'branch' && (
-                                <StatusConfirmation
-                                  resourceLabel={`شعبه‌ی «${branch.name}»`}
-                                  nextStatus={statusTarget.status}
-                                  reason={statusReason}
-                                  busy={busyAction === `branch-status:${branch.id}`}
-                                  onReasonChange={(value) => {
-                                    setStatusReason(value);
-                                    setStatusKey(newIdempotencyKey());
-                                  }}
-                                  onCancel={() => setStatusTarget(null)}
-                                  onSubmit={submitStatusChange}
-                                />
-                              )}
-                            </article>
-                          );
-                        })}
-                      </div>
-
-                      {branchPage?.nextCursor && (
-                        <Button
-                          type="button"
-                          tone="secondary"
-                          disabled={
-                            branchPage.loading ||
-                            busyAction !== null ||
-                            creatingBranchFor !== null ||
-                            editingBranchId !== null ||
-                            statusTarget !== null
-                          }
-                          onClick={() =>
-                            void loadBranches(
-                              organization.id,
-                              branchPage.nextCursor ?? undefined,
-                              true,
-                            )
-                          }
-                        >
-                          {branchPage.loading ? 'در حال دریافت…' : 'دریافت شعبه‌های بیشتر'}
-                        </Button>
-                      )}
-                    </section>
-                  )}
-                </Surface>
-              );
-            })}
-          </div>
-          {organizationCursor && !organizationsLoading && (
-            <div className={styles.loadMore}>
-              <Button
-                type="button"
-                tone="secondary"
-                disabled={busyAction !== null}
-                onClick={() => void loadOrganizations(organizationCursor, true)}
-              >
-                دریافت مجموعه‌های بیشتر
-              </Button>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    )}
+                  </Surface>
+                );
+              })}
             </div>
-          )}
-        </section>
+          </section>
 
-        <p className={styles.footerNote}>
-          شناسه‌ی نسخه برای جلوگیری از بازنویسی تغییر هم‌زمان استفاده می‌شود. رخدادهای ایجاد، ویرایش
-          و تغییر وضعیت در سرویس مالک همراه با actor و audit ثبت می‌شوند؛ دلیل در صورت ورود ثبت
-          می‌شود.
-        </p>
+          <p className={styles.footerNote}>
+            شناسه‌ی نسخه برای جلوگیری از بازنویسی تغییر هم‌زمان استفاده می‌شود. رخدادهای ایجاد،
+            ویرایش و تغییر وضعیت در سرویس مالک همراه با actor و audit ثبت می‌شوند؛ دلیل در صورت ورود
+            ثبت می‌شود.
+          </p>
+        </ManagementListPage>
       </div>
     </main>
   );
@@ -1346,7 +1775,9 @@ function BranchEditor({
                       disabled={!hours}
                       required={Boolean(hours)}
                       allowClear={false}
-                      onChange={(open) => onHoursChange(day.key, { open, close: hours?.close ?? '' })}
+                      onChange={(open) =>
+                        onHoursChange(day.key, { open, close: hours?.close ?? '' })
+                      }
                       title={`ساعت شروع ${day.label}`}
                     />
                   </label>
@@ -1358,7 +1789,9 @@ function BranchEditor({
                       disabled={!hours}
                       required={Boolean(hours)}
                       allowClear={false}
-                      onChange={(close) => onHoursChange(day.key, { open: hours?.open ?? '', close })}
+                      onChange={(close) =>
+                        onHoursChange(day.key, { open: hours?.open ?? '', close })
+                      }
                       title={`ساعت پایان ${day.label}`}
                     />
                   </label>

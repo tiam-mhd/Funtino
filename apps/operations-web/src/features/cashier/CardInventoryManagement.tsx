@@ -24,6 +24,7 @@ type Props = {
   scope: OperationsScope;
   scopeOption: OperationsScopeOption;
   onSessionExpired: () => void;
+  view?: 'inventory' | 'assignments';
 };
 
 type RegistrationDraft = { externalCardId: string; reason: string };
@@ -59,7 +60,14 @@ const noCardCapabilities: OperationsCardCapabilities = {
   canLookupCustomer: false,
 };
 
-export function CardInventoryManagement({ scope, scopeOption, onSessionExpired }: Props) {
+export function CardInventoryManagement({
+  scope,
+  scopeOption,
+  onSessionExpired,
+  view = 'inventory',
+}: Props) {
+  const showInventory = view === 'inventory';
+  const showAssignments = view === 'assignments';
   const currentScopeKey = scopeKey(scope);
   const initialBranches: OperationsBranch[] =
     scope.type === 'branch'
@@ -329,15 +337,21 @@ export function CardInventoryManagement({ scope, scopeOption, onSessionExpired }
     <section className={styles.manager} aria-labelledby="card-inventory-title">
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Wallet · موجودی شعبه</p>
-          <h2 id="card-inventory-title">مدیریت موجودی کارت</h2>
-          <p className={styles.explainer}>
-            این بخش فقط موجودی فیزیکی و چرخه‌ی کارت را از Wallet می‌خواند. شناسه‌ی کامل نمایش داده
-            نمی‌شود؛ تخصیص به خانواده/عضو تا اتصال مالک Customer در دسترس نیست.
+          <p className={styles.eyebrow}>
+            Wallet · {showAssignments ? 'تخصیص کارت' : 'موجودی شعبه'}
           </p>
+          <h2 id="card-inventory-title">
+            {showAssignments ? 'کارت‌های خانواده‌های این شعبه' : 'مدیریت موجودی کارت'}
+          </h2>
+          {showInventory && (
+            <p className={styles.explainer}>
+              موجودی فیزیکی و چرخه‌ی کارت از Wallet خوانده می‌شود. شناسه‌ی کامل کارت نمایش داده
+              نمی‌شود.
+            </p>
+          )}
         </div>
         <div className={styles.headerActions}>
-          {canManage && selectedBranchId && (
+          {showInventory && canManage && selectedBranchId && (
             <Button
               type="button"
               disabled={registrationBusy || statusBusy}
@@ -421,7 +435,7 @@ export function CardInventoryManagement({ scope, scopeOption, onSessionExpired }
         </p>
       )}
 
-      {registrationOpen && canManage && selectedBranchId && (
+      {showInventory && registrationOpen && canManage && selectedBranchId && (
         <Surface className={styles.panel}>
           <h3>ثبت کارت فیزیکی</h3>
           <p className={styles.helper}>
@@ -481,7 +495,7 @@ export function CardInventoryManagement({ scope, scopeOption, onSessionExpired }
         </Surface>
       )}
 
-      {selectedBranchId && !loading && !loadError && (
+      {showInventory && selectedBranchId && !loading && !loadError && (
         <Surface className={styles.filters}>
           <label className={styles.field} htmlFor="card-inventory-status">
             وضعیت موجودی
@@ -520,7 +534,7 @@ export function CardInventoryManagement({ scope, scopeOption, onSessionExpired }
           در حال دریافت موجودی از Wallet…
         </Surface>
       )}
-      {!selectedBranchId && scope.type === 'organization' && !branchError && (
+      {!selectedBranchId && scope.type === 'organization' && !branchError && showInventory && (
         <Surface className={styles.state}>
           برای مشاهده‌ی موجودی، یک شعبه‌ی مجاز انتخاب کنید.
         </Surface>
@@ -533,7 +547,7 @@ export function CardInventoryManagement({ scope, scopeOption, onSessionExpired }
           </Button>
         </Surface>
       )}
-      {!loading && !loadError && selectedBranchId && visibleCards.length === 0 && (
+      {showInventory && !loading && !loadError && selectedBranchId && visibleCards.length === 0 && (
         <Surface className={styles.state}>
           {cards.length === 0
             ? statusFilter === 'all'
@@ -548,7 +562,7 @@ export function CardInventoryManagement({ scope, scopeOption, onSessionExpired }
         </Surface>
       )}
 
-      {visibleCards.length > 0 && (
+      {showInventory && visibleCards.length > 0 && (
         <div className={styles.cardGrid} role="list" aria-label="فهرست موجودی کارت‌ها">
           {visibleCards.map((card) => {
             const allowedTransitions = allowedNextStatuses(card);
@@ -676,7 +690,7 @@ export function CardInventoryManagement({ scope, scopeOption, onSessionExpired }
           })}
         </div>
       )}
-      {nextCursor && selectedBranchId && !loadError && (
+      {showInventory && nextCursor && selectedBranchId && !loadError && (
         <Button
           type="button"
           tone="secondary"
@@ -687,14 +701,14 @@ export function CardInventoryManagement({ scope, scopeOption, onSessionExpired }
         </Button>
       )}
 
-      {lastUpdatedAt !== null && selectedBranchId && (
+      {showInventory && lastUpdatedAt !== null && selectedBranchId && (
         <p className={styles.lastUpdated} role="status">
           {stale && 'دریافت تازه موفق نشد؛ داده‌ی زیر ممکن است قدیمی باشد. '}
           آخرین دریافت از Wallet: {formatDate(new Date(lastUpdatedAt).toISOString())}. «تأییدنشده»
           وضعیت اتصال provider را نامشخص می‌داند و معادل آنلاین یا معتبر نیست.
         </p>
       )}
-      {selectedBranchId && !loadError && !loading && (
+      {showAssignments && selectedBranchId && !loadError && !loading && (
         <HouseholdCardAssignments
           organizationId={scope.organizationId}
           branchId={selectedBranchId}
