@@ -227,3 +227,520 @@
   font-weight: 800;
   text-decoration: none;
 }
+
+.ft-picker-control {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.ft-picker-control .ft-picker-field {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--ft-line);
+  border-radius: 12px;
+  padding: 0 40px 0 12px;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+.ft-picker-control .ft-picker-field:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ft-purple) 45%, var(--ft-line));
+  background: var(--ft-surface-soft);
+}
+
+.ft-picker-control .ft-picker-field:focus-visible,
+.ft-picker-control .ft-picker-field.is-invalid:focus-visible {
+  outline: none;
+  border-color: var(--ft-purple);
+  box-shadow: var(--ft-focus);
+}
+
+.ft-picker-control .ft-picker-field:disabled {
+  color: var(--ft-muted);
+  background: var(--ft-surface-soft);
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
+.ft-picker-control .ft-picker-field.is-invalid {
+  border-color: var(--ft-danger);
+}
+
+.ft-picker-control .ft-picker-field--time {
+  direction: ltr;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.ft-picker-control .ft-picker-field::placeholder {
+  color: var(--ft-muted);
+  opacity: 1;
+}
+
+.ft-picker-field__icon {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 12px;
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  color: var(--ft-purple);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.ft-picker-dialog-open {
+  overflow: hidden;
+}
+
+.ft-picker-dialog {
+  width: min(100% - 32px, 456px);
+  max-width: 456px;
+  max-height: min(88dvh, 760px);
+  overflow: visible;
+  border: 1px solid var(--ft-line);
+  border-radius: 20px;
+  padding: 0;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  box-shadow: var(--ft-shadow-md);
+}
+
+.ft-picker-dialog[open] {
+  animation: ft-picker-enter 160ms ease-out both;
+}
+
+.ft-picker-dialog::backdrop {
+  background: rgb(22 27 44 / 48%);
+  backdrop-filter: blur(2px);
+}
+
+.ft-picker-dialog__panel {
+  display: flex;
+  max-height: min(88dvh, 760px);
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.ft-picker-dialog__header {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--ft-line);
+  padding: 12px 18px;
+}
+
+.ft-picker-dialog__header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.ft-picker-dialog__close,
+.ft-date-picker__month-step {
+  display: inline-grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--ft-ink-soft);
+  background: transparent;
+  font: inherit;
+  font-size: 23px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ft-picker-dialog__close:hover,
+.ft-date-picker__month-step:hover {
+  color: var(--ft-purple);
+  background: var(--ft-surface-soft);
+}
+
+.ft-picker-dialog__close:focus-visible,
+.ft-date-picker__month-step:focus-visible,
+.ft-date-picker select:focus-visible,
+.ft-date-picker input:focus-visible,
+.ft-date-picker__day:focus-visible,
+.ft-time-picker button:focus-visible,
+.ft-picker-dialog__footer button:focus-visible,
+.ft-date-time-picker__tabs button:focus-visible {
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.ft-picker-dialog__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px;
+}
+
+.ft-picker-dialog__footer {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid var(--ft-line);
+  padding: 12px 18px;
+  background: var(--ft-surface);
+}
+
+.ft-picker-dialog__footer-spacer {
+  flex: 1;
+}
+
+.ft-picker-dialog__primary,
+.ft-picker-dialog__secondary,
+.ft-picker-dialog__text-action {
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.ft-picker-dialog__primary {
+  color: #fff;
+  background: var(--ft-teal-dark);
+}
+
+.ft-picker-dialog__primary:hover:not(:disabled) {
+  background: #005a5f;
+}
+
+.ft-picker-dialog__primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.ft-picker-dialog__secondary {
+  border-color: var(--ft-line);
+  color: var(--ft-ink-soft);
+  background: var(--ft-surface);
+}
+
+.ft-picker-dialog__secondary:hover {
+  background: var(--ft-surface-soft);
+}
+
+.ft-picker-dialog__text-action {
+  color: var(--ft-danger);
+  background: transparent;
+}
+
+.ft-picker-dialog__text-action:hover {
+  background: color-mix(in srgb, var(--ft-danger) 8%, transparent);
+}
+
+.ft-date-picker__navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.ft-date-picker__month-select select,
+.ft-date-picker__year input {
+  min-height: 42px;
+  border: 1px solid var(--ft-line);
+  border-radius: 10px;
+  padding: 0 10px;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.ft-date-picker__month-select select {
+  min-width: 118px;
+}
+
+.ft-date-picker__year input {
+  width: 84px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.ft-date-picker__calendar {
+  display: grid;
+  gap: 6px;
+}
+
+.ft-date-picker__week,
+.ft-date-picker__week-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.ft-date-picker__days {
+  display: grid;
+  gap: 4px;
+}
+
+.ft-date-picker__week span {
+  display: grid;
+  min-height: 36px;
+  place-items: center;
+  color: var(--ft-muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.ft-date-picker__empty,
+.ft-date-picker__day {
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 1;
+}
+
+.ft-date-picker__day {
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--ft-ink);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.ft-date-picker__day:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--ft-purple) 38%, var(--ft-line));
+  background: var(--ft-surface-soft);
+}
+
+.ft-date-picker__day.is-today:not(.is-selected) {
+  border-color: var(--ft-purple);
+  color: var(--ft-purple);
+  font-weight: 800;
+}
+
+.ft-date-picker__day.is-selected {
+  color: #fff;
+  background: var(--ft-purple);
+  font-weight: 800;
+}
+
+.ft-date-picker__day:disabled {
+  color: color-mix(in srgb, var(--ft-muted) 52%, transparent);
+  cursor: not-allowed;
+}
+
+.ft-date-picker__hint,
+.ft-time-picker__hint {
+  margin: 12px 0 0;
+  color: var(--ft-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.ft-time-picker__display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-bottom: 14px;
+  direction: ltr;
+  font-size: 25px;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.ft-time-picker__display button {
+  min-width: 64px;
+  min-height: 52px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--ft-ink);
+  background: var(--ft-surface-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ft-time-picker__display button.is-active {
+  border-color: var(--ft-purple);
+  color: var(--ft-purple);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ft-purple) 12%, transparent);
+}
+
+.ft-time-picker__clock {
+  position: relative;
+  width: min(100%, 330px);
+  margin-inline: auto;
+  aspect-ratio: 1;
+  border: 1px solid var(--ft-line);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ft-surface) 0 24%, var(--ft-surface-soft) 24.5% 100%);
+  direction: ltr;
+}
+
+.ft-time-picker__clock::before,
+.ft-time-picker__clock::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border: 1px solid var(--ft-line);
+  border-radius: 50%;
+  content: '';
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.ft-time-picker__clock::before { width: 84%; height: 84%; }
+.ft-time-picker__clock::after { width: 52%; height: 52%; }
+
+.ft-time-picker__hour {
+  position: absolute;
+  top: var(--y);
+  left: var(--x);
+  z-index: 1;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  padding: 0;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  box-shadow: 0 1px 4px rgb(32 35 65 / 8%);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.ft-time-picker__hour.is-inner {
+  width: 34px;
+  height: 34px;
+  color: var(--ft-ink-soft);
+  background: var(--ft-surface-soft);
+  font-size: 11px;
+}
+
+.ft-time-picker__hour:hover { border-color: var(--ft-purple); }
+.ft-time-picker__hour.is-selected { border-color: var(--ft-purple); color: #fff; background: var(--ft-purple); }
+
+.ft-time-picker__clock-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: var(--ft-muted);
+  font-size: 11px;
+  transform: translate(-50%, -50%);
+}
+
+.ft-time-picker__minutes {
+  display: grid;
+  max-height: min(54dvh, 400px);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px;
+}
+
+.ft-time-picker__minute {
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid var(--ft-line);
+  border-radius: 10px;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.ft-time-picker__minute:hover { border-color: var(--ft-purple); background: var(--ft-surface-soft); }
+.ft-time-picker__minute.is-selected { border-color: var(--ft-purple); color: #fff; background: var(--ft-purple); }
+
+.ft-date-time-picker__tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.ft-date-time-picker__tabs button {
+  min-width: 0;
+  min-height: 44px;
+  overflow: hidden;
+  border: 1px solid var(--ft-line);
+  border-radius: 11px;
+  padding: 0 8px;
+  color: var(--ft-ink-soft);
+  background: var(--ft-surface);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ft-date-time-picker__tabs button.is-active {
+  border-color: var(--ft-purple);
+  color: var(--ft-purple);
+  background: color-mix(in srgb, var(--ft-purple) 7%, var(--ft-surface));
+}
+
+.ft-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@keyframes ft-picker-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 560px) {
+  .ft-picker-dialog {
+    width: 100%;
+    max-width: none;
+    max-height: min(92dvh, 760px);
+    margin: auto 0 0;
+    border-radius: 22px 22px 0 0;
+    border-bottom: 0;
+  }
+
+  .ft-picker-dialog__panel { max-height: min(92dvh, 760px); }
+  .ft-picker-dialog__body { padding: 14px 16px; }
+  .ft-picker-dialog__footer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .ft-time-picker__hour { width: 36px; height: 36px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-picker-dialog[open] { animation: none; }
+  .ft-picker-control .ft-picker-field { transition: none; }
+}

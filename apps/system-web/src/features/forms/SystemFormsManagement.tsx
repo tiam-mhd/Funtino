@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Badge, Button } from '@funtino/design-system';
+import { Badge, Button, ClockTimePickerField, JalaliDatePickerField } from '@funtino/design-system';
 import {
   createEmptyFormDefinition,
   formFieldTypes,
@@ -52,6 +52,10 @@ const typeLabels: Record<FormFieldType, string> = {
   heading: 'عنوان',
   paragraph: 'توضیح',
   hidden: 'فیلد پنهان',
+};
+const formFieldInputRenderers = {
+  date: JalaliDatePickerField,
+  time: ClockTimePickerField,
 };
 
 export function SystemFormsManagement() {
@@ -573,6 +577,7 @@ export function SystemFormsManagement() {
                     answers={{}}
                     mode="preview"
                     readOnly
+                    fieldInputRenderers={formFieldInputRenderers}
                   />
                 </div>
               )}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Badge, Button, Surface } from '@funtino/design-system';
+import { Badge, Button, JalaliDatePickerField, Surface } from '@funtino/design-system';
 import { ApiRequestError } from '../../lib/api/client';
 import {
   confirmOperationsMfaEnrollment,
@@ -270,24 +270,24 @@ export function OperationsReports({ scope, onSessionExpired, mfaStepUpUntil, onM
         <form className={styles.filterForm} onSubmit={(event) => void applyRange(event)}>
           <label htmlFor="report-from">
             از تاریخ
-            <input
+            <JalaliDatePickerField
               id="report-from"
-              type="date"
-              max={today}
+              maxDate={today}
               required
               value={from}
-              onChange={(event) => setFrom(event.currentTarget.value)}
+              onChange={setFrom}
+              title="انتخاب تاریخ شروع گزارش"
             />
           </label>
           <label htmlFor="report-to">
             تا تاریخ
-            <input
+            <JalaliDatePickerField
               id="report-to"
-              type="date"
-              max={today}
+              maxDate={today}
               required
               value={to}
-              onChange={(event) => setTo(event.currentTarget.value)}
+              onChange={setTo}
+              title="انتخاب تاریخ پایان گزارش"
             />
           </label>
           <div className={styles.filterActions}>

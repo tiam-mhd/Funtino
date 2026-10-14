@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3002",
     "lint": "eslint .",
-    "test": "tsx --test src/tests/access-scope-options.spec.ts",
+    "test": "tsx --test src/tests/access-scope-options.spec.ts src/tests/persian-calendar.spec.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

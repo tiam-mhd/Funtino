@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { Badge, Button, Surface } from '@funtino/design-system';
+import { Badge, Button, ClockTimePickerField, Surface } from '@funtino/design-system';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
 import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
 import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
@@ -1340,34 +1340,26 @@ function BranchEditor({
                   </label>
                   <label className={styles.timeField} htmlFor={`${idPrefix}-${day.key}-from`}>
                     از
-                    <input
+                    <ClockTimePickerField
                       id={`${idPrefix}-${day.key}-from`}
-                      type="time"
                       value={hours?.open ?? ''}
                       disabled={!hours}
                       required={Boolean(hours)}
-                      onChange={(event) =>
-                        onHoursChange(day.key, {
-                          open: event.target.value,
-                          close: hours?.close ?? '',
-                        })
-                      }
+                      allowClear={false}
+                      onChange={(open) => onHoursChange(day.key, { open, close: hours?.close ?? '' })}
+                      title={`ساعت شروع ${day.label}`}
                     />
                   </label>
                   <label className={styles.timeField} htmlFor={`${idPrefix}-${day.key}-to`}>
                     تا
-                    <input
+                    <ClockTimePickerField
                       id={`${idPrefix}-${day.key}-to`}
-                      type="time"
                       value={hours?.close ?? ''}
                       disabled={!hours}
                       required={Boolean(hours)}
-                      onChange={(event) =>
-                        onHoursChange(day.key, {
-                          open: hours?.open ?? '',
-                          close: event.target.value,
-                        })
-                      }
+                      allowClear={false}
+                      onChange={(close) => onHoursChange(day.key, { open: hours?.open ?? '', close })}
+                      title={`ساعت پایان ${day.label}`}
                     />
                   </label>
                 </div>

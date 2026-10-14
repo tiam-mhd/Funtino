@@ -1,7 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { Badge, Button } from '@funtino/design-system';
+import {
+  Badge,
+  Button,
+  ClockTimePickerField,
+  DateTimePickerField,
+  JalaliDatePickerField,
+} from '@funtino/design-system';
 import { FormRenderer } from '@funtino/forms-renderer';
 import {
   createEmptyFormDefinition,
@@ -70,6 +76,10 @@ const fieldLabels: Record<FormFieldType, string> = {
   heading: 'عنوان',
   paragraph: 'توضیح',
   hidden: 'فیلد پنهان',
+};
+const formFieldInputRenderers = {
+  date: JalaliDatePickerField,
+  time: ClockTimePickerField,
 };
 const responseStatusLabels: Record<ResponseStatus, string> = {
   new: 'جدید',
@@ -2847,22 +2857,18 @@ export function OperationsForms({
                       </label>
                       <label>
                         شروع دسترسی
-                        <input
-                          type="datetime-local"
+                        <DateTimePickerField
                           value={settingsDraft.startsAt}
-                          onChange={(event) =>
-                            setSettingsDraft({ ...settingsDraft, startsAt: event.target.value })
-                          }
+                          onChange={(startsAt) => setSettingsDraft({ ...settingsDraft, startsAt })}
+                          title="زمان شروع دسترسی"
                         />
                       </label>
                       <label>
                         پایان دسترسی
-                        <input
-                          type="datetime-local"
+                        <DateTimePickerField
                           value={settingsDraft.endsAt}
-                          onChange={(event) =>
-                            setSettingsDraft({ ...settingsDraft, endsAt: event.target.value })
-                          }
+                          onChange={(endsAt) => setSettingsDraft({ ...settingsDraft, endsAt })}
+                          title="زمان پایان دسترسی"
                         />
                       </label>
                       <label>
@@ -3093,6 +3099,7 @@ export function OperationsForms({
                       if (endPage) setActivePageId(endPage.id);
                     }}
                     mode="preview"
+                    fieldInputRenderers={formFieldInputRenderers}
                   />
                 </div>
                 <p className={styles.helper}>
@@ -3352,24 +3359,24 @@ function ResponseManagement(props: ResponseManagementProps) {
             </label>
             <label>
               از تاریخ
-              <input
-                type="date"
+              <JalaliDatePickerField
                 value={fromDraft}
-                onChange={(event) => {
-                  setFromDraft(event.target.value);
-                  onDateFilter(event.target.value, toDraft);
+                onChange={(nextDate) => {
+                  setFromDraft(nextDate);
+                  onDateFilter(nextDate, toDraft);
                 }}
+                title="فیلتر از تاریخ"
               />
             </label>
             <label>
               تا تاریخ
-              <input
-                type="date"
+              <JalaliDatePickerField
                 value={toDraft}
-                onChange={(event) => {
-                  setToDraft(event.target.value);
-                  onDateFilter(fromDraft, event.target.value);
+                onChange={(nextDate) => {
+                  setToDraft(nextDate);
+                  onDateFilter(fromDraft, nextDate);
                 }}
+                title="فیلتر تا تاریخ"
               />
             </label>
             <label>
@@ -3540,6 +3547,7 @@ function ResponseManagement(props: ResponseManagementProps) {
                         }
                         mode="response"
                         readOnly={false}
+                        fieldInputRenderers={formFieldInputRenderers}
                       />
                       {!showSensitiveDetail && selectedResponse.hasSensitive && (
                         <p className={styles.helper}>

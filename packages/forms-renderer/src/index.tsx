@@ -1,6 +1,6 @@
 'use client';
 
-import type { CSSProperties, ChangeEvent, ReactNode } from 'react';
+import type { CSSProperties, ChangeEvent, ComponentType, ReactNode } from 'react';
 import {
   evaluateCondition,
   nextFlowPage,
@@ -28,6 +28,18 @@ export type FormRendererProps = {
   completed?: boolean;
   onComplete?: () => void;
   submitting?: boolean;
+  fieldInputRenderers?: Partial<Record<'date' | 'time', ComponentType<FormDateTimeFieldProps>>>;
+};
+
+export type FormDateTimeFieldProps = {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  disabled?: boolean;
+  'aria-describedby'?: string;
+  'aria-invalid'?: boolean;
+  'aria-labelledby'?: string;
 };
 
 export function FormRenderer({
@@ -44,6 +56,7 @@ export function FormRenderer({
   completed = false,
   onComplete,
   submitting = false,
+  fieldInputRenderers,
 }: FormRendererProps) {
   const questions = visibleQuestionPages(definition, answers);
   const flowPages = visibleFlowPages(definition, answers);
@@ -196,6 +209,7 @@ export function FormRenderer({
                     error={errors[field.id]}
                     onChange={onAnswerChange}
                     readOnly={readOnly}
+                    fieldInputRenderers={fieldInputRenderers}
                   />
                 ))}
             </div>
@@ -284,12 +298,14 @@ function FieldControl({
   error,
   onChange,
   readOnly,
+  fieldInputRenderers,
 }: {
   field: FormField;
   value: unknown;
   error?: string;
   onChange?: (fieldId: string, value: unknown) => void;
   readOnly: boolean;
+  fieldInputRenderers?: FormRendererProps['fieldInputRenderers'];
 }) {
   const id = `form-field-${field.id}`;
   const helpId = `${id}-help`;
@@ -379,7 +395,15 @@ function FieldControl({
       />
     );
   } else if (field.type === 'date' || field.type === 'time') {
-    control = (
+    const Picker = fieldInputRenderers?.[field.type];
+    control = Picker ? (
+      <Picker
+        {...common}
+        aria-labelledby={`${id}-label`}
+        value={typeof value === 'string' ? value : ''}
+        onChange={(nextValue) => setValue(nextValue)}
+      />
+    ) : (
       <input
         {...common}
         type={field.type}

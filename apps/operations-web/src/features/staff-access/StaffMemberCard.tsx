@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent, type SyntheticEvent } from 'react';
-import { Button, Surface } from '@funtino/design-system';
+import { Button, DateTimePickerField, Surface } from '@funtino/design-system';
 import { ApiRequestError } from '../../lib/api/client';
 import type { OperationsScope } from '../../lib/auth/operations-access';
 import {
@@ -443,11 +443,11 @@ export function StaffMemberCard(props: StaffMemberCardProps) {
                           </label>
                           <label className={styles.field}>
                             زمان انقضا (اختیاری)
-                            <input
+                            <DateTimePickerField
                               disabled={actionsDisabled}
-                              onChange={(event) => setExpiresAt(event.currentTarget.value)}
-                              type="datetime-local"
+                              onChange={setExpiresAt}
                               value={expiresAt}
+                              title="زمان انقضای دسترسی"
                             />
                           </label>
                         </div>

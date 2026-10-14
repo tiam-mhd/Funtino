@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ApiRequestError, apiRequest } from '../../lib/api/client';
+import { DateTimePickerField } from '@funtino/design-system';
 import { LoadingSkeleton } from '../../components/system-shell/LoadingSkeleton';
 import { SystemPageHeader } from '../../components/system-shell/SystemPageHeader';
 import { SystemConfirmDialog } from '../../components/system-shell/SystemConfirmDialog';
@@ -1360,10 +1361,10 @@ export function AccessManagement() {
                     </label>
                     <label>
                       انقضا (اختیاری)
-                      <input
-                        type="datetime-local"
+                      <DateTimePickerField
                         value={overrideExpiry}
-                        onChange={(event) => setOverrideExpiry(event.target.value)}
+                        onChange={setOverrideExpiry}
+                        title="زمان انقضای دسترسی"
                       />
                     </label>
                     <button
