@@ -44,6 +44,8 @@
     scripts/
       deployment/
         export-runflare-bundles.mjs
+        snapshot-integrity.mjs
+        snapshot-integrity.spec.mjs
       runtime-bundle/
         supervisor.mjs
         healthcheck.mjs

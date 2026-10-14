@@ -97,7 +97,7 @@ Bootstrap مالک مقید به شماره طبق ADR-0021 است و migration 
 | فقط DOCS                                              | هیچ‌کدام، مگر Dockerfile/manifest/runtime config هم عوض شود               |
 | migration                                             | job مالک و compatibility release؛ workerهای استثنای ADR-0015 پیش از start |
 
-تا وقتی pipeline انتشار وجود ندارد، انتشار مجاز فقط controlled snapshot از source است. پیش از push برای هر repository باید remote fetch و divergence برابر 0 0 باشد، diff بررسی شود، stage با path روشن انجام شود و force-push ممنوع است. این task فقط snapshot و repository محلی را آماده می‌کند؛ push به GitHub و اتصال به Runflare بخش جداگانه‌ی انتشار است.
+تا وقتی pipeline انتشار وجود ندارد، انتشار مجاز فقط controlled snapshot از source است. receipt مقصد باید با inventory فایل و محتوای commit سازگار باشد؛ اختلاف فقط وقتی پذیرفته می‌شود که clone تمیز باشد و blob فایل مقصد دقیقاً با فایل همان `sourceRevision` درج‌شده در receipt تطبیق کند. اختلاف‌های دیگر export را متوقف می‌کنند. پیش از push برای هر repository باید remote fetch و divergence برابر 0 0 باشد، diff بررسی شود، stage با path روشن انجام شود و force-push ممنوع است. این task فقط snapshot و repository محلی را آماده می‌کند؛ push به GitHub و اتصال به Runflare بخش جداگانه‌ی انتشار است.
 
 بعد از آماده‌شدن source remote و pipeline، pipeline با path filter bundleهای متأثر را کامل prune/build و به دو deployment repository push می‌کند. هر repository یک branch مشخص، ترجیحاً main، و Auto Pull همان item را دنبال می‌کند. Source commit، deployment commit و deployed image/revision جداگانه ثبت می‌شوند.
 

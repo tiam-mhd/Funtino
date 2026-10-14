@@ -15,6 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { committedBlobMatchesSourceRevision } from './snapshot-integrity.mjs';
 
 const SOURCE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const DEPLOYMENT_PARENT = resolve(SOURCE_ROOT, '..', 'Funtino-deployments');
@@ -474,9 +475,39 @@ async function inspectExistingDestination(bundleName, destinationDirectory, rele
         if (committedFile.error) {
           throw committedFile.error;
         }
+        if (committedFile.status !== 0) {
+          snapshotMatches = false;
+          break;
+        }
+
+        const committedBlobHash = createHash('sha256').update(committedFile.stdout).digest('hex');
+        if (committedBlobHash === expectedFile.sha256) {
+          continue;
+        }
+
+        const sourceFile = spawnSync(
+          'git',
+          ['cat-file', 'blob', `${receipt.sourceRevision}:${expectedFile.path}`],
+          {
+            cwd: SOURCE_ROOT,
+            env: SAFE_GIT_DIRECTORY_ENV,
+            maxBuffer: 256 * 1024 * 1024,
+          },
+        );
+        if (sourceFile.error) {
+          throw sourceFile.error;
+        }
+
+        const sourceRevisionBlobHash =
+          sourceFile.status === 0
+            ? createHash('sha256').update(sourceFile.stdout).digest('hex')
+            : null;
         if (
-          committedFile.status !== 0 ||
-          createHash('sha256').update(committedFile.stdout).digest('hex') !== expectedFile.sha256
+          !committedBlobMatchesSourceRevision({
+            sourceRevision: receipt.sourceRevision,
+            committedBlobHash,
+            sourceRevisionBlobHash,
+          })
         ) {
           snapshotMatches = false;
           break;

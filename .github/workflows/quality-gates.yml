@@ -30,6 +30,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --audit-level=high
+      - name: Test deployment snapshot integrity
+        run: node --test scripts/deployment/snapshot-integrity.spec.mjs
       - name: Validate Prometheus rules and Alertmanager configuration
         shell: bash
         run: |
