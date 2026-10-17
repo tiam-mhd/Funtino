@@ -314,10 +314,10 @@
 .header {
   position: relative;
   z-index: 10;
-  display: flex;
+  display: grid;
   min-height: 112px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 26px;
   border-bottom: 1px solid var(--ops-line);
   padding: 17px clamp(20px, 3vw, 40px);
@@ -325,16 +325,27 @@
 }
 
 .headingCopy {
+  width: min(100%, 460px);
   min-width: 0;
+  justify-self: center;
+  text-align: right;
 }
 
 .breadcrumb {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   margin-bottom: 5px;
   color: var(--ft-muted);
   font-size: 10px;
+  white-space: nowrap;
+}
+
+.breadcrumb > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .breadcrumb svg {
@@ -931,7 +942,8 @@
   }
 
   .headingCopy {
-    flex: 1;
+    width: 100%;
+    justify-self: stretch;
   }
 
   .headerContext {
