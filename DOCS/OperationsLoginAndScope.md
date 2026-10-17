@@ -19,6 +19,22 @@
 5. Choosing a scope posts it back to Gateway. The UI enters the scoped shell only after server validation and audit succeed. Changing scope repeats that process.
 6. No active scope produces an explicit access-denied state while preserving the invitation inbox. Dependency errors do not fall back to cached/demo data. The staff-access module is connected to IAM in the scoped shell; other operational modules remain unavailable until separately implemented.
 
+## Workspace header and scope changes
+
+- The header shows the currently active branch, or “همهٔ شعب” when the active scope is the organization. It does not contain a scope selector.
+- The scope selector sits directly below the brand at the top of the sidebar and lists only the scopes already provided to the signed-in user.
+- The user name and access label open a compact account menu containing account security and sign-out actions.
+- On mobile, the same scope selector stays at the top of the sidebar drawer while the active branch remains visible in the page header.
+
+## Responsive presentation and assets
+
+- The phone, code, optional management-password, and scope-selection screens use an RTL responsive layout. Sign-in, code-entry, and scope-selection states share the same visual frame; the page offers explicit light and dark choices through sun and moon icons with a smoothly animated active indicator before and after sign-in. Login, verification, password, scope, and status cards use a lightly translucent surface with 3px background blur so the park remains subtly visible while text stays readable. The desktop introduction uses a high-contrast glass panel and grouped highlights. Motion respects reduced-motion preferences.
+- Desktop uses `login-day-desktop.png` or `login-night-desktop.png`; mobile uses the portrait `login-day-mobile.png` or `login-night-mobile.png` from `apps/operations-web/public/brand/`.
+- The source images are the four files supplied for this task in `DOCS/Images/login-backgrounds/`: `Funtino Park in Golden Daylight.png`, `Funtino Nights_ Neon Amusement Park.png`, `Sunny Funtin Amusement Park Adventure.png`, and `Neon Funtino Carnival at Night.png`. The product owner explicitly requested these images for the Operations Web login. No separate third-party license metadata was supplied.
+- The supplied `DOCS/Images/logos/logo-operation-panel.png` is the official Operations Web logo. Its transparent WebP version, `apps/operations-web/public/brand/operations-panel-logo.webp`, is used in the login header, workspace sidebar, and browser tab icon. Customer Web and System Web retain their own branding. The logo image keeps the accessible name “فانتینو”; no separate third-party license metadata was supplied.
+- The backgrounds are decorative and have no text alternative.
+- This is a presentation-only change. It does not change the public contract, ownership boundaries, authentication transitions, or the explicit scope-selection step.
+
 ## Contract and source layout
 
 - Public contract: `contracts/openapi/gateway.yaml`.

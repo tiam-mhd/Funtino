@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   title: 'فانتینو | پنل عملیات',
   description: 'ورود امن و انتخاب محدوده‌ی مجاز مجموعه یا شعبه در پنل عملیات فانتینو',
   icons: {
-    icon: '/brand/funtino-logo.png',
+    icon: '/brand/operations-panel-logo.webp',
   },
 };
 

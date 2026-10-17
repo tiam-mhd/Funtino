@@ -24,7 +24,7 @@
   height: 100vh;
   min-height: 560px;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
   padding: 0 15px 14px;
   color: #fff;
   background: var(--ops-sidebar);
@@ -54,11 +54,9 @@
 .brandImage {
   display: block;
   width: 102px;
-  height: 38px;
+  height: 39px;
   flex: 0 0 auto;
-  border-radius: 9px;
-  padding: 2px 4px;
-  background: #fff;
+  background: transparent;
   object-fit: contain;
 }
 
@@ -91,12 +89,8 @@
 .mobileMenuButton svg,
 .navIcon svg,
 .scopeMark svg,
-.scopeButtonIcon svg,
 .optionIcon svg,
 .breadcrumb svg,
-.scopeVerified svg,
-.inlineVerified svg,
-.footerShield svg,
 .scopeError svg {
   display: block;
   width: 19px;
@@ -108,15 +102,59 @@
   min-height: 76px;
   align-items: center;
   gap: 11px;
-  margin-top: 16px;
+  margin-top: 0;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 15px;
   padding: 11px;
   background: rgb(255 255 255 / 6%);
 }
 
+.scopeSwitcher {
+  position: relative;
+  z-index: 25;
+  margin-top: 16px;
+}
+
+.scopeCardButton {
+  width: 100%;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: right;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+.scopeCardButton:hover {
+  border-color: rgb(69 201 202 / 40%);
+  background: rgb(255 255 255 / 9%);
+}
+
+.scopeCardButton:active {
+  transform: scale(0.99);
+}
+
+.scopeCardButton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(69 201 202 / 38%);
+}
+
+.scopeCardButton > svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  color: #bac6d5;
+  transition: transform 160ms ease;
+}
+
+.scopeCardButton[aria-expanded='true'] > svg {
+  transform: rotate(180deg);
+}
+
 .scopeMark,
-.scopeButtonIcon,
 .optionIcon {
   display: grid;
   width: 39px;
@@ -129,15 +167,13 @@
 }
 
 .scopeCopy,
-.scopeButtonCopy,
 .optionText {
   display: grid;
   min-width: 0;
   gap: 2px;
 }
 
-.scopeCaption,
-.actionCaption {
+.scopeCaption {
   color: var(--ops-sidebar-muted);
   font-size: 10px;
   font-weight: 700;
@@ -157,25 +193,6 @@
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.scopeVerified,
-.inlineVerified {
-  display: grid;
-  width: 23px;
-  height: 23px;
-  flex: 0 0 auto;
-  place-items: center;
-  margin-inline-start: auto;
-  border-radius: 50%;
-  color: var(--ft-success);
-  background: rgb(58 175 120 / 13%);
-}
-
-.scopeVerified svg,
-.inlineVerified svg {
-  width: 14px;
-  height: 14px;
 }
 
 .navigation {
@@ -236,8 +253,10 @@
 .mobileClose:focus-visible,
 .collapseButton:focus-visible,
 .mobileMenuButton:focus-visible,
-.scopeButton:focus-visible,
+.scopeCardButton:focus-visible,
 .scopeOption:focus-visible,
+.accountTrigger:focus-visible,
+.accountMenuItem:focus-visible,
 .backdrop:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgb(14 207 193 / 35%);
@@ -287,32 +306,9 @@
   display: flex;
   min-height: 54px;
   align-items: center;
-  gap: 9px;
+  justify-content: flex-end;
   border-top: 1px solid rgb(255 255 255 / 10%);
   padding: 12px 4px 0;
-}
-
-.footerShield {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 9px;
-  color: #9ca6c0;
-  background: rgb(255 255 255 / 7%);
-}
-
-.footerShield svg {
-  width: 16px;
-  height: 16px;
-}
-
-.footerText {
-  flex: 1;
-  color: #aeb5ca;
-  font-size: 9px;
-  line-height: 1.8;
 }
 
 .collapseButton {
@@ -349,7 +345,7 @@
   gap: 26px;
   border-bottom: 1px solid var(--ops-line);
   padding: 17px clamp(20px, 3vw, 40px);
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .headingCopy {
@@ -376,6 +372,10 @@
   font-weight: 800;
 }
 
+.mobileBreadcrumb {
+  display: none;
+}
+
 .headingCopy h1 {
   margin: 0;
   color: var(--ft-ink);
@@ -392,109 +392,135 @@
   line-height: 1.8;
 }
 
-.headerActions {
+.headerContext {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 19px;
+  gap: clamp(12px, 1.5vw, 22px);
 }
 
-.scopeSwitcher {
-  position: relative;
-  display: grid;
-  min-width: 220px;
-  gap: 4px;
-}
-
-.actionCaption {
-  color: var(--ft-muted);
-  font-size: 9px;
-}
-
-.scopeButton,
-.scopeButtonStatic {
+.headerScope {
   display: flex;
-  min-height: 48px;
+  min-width: 0;
   align-items: center;
-  gap: 9px;
-  border: 1px solid var(--ops-line);
-  border-radius: 13px;
-  padding: 5px 9px;
-  color: var(--ft-ink);
-  background: #fff;
-  text-align: right;
+  gap: 10px;
 }
 
-.scopeButton {
-  width: 100%;
-  cursor: pointer;
-  font: inherit;
+.headerScopeIcon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--ft-teal-dark);
+  background: rgb(14 207 193 / 9%);
 }
 
-.scopeButton:hover {
-  border-color: rgb(0 107 112 / 38%);
-  background: #fbfefd;
+.headerScopeIcon svg {
+  width: 22px;
+  height: 22px;
 }
 
-.scopeButtonIcon {
-  width: 34px;
-  height: 34px;
+.headerScopeCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
 }
 
-.scopeButtonIcon svg {
-  width: 17px;
-  height: 17px;
-}
-
-.scopeButtonCopy {
-  flex: 1;
-}
-
-.scopeButtonCopy strong,
-.optionText strong {
+.headerScopeCopy strong {
+  max-width: 200px;
   overflow: hidden;
   color: var(--ft-ink);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.scopeButtonCopy small,
-.optionText small {
-  overflow: hidden;
+.headerScopeCopy small {
   color: var(--ft-muted);
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 10px;
 }
 
-.scopeButton > svg {
+.headerDivider {
+  width: 1px;
+  height: 46px;
+  flex: 0 0 auto;
+  background: var(--ft-line);
+}
+
+.account {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.accountTrigger {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  padding: 4px 7px;
+  color: var(--ft-ink);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: right;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.accountTrigger:hover,
+.accountTrigger[aria-expanded='true'] {
+  border-color: var(--ft-line);
+  background: var(--ft-surface-soft);
+}
+
+.accountTrigger > svg {
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
   color: var(--ft-muted);
+  transition: transform 160ms ease;
 }
 
-.scopeMenu {
+.accountTrigger[aria-expanded='true'] > svg {
+  transform: rotate(180deg);
+}
+
+.scopeMenu,
+.accountMenu {
   position: absolute;
   z-index: 50;
   top: calc(100% + 8px);
-  inset-inline: 0;
   display: grid;
   gap: 5px;
   max-height: min(62vh, 430px);
   overflow-y: auto;
-  border: 1px solid var(--ops-line);
+  border: 1px solid rgb(255 255 255 / 13%);
   border-radius: 15px;
   padding: 9px;
-  background: #fff;
-  box-shadow: var(--ft-shadow-md);
+  color: #f4f7fb;
+  background: #242a43;
+  box-shadow: 0 16px 38px rgb(4 9 24 / 30%);
+}
+
+.scopeMenu[hidden],
+.accountMenu[hidden] {
+  display: none;
+}
+
+.scopeMenu {
+  inset-inline-start: 0;
+  width: min(310px, calc(100vw - 34px));
 }
 
 .scopeMenuTitle {
   padding: 3px 8px 6px;
-  color: var(--ft-muted);
+  color: #b9c3d2;
   font-size: 10px;
   font-weight: 800;
 }
@@ -507,14 +533,15 @@
   border: 1px solid transparent;
   border-radius: 11px;
   padding: 6px;
-  background: #fff;
+  color: #f4f7fb;
+  background: transparent;
   cursor: pointer;
   font: inherit;
   text-align: right;
 }
 
 .scopeOption:hover:not(:disabled) {
-  background: var(--ft-surface-soft);
+  background: rgb(255 255 255 / 8%);
 }
 
 .scopeOption:disabled {
@@ -522,8 +549,8 @@
 }
 
 .scopeOptionActive {
-  border-color: rgb(0 107 112 / 15%);
-  background: #effaf8;
+  border-color: rgb(69 201 202 / 30%);
+  background: rgb(69 201 202 / 12%);
 }
 
 .optionIcon {
@@ -540,22 +567,30 @@
   flex: 1;
 }
 
+.optionText strong {
+  overflow: hidden;
+  color: #f4f7fb;
+  font-size: 11px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionText small {
+  overflow: hidden;
+  color: #b9c3d2;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .currentScope {
   border-radius: 999px;
   padding: 4px 7px;
-  color: var(--ft-teal-dark);
-  background: #ddf7f3;
+  color: #8ee7de;
+  background: rgb(69 201 202 / 15%);
   font-size: 9px;
   font-weight: 900;
-}
-
-.scopeMenuNote {
-  margin: 4px 3px 1px;
-  border-top: 1px solid var(--ops-line);
-  padding: 8px 5px 0;
-  color: var(--ft-muted);
-  font-size: 9px;
-  line-height: 1.8;
 }
 
 .tinySpinner {
@@ -566,12 +601,6 @@
   border-top-color: var(--ft-teal-dark);
   border-radius: 50%;
   animation: spin 750ms linear infinite;
-}
-
-.account {
-  display: flex;
-  align-items: center;
-  gap: 9px;
 }
 
 .avatar {
@@ -608,27 +637,76 @@
   font-size: 9px;
 }
 
-.accountSecurityLink {
-  border: 1px solid var(--ft-line);
-  border-radius: 10px;
-  padding: 8px 10px;
-  color: var(--ft-purple);
-  font-size: 10px;
-  font-weight: 800;
+.accountMenu {
+  inset-inline-end: 0;
+  width: min(250px, calc(100vw - 28px));
+  padding: 7px;
+}
+
+.accountMenuItem {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  padding: 6px 9px;
+  color: #f4f7fb;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  text-align: right;
   text-decoration: none;
-  white-space: nowrap;
 }
 
-.accountSecurityLink:focus-visible {
-  outline: 3px solid var(--ft-teal);
-  outline-offset: 2px;
+.accountMenuItem:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 10%);
+  background: rgb(255 255 255 / 8%);
 }
 
-.logoutButton {
-  min-height: 38px !important;
-  border-radius: 11px !important;
-  padding-inline: 11px !important;
-  font-size: 10px !important;
+.accountMenuItem > span:nth-child(2) {
+  flex: 1;
+}
+
+.accountMenuIcon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  color: #83dfdb;
+  background: rgb(69 201 202 / 12%);
+}
+
+.accountMenuIcon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.accountMenuItem > svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: #aeb9c9;
+  transform: rotate(180deg);
+}
+
+.accountMenuLogout {
+  width: 100%;
+  color: #ffd4d8;
+}
+
+.accountMenuLogout .accountMenuIcon {
+  color: #ffabb4;
+  background: rgb(213 80 99 / 15%);
+}
+
+.accountMenuLogout:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .scopeError {
@@ -677,9 +755,7 @@
 .collapsed .brandDivider,
 .collapsed .brandLabel,
 .collapsed .scopeCopy,
-.collapsed .scopeVerified,
-.collapsed .navLabel,
-.collapsed .footerText {
+.collapsed .navLabel {
   display: none;
 }
 
@@ -690,6 +766,10 @@
 .collapsed .scopeCard {
   justify-content: center;
   padding: 9px 5px;
+}
+
+.collapsed .scopeCardButton > svg {
+  display: none;
 }
 
 .collapsed .navItem {
@@ -707,10 +787,6 @@
   padding-inline: 0;
 }
 
-.collapsed .footerShield {
-  display: none;
-}
-
 .collapsed .collapseButton {
   width: 37px;
   height: 37px;
@@ -724,18 +800,19 @@
 
 @media (max-width: 1200px) {
   .header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 14px;
+    gap: 18px;
   }
 
-  .headerActions {
-    width: 100%;
-    justify-content: space-between;
+  .headerContext {
+    gap: 11px;
   }
 
-  .scopeSwitcher {
-    min-width: min(48%, 300px);
+  .accountCopy strong {
+    max-width: 125px;
+  }
+
+  .headerScopeCopy strong {
+    max-width: 145px;
   }
 }
 
@@ -766,17 +843,6 @@
     visibility: visible;
   }
 
-  .brandDivider,
-  .brandLabel,
-  .scopeCopy,
-  .scopeVerified,
-  .groupLabel,
-  .navLabel,
-  .footerText,
-  .footerShield {
-    display: initial;
-  }
-
   .brandRow {
     justify-content: space-between;
   }
@@ -793,17 +859,25 @@
     display: block;
   }
 
+  .collapsed .brandDivider,
+  .collapsed .brandLabel,
+  .collapsed .groupLabel,
+  .collapsed .navLabel {
+    display: initial;
+  }
+
   .scopeCard {
     justify-content: flex-start;
     padding: 11px;
   }
 
+  .collapsed .scopeCopy,
   .scopeCopy {
     display: grid;
   }
 
-  .scopeVerified {
-    display: grid;
+  .collapsed .scopeCardButton > svg {
+    display: block;
   }
 
   .groupLabel {
@@ -819,18 +893,11 @@
     display: block;
   }
 
-  .sidebarFooter {
+  .sidebarFooter,
+  .collapsed .sidebarFooter {
     flex-wrap: nowrap;
     justify-content: flex-start;
     padding-inline: 4px;
-  }
-
-  .footerShield {
-    display: grid;
-  }
-
-  .footerText {
-    display: block;
   }
 
   .collapseButton {
@@ -850,7 +917,7 @@
     border: 1px solid var(--ops-line);
     border-radius: 12px;
     color: var(--ft-ink);
-    background: #fff;
+    background: var(--ft-surface);
     cursor: pointer;
   }
 
@@ -864,77 +931,74 @@
   }
 
   .header {
-    min-height: 88px;
-    flex-direction: row;
+    display: grid;
+    min-height: 76px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
     gap: 12px;
     padding: 14px 18px;
+  }
+
+  .headingCopy .breadcrumb {
+    display: none;
+  }
+
+  .mobileBreadcrumb {
+    display: flex;
+    min-height: 30px;
+    align-items: center;
+    gap: 7px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--ops-line);
+    padding: 0 18px;
+    color: var(--ft-muted);
+    background: var(--ft-surface);
+    font-size: 10px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .mobileBreadcrumb svg {
+    display: block;
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+    transform: rotate(180deg);
+  }
+
+  .mobileBreadcrumb [aria-current='page'] {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--ft-teal-dark);
+    font-weight: 800;
+    text-overflow: ellipsis;
   }
 
   .headingCopy {
     flex: 1;
   }
 
-  .headerActions {
-    width: auto;
-    flex: 0 0 auto;
+  .headerContext {
+    gap: 9px;
   }
 
-  .scopeSwitcher {
-    min-width: 0;
+  .headerDivider {
+    height: 37px;
   }
 
-  .scopeSwitcher > .actionCaption,
-  .accountCopy {
-    display: none;
+  .headerScopeIcon {
+    width: 36px;
+    height: 36px;
   }
 
-  .scopeButton,
-  .scopeButtonStatic {
-    min-height: 42px;
-    width: min(132px, 28vw);
-    min-width: 82px;
-    justify-content: flex-start;
-    padding: 3px 6px;
+  .headerScopeCopy strong {
+    max-width: 115px;
+    font-size: 11px;
   }
 
-  .scopeButtonCopy {
-    display: grid;
-    flex: 1;
-  }
-
-  .scopeButtonCopy small {
-    display: none;
-  }
-
-  .scopeButton > svg,
-  .scopeButtonStatic .inlineVerified {
-    display: none;
-  }
-
-  .scopeButtonIcon {
-    width: 34px;
-    height: 34px;
-  }
-
-  .scopeMenu {
-    inset-inline: auto 0;
-    width: min(310px, 84vw);
-  }
-
-  .account {
-    gap: 6px;
-  }
-
-  .accountSecurityLink {
-    padding: 7px;
-    font-size: 9px;
-  }
-
-  .logoutButton {
-    min-height: 37px !important;
-    padding-inline: 8px !important;
-    font-size: 9px !important;
+  .accountTrigger {
+    gap: 7px;
+    padding-inline: 3px;
   }
 
   .content {
@@ -944,26 +1008,32 @@
 
 @media (max-width: 620px) {
   .header {
-    min-height: 76px;
-    align-items: flex-start;
-    padding: 12px 12px;
+    min-height: 64px;
+    gap: 8px;
+    padding: 11px 12px;
   }
 
   .mobileMenuButton {
     width: 38px;
     height: 38px;
-    margin-top: 4px;
+    margin-top: 0;
   }
 
-  .breadcrumb {
+  .mobileBreadcrumb {
+    min-height: 28px;
     gap: 5px;
-    margin-bottom: 2px;
-    font-size: 8px;
+    padding-inline: 12px;
+    font-size: 9px;
   }
 
-  .breadcrumb svg {
+  .mobileBreadcrumb svg {
     width: 10px;
     height: 10px;
+  }
+
+  .mobileBreadcrumb > :first-child,
+  .mobileBreadcrumb > :nth-child(2) {
+    display: none;
   }
 
   .headingCopy h1 {
@@ -974,19 +1044,58 @@
     display: none;
   }
 
-  .headerActions {
+  .headerContext {
+    gap: 7px;
+  }
+
+  .headerDivider {
+    height: 32px;
+  }
+
+  .headerScope {
     gap: 6px;
-    padding-top: 2px;
+  }
+
+  .headerScopeIcon {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+  }
+
+  .headerScopeIcon svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .headerScopeCopy strong {
+    max-width: 82px;
+    font-size: 9px;
+  }
+
+  .headerScopeCopy small,
+  .accountCopy {
+    display: none;
+  }
+
+  .accountTrigger {
+    min-height: 40px;
+    gap: 0;
+    padding: 2px;
+  }
+
+  .accountTrigger > svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .headerScope {
+    max-width: 120px;
   }
 
   .avatar {
-    width: 36px;
-    height: 36px;
-  }
-
-  .logoutButton {
-    min-height: 36px !important;
-    padding-inline: 7px !important;
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
   }
 
   .content {

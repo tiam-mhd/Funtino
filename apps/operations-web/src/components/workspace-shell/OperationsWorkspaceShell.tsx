@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Button } from '@funtino/design-system';
 import {
   scopeKey,
   type OperationsScope,
@@ -77,24 +76,24 @@ const sectionLabels: Record<WorkspaceSection, string> = {
 };
 
 const sectionDescriptions: Record<WorkspaceSection, string> = {
-  overview: 'وضعیت شعب و سلامت دستگاه‌ها در محدودهٔ مجاز شما',
+  overview: 'وضعیت شعب و دستگاه‌های مجموعه',
   branches: 'فهرست شعب فعال و وضعیت عملیاتی آن‌ها',
-  staff: 'اعضا و نقش‌های محدوده‌ی کاری جاری',
+  staff: 'کارکنان و نقش‌های کاری مجموعه',
   invitationsReceived: 'دعوت‌هایی که برای حساب شما فرستاده شده‌اند',
-  invitationsIssued: 'دعوت‌های کاری صادرشده در همین محدوده',
-  devices: 'فهرست دستگاه‌ها و وضعیت واقعی آن‌ها',
-  cardsInventory: 'موجودی فیزیکی کارت در شعبه‌ی انتخاب‌شده',
-  cardsAssignments: 'تخصیص و پیگیری کارت‌های خانواده در یک شعبه',
-  family: 'جست‌وجو و پشتیبانی محدود خانواده‌ی مشتری',
-  familyMembers: 'اعضای خانواده‌ی انتخاب‌شده پس از جست‌وجوی مجاز',
+  invitationsIssued: 'دعوت‌های کاری فرستاده‌شده برای همکاران',
+  devices: 'فهرست دستگاه‌ها و وضعیت آن‌ها',
+  cardsInventory: 'کارت‌های موجود در شعبه‌ی انتخاب‌شده',
+  cardsAssignments: 'مدیریت کارت‌های خانواده در شعبه‌ی انتخاب‌شده',
+  family: 'جست‌وجو و پیگیری خانواده‌های مشتری',
+  familyMembers: 'اعضای خانواده‌ی انتخاب‌شده',
   familyInvitations: 'وضعیت دعوت‌های خانواده‌ی انتخاب‌شده',
   familyHistory: 'تغییرات ثبت‌شده برای خانواده‌ی انتخاب‌شده',
-  formsLibrary: 'فرم‌های ثبت‌شده در محدوده‌ی کاری جاری',
+  formsLibrary: 'فرم‌های ثبت‌شده در مجموعه',
   formsResponses: 'پاسخ‌های ثبت‌شده برای یک فرم انتخاب‌شده',
-  formsBranches: 'مقایسه‌ی تجمیعی پاسخ فرم‌ها بین شعب',
-  reportsSummary: 'نمای تجمیعی گزارش در بازه‌ی انتخاب‌شده',
+  formsBranches: 'مقایسه‌ی پاسخ فرم‌ها بین شعب',
+  reportsSummary: 'خلاصه‌ی گزارش‌ها در بازه‌ی انتخاب‌شده',
   reportsBranches: 'مقایسه‌ی گزارش مجموعه بین شعب',
-  reportsDaily: 'روند روزانه‌ی رویدادها در بازه‌ی انتخاب‌شده',
+  reportsDaily: 'روند روزانه‌ی فعالیت‌ها در بازه‌ی انتخاب‌شده',
 };
 
 const navigationGroups: Array<{ id: string; label: string; sections: WorkspaceSection[] }> = [
@@ -183,7 +182,7 @@ function scopeLabel(option: OperationsScopeOption) {
 function scopeDescription(option: OperationsScopeOption) {
   return option.scope.type === 'organization'
     ? option.organization.name
-    : `${option.organization.name} · ${option.branch?.city ?? 'شعبهٔ مجاز'}`;
+    : [option.organization.name, option.branch?.city].filter(Boolean).join(' · ');
 }
 
 export function OperationsWorkspaceShell({
@@ -203,12 +202,16 @@ export function OperationsWorkspaceShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [scopeMenuOpen, setScopeMenuOpen] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<string[]>([]);
   const initialActiveSection = useRef(activeSection);
   const sidebarRef = useRef<HTMLElement>(null);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const scopeMenuRef = useRef<HTMLDivElement>(null);
+  const scopeTriggerRef = useRef<HTMLButtonElement>(null);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const accountTriggerRef = useRef<HTMLButtonElement>(null);
   const previouslyOpenedMobileMenu = useRef(false);
 
   const availableScopes = useMemo(() => {
@@ -345,7 +348,9 @@ export function OperationsWorkspaceShell({
     }
     function closeScopeMenuOnEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') {
+        event.preventDefault();
         setScopeMenuOpen(false);
+        scopeTriggerRef.current?.focus();
       }
     }
     document.addEventListener('pointerdown', closeScopeMenu);
@@ -356,9 +361,47 @@ export function OperationsWorkspaceShell({
     };
   }, [scopeMenuOpen]);
 
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    function closeAccountMenu(event: PointerEvent) {
+      if (event.target instanceof Node && !accountMenuRef.current?.contains(event.target)) {
+        setAccountMenuOpen(false);
+      }
+    }
+    function closeAccountMenuOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setAccountMenuOpen(false);
+        accountTriggerRef.current?.focus();
+      }
+    }
+    document.addEventListener('pointerdown', closeAccountMenu);
+    document.addEventListener('keydown', closeAccountMenuOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeAccountMenu);
+      document.removeEventListener('keydown', closeAccountMenuOnEscape);
+    };
+  }, [accountMenuOpen]);
+
+  useEffect(() => {
+    if (!mobileOpen) setScopeMenuOpen(false);
+  }, [mobileOpen]);
+
   function chooseScope(scope: OperationsScope) {
     setScopeMenuOpen(false);
+    setAccountMenuOpen(false);
+    scopeTriggerRef.current?.focus();
     void onSelectScope(scope);
+  }
+
+  function toggleScopeMenu() {
+    setAccountMenuOpen(false);
+    setScopeMenuOpen((open) => !open);
+  }
+
+  function toggleAccountMenu() {
+    setScopeMenuOpen(false);
+    setAccountMenuOpen((open) => !open);
   }
 
   const currentGroupId = navigationGroups.find((group) =>
@@ -391,9 +434,9 @@ export function OperationsWorkspaceShell({
             <Image
               alt="فانتینو"
               className={styles.brandImage}
-              height={42}
+              height={48}
               priority
-              src="/brand/funtino-logo.png"
+              src="/brand/operations-panel-logo.webp"
               width={126}
             />
             <span className={styles.brandDivider} />
@@ -409,25 +452,83 @@ export function OperationsWorkspaceShell({
           </button>
         </div>
 
-        <div className={styles.scopeCard}>
-          <span aria-hidden="true" className={styles.scopeMark}>
-            <Icon name={activeScope.scope.type === 'organization' ? 'organization' : 'branch'} />
-          </span>
-          <span className={styles.scopeCopy}>
-            <span className={styles.scopeCaption}>محدودهٔ فعال</span>
-            <strong>
-              {activeScope.scope.type === 'organization' ? 'همهٔ شعب' : activeScope.branch?.name}
-            </strong>
-            <span>{activeScope.organization.name}</span>
-          </span>
-          <span
-            aria-label="محدوده توسط سرور تأیید شده"
-            className={styles.scopeVerified}
-            role="img"
-            title="محدوده تأیید شده"
-          >
-            <Icon name="check" />
-          </span>
+        <div className={styles.scopeSwitcher} ref={scopeMenuRef}>
+          {hasOtherScopes ? (
+            <button
+              aria-controls="operations-scope-options"
+              aria-expanded={scopeMenuOpen}
+              aria-label={`انتخاب مجموعه یا شعبه، مورد فعلی: ${scopeLabel(activeScope)}`}
+              className={`${styles.scopeCard} ${styles.scopeCardButton}`}
+              onClick={toggleScopeMenu}
+              ref={scopeTriggerRef}
+              type="button"
+            >
+              <span aria-hidden="true" className={styles.scopeMark}>
+                <Icon name={activeScope.scope.type === 'organization' ? 'organization' : 'branch'} />
+              </span>
+              <span className={styles.scopeCopy}>
+                <span className={styles.scopeCaption}>محل فعالیت</span>
+                <strong>{scopeLabel(activeScope)}</strong>
+                <span>{scopeDescription(activeScope)}</span>
+              </span>
+              {selectingScopeKey ? (
+                <span aria-label="در حال تغییر" className={styles.tinySpinner} role="status" />
+              ) : (
+                <Icon name="chevronDown" />
+              )}
+            </button>
+          ) : (
+            <div
+              aria-label={`محل فعالیت فعلی: ${scopeLabel(activeScope)}`}
+              className={styles.scopeCard}
+              role="group"
+            >
+              <span aria-hidden="true" className={styles.scopeMark}>
+                <Icon name={activeScope.scope.type === 'organization' ? 'organization' : 'branch'} />
+              </span>
+              <span className={styles.scopeCopy}>
+                <span className={styles.scopeCaption}>محل فعالیت</span>
+                <strong>{scopeLabel(activeScope)}</strong>
+                <span>{scopeDescription(activeScope)}</span>
+              </span>
+            </div>
+          )}
+          {hasOtherScopes && (
+            <div
+              aria-label="انتخاب مجموعه یا شعبه"
+              className={styles.scopeMenu}
+              hidden={!scopeMenuOpen}
+              id="operations-scope-options"
+              role="group"
+            >
+              <span className={styles.scopeMenuTitle}>انتخاب مجموعه یا شعبه</span>
+              {availableScopes.map((option) => {
+                const isCurrent = scopeKey(option.scope) === scopeKey(activeScope.scope);
+                const optionKey = scopeKey(option.scope);
+                const isSelecting = selectingScopeKey === optionKey;
+                return (
+                  <button
+                    aria-current={isCurrent ? 'true' : undefined}
+                    className={`${styles.scopeOption} ${isCurrent ? styles.scopeOptionActive : ''}`}
+                    disabled={selectingScopeKey !== null || isCurrent}
+                    key={optionKey}
+                    onClick={() => chooseScope(option.scope)}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className={styles.optionIcon}>
+                      <Icon name={option.scope.type === 'organization' ? 'organization' : 'branch'} />
+                    </span>
+                    <span className={styles.optionText}>
+                      <strong>{scopeLabel(option)}</strong>
+                      <small>{scopeDescription(option)}</small>
+                    </span>
+                    {isSelecting && <span aria-hidden="true" className={styles.tinySpinner} />}
+                    {isCurrent && <span className={styles.currentScope}>فعال</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <nav aria-label="بخش‌های پنل عملیات" className={styles.navigation}>
@@ -497,10 +598,6 @@ export function OperationsWorkspaceShell({
         </nav>
 
         <div className={styles.sidebarFooter}>
-          <span aria-hidden="true" className={styles.footerShield}>
-            <Icon name="shield" />
-          </span>
-          <span className={styles.footerText}>مجوز هر درخواست در سرور بررسی می‌شود.</span>
           <button
             aria-label={collapsed ? 'بازکردن منوی کناری' : 'بستن منوی کناری'}
             className={styles.collapseButton}
@@ -538,114 +635,87 @@ export function OperationsWorkspaceShell({
             <p>{sectionDescriptions[activeSection]}</p>
           </div>
 
-          <div className={styles.headerActions}>
-            <div className={styles.scopeSwitcher} ref={scopeMenuRef}>
-              <span className={styles.actionCaption}>محدودهٔ کاری</span>
-              {hasOtherScopes ? (
-                <button
-                  aria-label={`تغییر محدودهٔ کاری، محدودهٔ فعلی: ${scopeLabel(activeScope)}`}
-                  aria-expanded={scopeMenuOpen}
-                  aria-haspopup="true"
-                  className={styles.scopeButton}
-                  onClick={() => setScopeMenuOpen((open) => !open)}
-                  type="button"
-                >
-                  <span aria-hidden="true" className={styles.scopeButtonIcon}>
-                    <Icon name="organization" />
-                  </span>
-                  <span className={styles.scopeButtonCopy}>
-                    <strong>{scopeLabel(activeScope)}</strong>
-                    <small>{scopeDescription(activeScope)}</small>
-                  </span>
-                  {selectingScopeKey ? (
-                    <span aria-label="در حال تغییر محدوده" className={styles.tinySpinner} />
-                  ) : (
-                    <Icon name="chevronDown" />
-                  )}
-                </button>
-              ) : (
-                <div
-                  aria-label={`محدودهٔ کاری فعلی: ${scopeLabel(activeScope)}`}
-                  className={styles.scopeButtonStatic}
-                  role="group"
-                >
-                  <span aria-hidden="true" className={styles.scopeButtonIcon}>
-                    <Icon name="organization" />
-                  </span>
-                  <span className={styles.scopeButtonCopy}>
-                    <strong>{scopeLabel(activeScope)}</strong>
-                    <small>{scopeDescription(activeScope)}</small>
-                  </span>
-                  <span aria-label="تأییدشده" className={styles.inlineVerified} role="img">
-                    <Icon name="check" />
-                  </span>
-                </div>
-              )}
-              {scopeMenuOpen && hasOtherScopes && (
-                <div aria-label="انتخاب محدودهٔ کاری" className={styles.scopeMenu}>
-                  <span className={styles.scopeMenuTitle}>محدودهٔ مجاز را انتخاب کنید</span>
-                  {availableScopes.map((option) => {
-                    const isCurrent = scopeKey(option.scope) === scopeKey(activeScope.scope);
-                    const optionKey = scopeKey(option.scope);
-                    const isSelecting = selectingScopeKey === optionKey;
-                    return (
-                      <button
-                        aria-current={isCurrent ? 'true' : undefined}
-                        className={`${styles.scopeOption} ${isCurrent ? styles.scopeOptionActive : ''}`}
-                        disabled={selectingScopeKey !== null || isCurrent}
-                        key={optionKey}
-                        onClick={() => chooseScope(option.scope)}
-                        type="button"
-                      >
-                        <span aria-hidden="true" className={styles.optionIcon}>
-                          <Icon
-                            name={option.scope.type === 'organization' ? 'organization' : 'branch'}
-                          />
-                        </span>
-                        <span className={styles.optionText}>
-                          <strong>{scopeLabel(option)}</strong>
-                          <small>{scopeDescription(option)}</small>
-                        </span>
-                        {isSelecting && <span aria-hidden="true" className={styles.tinySpinner} />}
-                        {isCurrent && <span className={styles.currentScope}>فعال</span>}
-                      </button>
-                    );
-                  })}
-                  <p className={styles.scopeMenuNote}>
-                    انتخاب محدوده در سرور دوباره بررسی و ثبت می‌شود.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className={styles.account}>
-              <span aria-hidden="true" className={styles.avatar}>
-                {userLabel.slice(0, 1) || 'ک'}
+          <div className={styles.headerContext}>
+            <div
+              aria-label={`محل فعالیت فعلی: ${scopeLabel(activeScope)}`}
+              className={styles.headerScope}
+              role="group"
+            >
+              <span aria-hidden="true" className={styles.headerScopeIcon}>
+                <Icon name={activeScope.scope.type === 'organization' ? 'organization' : 'branch'} />
               </span>
-              <span className={styles.accountCopy}>
-                <strong dir="auto">{userLabel}</strong>
+              <span className={styles.headerScopeCopy}>
+                <strong>{scopeLabel(activeScope)}</strong>
                 <small>
-                  {activeScope.scope.type === 'organization' ? 'دسترسی مجموعه' : 'دسترسی شعبه'}
+                  {activeScope.scope.type === 'organization' ? 'مجموعهٔ فعال' : 'شعبهٔ فعال'}
                 </small>
               </span>
-              <a
-                className={styles.accountSecurityLink}
-                href="/account/security/management-password"
-              >
-                امنیت حساب
-              </a>
-              <Button
-                className={styles.logoutButton}
-                disabled={logoutBusy}
-                onClick={onLogout}
-                tone="ghost"
+            </div>
+            <span aria-hidden="true" className={styles.headerDivider} />
+            <div className={styles.account} ref={accountMenuRef}>
+              <button
+                aria-controls="operations-account-actions"
+                aria-expanded={accountMenuOpen}
+                aria-label={`نمایش حساب ${userLabel}، ${activeScope.scope.type === 'organization' ? 'دسترسی مجموعه' : 'دسترسی شعبه'}`}
+                className={styles.accountTrigger}
+                onClick={toggleAccountMenu}
+                ref={accountTriggerRef}
                 type="button"
               >
-                {logoutBusy ? 'در حال خروج…' : 'خروج امن'}
-              </Button>
+                <span aria-hidden="true" className={styles.avatar}>
+                  {userLabel.slice(0, 1) || 'ک'}
+                </span>
+                <span className={styles.accountCopy}>
+                  <strong dir="auto">{userLabel}</strong>
+                  <small>
+                    {activeScope.scope.type === 'organization' ? 'دسترسی مجموعه' : 'دسترسی شعبه'}
+                  </small>
+                </span>
+                <Icon name="chevronDown" />
+              </button>
+              <div
+                aria-label="گزینه‌های حساب کاربری"
+                className={styles.accountMenu}
+                hidden={!accountMenuOpen}
+                id="operations-account-actions"
+                role="group"
+              >
+                <Link
+                  className={styles.accountMenuItem}
+                  href="/account/security/management-password"
+                >
+                  <span aria-hidden="true" className={styles.accountMenuIcon}>
+                    <Icon name="shield" />
+                  </span>
+                  <span>امنیت حساب</span>
+                  <Icon name="chevron" />
+                </Link>
+                <button
+                  className={`${styles.accountMenuItem} ${styles.accountMenuLogout}`}
+                  disabled={logoutBusy}
+                  onClick={() => {
+                    setAccountMenuOpen(false);
+                    onLogout();
+                  }}
+                  type="button"
+                >
+                  <span aria-hidden="true" className={styles.accountMenuIcon}>
+                    <Icon name="logout" />
+                  </span>
+                  <span>{logoutBusy ? 'در حال خروج…' : 'خروج از حساب'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </header>
+
+        <nav aria-label="مسیر صفحه" className={styles.mobileBreadcrumb}>
+          <span>فانتینو</span>
+          <Icon name="chevron" />
+          <span>پنل عملیات</span>
+          <Icon name="chevron" />
+          <span aria-current="page">{sectionLabels[activeSection]}</span>
+        </nav>
 
         {scopeError && (
           <div className={styles.scopeError} role="alert">
@@ -679,7 +749,8 @@ function Icon({
     | 'close'
     | 'chevron'
     | 'chevronDown'
-    | 'warning';
+    | 'warning'
+    | 'logout';
 }) {
   const common = {
     'aria-hidden': true as const,
@@ -809,6 +880,11 @@ function Icon({
       <>
         <path d="M12 3 2.8 19a1.6 1.6 0 0 0 1.4 2.4h15.6a1.6 1.6 0 0 0 1.4-2.4L12 3Z" />
         <path d="M12 9v4M12 17h.01" />
+      </>
+    ),
+    logout: (
+      <>
+        <path d="M10 5H5v14h5M15 16l4-4-4-4M19 12H9" />
       </>
     ),
   };
