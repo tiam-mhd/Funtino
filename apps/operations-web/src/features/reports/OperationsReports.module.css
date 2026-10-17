@@ -81,7 +81,7 @@
 }
 .coverage {
   border-color: rgb(14 143 147 / 18%);
-  background: #f6fcfb;
+  background: var(--ops-surface-subtle);
 }
 .coverage strong {
   color: var(--ft-ink);
@@ -96,7 +96,7 @@
 .coverageWarning {
   border-inline-start: 3px solid #d18a1d;
   padding-inline-start: 10px;
-  color: #805519 !important;
+  color: var(--ops-warning-ink) !important;
 }
 .coverage code {
   color: var(--ft-teal-dark);
@@ -128,7 +128,7 @@
   line-height: 1.8;
 }
 .warningValue {
-  color: #9c5d06 !important;
+  color: var(--ops-warning-ink) !important;
 }
 .periodSummary,
 .branchPanel {
@@ -168,7 +168,7 @@
   border-radius: 13px;
 }
 .tableScroller:focus-visible {
-  outline: 3px solid var(--ft-focus, #2563eb);
+  outline: 3px solid var(--ft-focus, var(--ft-focus));
   outline-offset: 3px;
 }
 .tableScroller table {
@@ -186,7 +186,7 @@
 }
 .tableScroller thead th {
   color: var(--ft-ink-soft);
-  background: #f8f9fc;
+  background: var(--ops-surface-subtle);
   font-weight: 800;
 }
 .tableScroller tbody th {
@@ -229,7 +229,7 @@
   height: 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: #eef0f5;
+  background: var(--ops-surface-subtle);
 }
 .barTrack span {
   display: block;
@@ -255,17 +255,17 @@
 }
 .error {
   border-color: rgb(216 91 105 / 30%);
-  background: #fff7f8;
+  background: var(--ops-surface-subtle);
 }
 .error p {
   margin: 0 0 9px;
-  color: #963b49;
+  color: var(--ft-ink-soft);
   font-size: 12px;
   line-height: 1.8;
 }
 .errorText {
   margin: 0;
-  color: #963b49;
+  color: var(--ft-ink-soft);
   font-size: 12px;
 }
 .notice {
@@ -273,8 +273,8 @@
   border: 1px solid rgb(33 134 93 / 22%);
   border-radius: 12px;
   padding: 12px 14px;
-  color: #23694c;
-  background: #f2fbf6;
+  color: var(--ops-success-ink);
+  background: var(--ops-surface-subtle);
   font-size: 12px;
 }
 .mfaPanel {
@@ -298,8 +298,8 @@
   overflow-wrap: anywhere;
   border-radius: 9px;
   padding: 11px;
-  color: #4d397f;
-  background: #f4f0ff;
+  color: var(--ops-purple-ink);
+  background: var(--ops-purple-bg);
 }
 .recoveryCodes {
   display: grid;
@@ -326,8 +326,8 @@
 .warning {
   border-radius: 10px;
   padding: 11px;
-  color: #805519 !important;
-  background: #fff8eb;
+  color: var(--ops-warning-ink) !important;
+  background: var(--ops-warning-bg);
 }
 
 @media (max-width: 900px) {
@@ -372,12 +372,12 @@
 .branchPanel,
 .mfaPanel {
   border-radius: 14px;
-  background-color: #fff;
+  background-color: var(--ft-surface);
 }
 
 .coverage {
-  border-color: #d9e7e5;
-  background: #f7fbfa;
+  border-color: var(--ft-line);
+  background: var(--ops-surface-subtle);
 }
 
 .tableScroller {
@@ -387,7 +387,7 @@
 }
 
 .tableScroller thead th {
-  background: #f4f7f9;
+  background: var(--ops-surface-subtle);
 }
 
 .totalGrid > div,
@@ -397,8 +397,8 @@
 }
 
 .notice {
-  border-color: #cfe4dc;
+  border-color: var(--ops-success-line);
   border-radius: 10px;
-  color: #23694c;
-  background: #f3faf6;
+  color: var(--ops-success-ink);
+  background: var(--ops-surface-subtle);
 }

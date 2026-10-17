@@ -1,8 +1,8 @@
 .panel {
   display: grid;
   gap: 12px;
-  border: 1px solid #e4dece;
-  background: #fffdf8;
+  border: 1px solid var(--ops-warning-line);
+  background: var(--ops-surface-subtle);
   box-shadow: none;
 }
 
@@ -45,11 +45,11 @@
 .field select {
   width: 100%;
   min-height: 44px;
-  border: 1px solid #d9dce8;
+  border: 1px solid var(--ft-line);
   border-radius: 12px;
   padding: 9px 11px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font: inherit;
   font-size: 13px;
 }
@@ -68,7 +68,7 @@
   border-radius: 10px;
   padding: 10px 12px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font-size: 13px;
 }
 
@@ -81,7 +81,7 @@
   border-radius: 12px;
   padding: 14px 32px 14px 14px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font-size: 12px;
 }
 
@@ -109,15 +109,15 @@
   margin: 0;
   border-radius: 10px;
   padding: 10px 12px;
-  color: #85510b;
-  background: #fff2d7;
+  color: var(--ops-warning-ink);
+  background: var(--ops-warning-bg);
   font-size: 11px;
   line-height: 1.9;
 }
 
 .error {
   margin: 0;
-  color: var(--ft-danger, #a62338);
+  color: var(--ft-danger, var(--ops-danger-ink));
   font-size: 11px;
   line-height: 1.8;
 }

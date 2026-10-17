@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { OperationsThemeToggle } from './OperationsThemeToggle';
 import {
   scopeKey,
   type OperationsScope,
@@ -31,14 +32,30 @@ export type WorkspaceSection =
   | 'reportsDaily';
 
 type NavigationIcon =
+  | 'groupOverview'
+  | 'groupOrganization'
+  | 'groupEquipment'
+  | 'groupForms'
+  | 'groupReports'
+  | 'groupFamilies'
   | 'overview'
   | 'branches'
   | 'staff'
+  | 'invitationsReceived'
+  | 'invitationsIssued'
   | 'devices'
-  | 'cards'
-  | 'family'
-  | 'reports'
-  | 'forms';
+  | 'cardsInventory'
+  | 'cardsAssignments'
+  | 'familySearch'
+  | 'familyMembers'
+  | 'familyInvitations'
+  | 'familyHistory'
+  | 'formsLibrary'
+  | 'formsResponses'
+  | 'formsBranches'
+  | 'reportsSummary'
+  | 'reportsBranches'
+  | 'reportsDaily';
 
 type Props = {
   activeSection: WorkspaceSection;
@@ -56,23 +73,23 @@ type Props = {
 
 const sectionLabels: Record<WorkspaceSection, string> = {
   overview: 'نمای کلی',
-  branches: 'شعب',
-  staff: 'کارکنان',
+  branches: 'شعبه‌ها',
+  staff: 'همکاران',
   invitationsReceived: 'دعوت‌های دریافتی',
-  invitationsIssued: 'دعوت‌های صادرشده',
+  invitationsIssued: 'دعوت‌های ارسالی',
   devices: 'دستگاه‌ها',
-  cardsInventory: 'موجودی کارت',
-  cardsAssignments: 'تخصیص کارت',
-  family: 'پشتیبانی خانواده',
+  cardsInventory: 'موجودی کارت‌ها',
+  cardsAssignments: 'کارت خانواده‌ها',
+  family: 'جست‌وجوی خانواده‌ها',
   familyMembers: 'اعضای خانواده',
   familyInvitations: 'دعوت‌های خانواده',
-  familyHistory: 'تاریخچه‌ی خانواده',
+  familyHistory: 'سابقه خانواده',
   formsLibrary: 'فهرست فرم‌ها',
   formsResponses: 'پاسخ‌های فرم',
-  formsBranches: 'مقایسه‌ی پاسخ شعب',
-  reportsSummary: 'خلاصه‌ی گزارش',
-  reportsBranches: 'مقایسه‌ی شعب',
-  reportsDaily: 'روند روزانه',
+  formsBranches: 'پاسخ فرم‌ها در شعب',
+  reportsSummary: 'خلاصه عملکرد',
+  reportsBranches: 'مقایسه شعب',
+  reportsDaily: 'فعالیت روزانه',
 };
 
 const sectionDescriptions: Record<WorkspaceSection, string> = {
@@ -96,27 +113,41 @@ const sectionDescriptions: Record<WorkspaceSection, string> = {
   reportsDaily: 'روند روزانه‌ی فعالیت‌ها در بازه‌ی انتخاب‌شده',
 };
 
-const navigationGroups: Array<{ id: string; label: string; sections: WorkspaceSection[] }> = [
-  { id: 'overview', label: 'پیشخوان', sections: ['overview'] },
+const navigationGroups: Array<{
+  id: string;
+  label: string;
+  icon: NavigationIcon;
+  sections: WorkspaceSection[];
+}> = [
+  { id: 'overview', label: 'پیشخوان', icon: 'groupOverview', sections: ['overview'] },
   {
     id: 'structure-access',
-    label: 'ساختار و دسترسی',
+    label: 'شعب و همکاران',
+    icon: 'groupOrganization',
     sections: ['branches', 'staff', 'invitationsReceived', 'invitationsIssued'],
   },
   {
     id: 'cards-devices',
-    label: 'کارت و تجهیزات',
+    label: 'کارت‌ها و دستگاه‌ها',
+    icon: 'groupEquipment',
     sections: ['devices', 'cardsInventory', 'cardsAssignments'],
   },
-  { id: 'forms', label: 'فرم‌ها', sections: ['formsLibrary', 'formsResponses', 'formsBranches'] },
+  {
+    id: 'forms',
+    label: 'فرم‌ها',
+    icon: 'groupForms',
+    sections: ['formsLibrary', 'formsResponses', 'formsBranches'],
+  },
   {
     id: 'reports',
     label: 'گزارش‌ها',
+    icon: 'groupReports',
     sections: ['reportsSummary', 'reportsBranches', 'reportsDaily'],
   },
   {
     id: 'support',
-    label: 'پشتیبانی خانواده',
+    label: 'خانواده‌ها',
+    icon: 'groupFamilies',
     sections: ['family', 'familyMembers', 'familyInvitations', 'familyHistory'],
   },
 ];
@@ -125,21 +156,21 @@ const sectionIcons: Record<WorkspaceSection, NavigationIcon> = {
   overview: 'overview',
   branches: 'branches',
   staff: 'staff',
-  invitationsReceived: 'staff',
-  invitationsIssued: 'staff',
+  invitationsReceived: 'invitationsReceived',
+  invitationsIssued: 'invitationsIssued',
   devices: 'devices',
-  cardsInventory: 'cards',
-  cardsAssignments: 'cards',
-  family: 'family',
-  familyMembers: 'family',
-  familyInvitations: 'family',
-  familyHistory: 'family',
-  formsLibrary: 'forms',
-  formsResponses: 'forms',
-  formsBranches: 'reports',
-  reportsSummary: 'reports',
-  reportsBranches: 'reports',
-  reportsDaily: 'reports',
+  cardsInventory: 'cardsInventory',
+  cardsAssignments: 'cardsAssignments',
+  family: 'familySearch',
+  familyMembers: 'familyMembers',
+  familyInvitations: 'familyInvitations',
+  familyHistory: 'familyHistory',
+  formsLibrary: 'formsLibrary',
+  formsResponses: 'formsResponses',
+  formsBranches: 'formsBranches',
+  reportsSummary: 'reportsSummary',
+  reportsBranches: 'reportsBranches',
+  reportsDaily: 'reportsDaily',
 };
 
 const sectionHrefs: Record<WorkspaceSection, string> = {
@@ -430,7 +461,7 @@ export function OperationsWorkspaceShell({
         role={isMobile && mobileOpen ? 'dialog' : undefined}
       >
         <div className={styles.brandRow}>
-          <a className={styles.brand} href="/" aria-label="فانتینو، پنل عملیات">
+          <a className={styles.brand} href="/" aria-label="صفحه اصلی پنل فانتینو">
             <Image
               alt="فانتینو"
               className={styles.brandImage}
@@ -439,8 +470,6 @@ export function OperationsWorkspaceShell({
               src="/brand/operations-panel-logo.webp"
               width={126}
             />
-            <span className={styles.brandDivider} />
-            <span className={styles.brandLabel}>پنل عملیات</span>
           </a>
           <button
             aria-label="بستن منو"
@@ -548,7 +577,7 @@ export function OperationsWorkspaceShell({
               ? sections
               : sections.filter((section) => section === activeSection);
             return (
-              <div className={styles.navGroup} key={group.label}>
+              <div className={styles.navGroup} key={group.id}>
                 <h2
                   className={`${styles.groupLabel} ${currentGroupId === group.id ? styles.groupLabelActive : ''}`}
                 >
@@ -567,7 +596,12 @@ export function OperationsWorkspaceShell({
                     title={collapsed ? group.label : undefined}
                     type="button"
                   >
-                    <span>{group.label}</span>
+                    <span className={styles.groupCopy}>
+                      <span aria-hidden="true" className={styles.groupIcon}>
+                        <Icon name={group.icon} />
+                      </span>
+                      <span className={styles.groupText}>{group.label}</span>
+                    </span>
                     <Icon name="chevronDown" />
                   </button>
                 </h2>
@@ -598,15 +632,7 @@ export function OperationsWorkspaceShell({
         </nav>
 
         <div className={styles.sidebarFooter}>
-          <button
-            aria-label={collapsed ? 'بازکردن منوی کناری' : 'بستن منوی کناری'}
-            className={styles.collapseButton}
-            onClick={() => setCollapsed((value) => !value)}
-            title={collapsed ? 'بازکردن منو' : 'جمع‌کردن منو'}
-            type="button"
-          >
-            <Icon name={collapsed ? 'expand' : 'collapse'} />
-          </button>
+          <OperationsThemeToggle />
         </div>
       </aside>
 
@@ -614,10 +640,14 @@ export function OperationsWorkspaceShell({
         <header className={styles.header}>
           <button
             aria-controls="operations-sidebar"
-            aria-expanded={mobileOpen}
-            aria-label={mobileOpen ? 'بستن منو' : 'بازکردن منو'}
+            aria-expanded={isMobile ? mobileOpen : !collapsed}
+            aria-label={isMobile ? 'بازکردن منو' : collapsed ? 'بازکردن منو' : 'جمع‌کردن منو'}
             className={styles.mobileMenuButton}
-            onClick={() => setMobileOpen(true)}
+            onClick={() => {
+              if (isMobile) setMobileOpen(true);
+              else setCollapsed((value) => !value);
+            }}
+            title={isMobile ? 'بازکردن منو' : collapsed ? 'بازکردن منو' : 'جمع‌کردن منو'}
             ref={mobileMenuButtonRef}
             type="button"
           >
@@ -763,21 +793,57 @@ function Icon({
   };
 
   const content: Record<typeof name, ReactNode> = {
+    groupOverview: (
+      <>
+        <rect x="3.5" y="4" width="7" height="6.5" rx="1.5" />
+        <rect x="13.5" y="4" width="7" height="6.5" rx="1.5" />
+        <rect x="3.5" y="13.5" width="7" height="6.5" rx="1.5" />
+        <rect x="13.5" y="13.5" width="7" height="6.5" rx="1.5" />
+      </>
+    ),
+    groupOrganization: (
+      <>
+        <path d="M3.5 20.5h17M5.5 20.5V7l6.5-3.5L18.5 7v13.5" />
+        <path d="M8.5 9h1M8.5 12h1M14.5 9h1M14.5 12h1M10 20.5v-4h4v4" />
+      </>
+    ),
+    groupEquipment: (
+      <>
+        <path d="M4 8h16v12H4zM8 8V5h8v3M4 12h16" />
+        <path d="M10 12v2h4v-2" />
+      </>
+    ),
+    groupForms: (
+      <>
+        <path d="M7 4.5h9l3 3V19a1.5 1.5 0 0 1-1.5 1.5H7A2 2 0 0 1 5 18.5v-12a2 2 0 0 1 2-2Z" />
+        <path d="M16 4.5v3h3M8.5 11h7M8.5 14.5h7M8.5 18h4" />
+        <path d="M3.5 8v11a2 2 0 0 0 2 2" />
+      </>
+    ),
+    groupReports: (
+      <>
+        <rect x="3.5" y="4" width="17" height="16" rx="2" />
+        <path d="M7 16v-3M11 16V8M15 16v-5M18 8.5l-3 3-3-2-4 4" />
+      </>
+    ),
+    groupFamilies: (
+      <>
+        <circle cx="8" cy="8" r="2.7" />
+        <circle cx="16" cy="8" r="2.7" />
+        <path d="M3.5 19v-1.5a4 4 0 0 1 4-4h1a4 4 0 0 1 4 4V19M11.5 15a4 4 0 0 1 3.5-1.5h1a4 4 0 0 1 4 4V19" />
+      </>
+    ),
     overview: (
       <>
-        <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
-        <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
-        <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
-        <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+        <path d="M4.5 15a7.5 7.5 0 1 1 15 0" />
+        <path d="M12 12l4-3M5 19.5h14" />
+        <circle cx="12" cy="12" r="1" />
       </>
     ),
     branches: (
       <>
-        <path d="M6 20v-5a3 3 0 0 1 3-3h6a3 3 0 0 0 3-3V4" />
-        <circle cx="6" cy="20" r="2" />
-        <circle cx="18" cy="4" r="2" />
-        <circle cx="18" cy="20" r="2" />
-        <path d="M18 6v12" />
+        <path d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12Z" />
+        <path d="M9 9h6M9 12h6M10 6h4" />
       </>
     ),
     staff: (
@@ -787,37 +853,105 @@ function Icon({
         <path d="M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M16 4.2a3.5 3.5 0 0 1 0 6.6" />
       </>
     ),
+    invitationsReceived: (
+      <>
+        <path d="M4 14h4l2 3h4l2-3h4v6H4z" />
+        <path d="M12 3v10M8.5 9.5 12 13l3.5-3.5" />
+      </>
+    ),
+    invitationsIssued: (
+      <>
+        <rect x="3.5" y="6" width="13.5" height="12" rx="2" />
+        <path d="m4.5 7 5.75 4.5L16 7M14 3h6v6M20 3l-7 7" />
+      </>
+    ),
     devices: (
       <>
-        <rect x="5" y="3" width="14" height="18" rx="2" />
-        <path d="M9 7h6M9 11h6M9 15h2" />
-        <circle cx="16" cy="16" r="1" />
+        <rect x="2.5" y="4" width="13" height="11" rx="1.5" />
+        <path d="M6 19h6M9 15v4" />
+        <rect x="17.5" y="7" width="4" height="11" rx="1" />
+        <path d="M19 15.5h1" />
       </>
     ),
-    cards: (
+    cardsInventory: (
+      <>
+        <rect x="5" y="3.5" width="15" height="12" rx="2" />
+        <rect x="3.5" y="8.5" width="15" height="12" rx="2" />
+        <path d="M6.5 12.5h5M6.5 16.5h3" />
+      </>
+    ),
+    cardsAssignments: (
       <>
         <rect x="3" y="5" width="18" height="14" rx="2" />
-        <path d="M3 10h18M7 15h3" />
+        <path d="M3 9.5h18M6.5 14.5h5" />
+        <circle cx="17" cy="15" r="2.2" />
+        <path d="M14.5 19a3 3 0 0 1 5 0" />
       </>
     ),
-    family: (
+    familySearch: (
+      <>
+        <circle cx="10.5" cy="10.5" r="6" />
+        <path d="m15 15 5 5M8.5 10h4M10.5 8v5" />
+      </>
+    ),
+    familyMembers: (
+      <>
+        <path d="m3 10 9-7 9 7v10.5H3Z" />
+        <circle cx="9" cy="12" r="1.8" />
+        <circle cx="15" cy="12" r="1.8" />
+        <path d="M6 18a3 3 0 0 1 6 0M12 18a3 3 0 0 1 6 0" />
+      </>
+    ),
+    familyInvitations: (
       <>
         <circle cx="9" cy="8" r="3" />
-        <circle cx="17" cy="9" r="2.2" />
-        <path d="M3.5 20v-1.3a4 4 0 0 1 4-4h3a4 4 0 0 1 4 4V20M15 15a3.5 3.5 0 0 1 5.5 2.8V20" />
+        <path d="M3 20v-1.5a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4V20M18 7v6M15 10h6" />
       </>
     ),
-    reports: (
+    familyHistory: (
       <>
-        <path d="M4 19.5h16M6 16V9M12 16V4M18 16v-4" />
-        <circle cx="6" cy="7" r="1" />
-        <circle cx="18" cy="10" r="1" />
+        <circle cx="11" cy="12" r="8" />
+        <path d="M11 7v5l3 2M4 4v4h4M4.5 8A8 8 0 0 1 19 7" />
       </>
     ),
-    forms: (
+    formsLibrary: (
       <>
-        <path d="M7 3.5h7l4 4V20a1 1 0 0 1-1 1H7a2 2 0 0 1-2-2V5.5a2 2 0 0 1 2-2Z" />
-        <path d="M14 3.5v4h4M8.5 12h7M8.5 16h7" />
+        <path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v15H7.5A2.5 2.5 0 0 0 5 20.5Z" />
+        <path d="M5 5.5v15M9 7h6M9 10.5h6M9 14h6" />
+      </>
+    ),
+    formsResponses: (
+      <>
+        <path d="M6 3.5h12v17H6zM9 3.5v-1h6v1" />
+        <path d="m9 11 2 2 4-4M9 17h6" />
+      </>
+    ),
+    formsBranches: (
+      <>
+        <path d="M5 4.5h9l3 3v3M14 4.5v3h3M8 10v4m0 0h8m-8 0v5m8-5v5" />
+        <circle cx="8" cy="20" r="1.5" />
+        <circle cx="16" cy="20" r="1.5" />
+        <path d="M5 10h6" />
+      </>
+    ),
+    reportsSummary: (
+      <>
+        <path d="M12 3.5v8.5h8.5A8.5 8.5 0 1 1 12 3.5Z" />
+        <path d="M15 3.8a8.5 8.5 0 0 1 5.2 5.2H15Z" />
+      </>
+    ),
+    reportsBranches: (
+      <>
+        <path d="M4 19.5h16M6 16V9M12 16V5M18 16v-5" />
+        <path d="M4.5 7.5 9 5l3 2 6-3" />
+      </>
+    ),
+    reportsDaily: (
+      <>
+        <rect x="3.5" y="5" width="17" height="16" rx="2" />
+        <path d="M7.5 3v4M16.5 3v4M3.5 9h17" />
+        <circle cx="12" cy="15" r="3" />
+        <path d="M12 13.5V15l1 1" />
       </>
     ),
     organization: (

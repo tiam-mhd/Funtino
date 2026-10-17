@@ -65,7 +65,7 @@
   align-items: end;
   gap: 11px;
   border: 1px solid var(--ft-line);
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .field {
@@ -84,12 +84,12 @@
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  border: 1px solid #d9dce8;
+  border: 1px solid var(--ft-line);
   border-radius: 12px;
   padding: 9px 11px;
   outline: none;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -110,7 +110,7 @@
 .field select:disabled,
 .field textarea:disabled {
   color: var(--ft-muted);
-  background: #f6f7fa;
+  background: var(--ops-surface-subtle);
 }
 
 .filterNote {
@@ -127,7 +127,7 @@
   align-items: center;
   gap: 10px;
   border: 1px solid rgb(14 207 193 / 20%);
-  background: #effbf9;
+  background: var(--ops-success-bg);
 }
 
 .scopeBanner > span {
@@ -145,7 +145,7 @@
   display: grid;
   gap: 11px;
   border: 1px solid var(--ft-line);
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .panel h3 {
@@ -176,13 +176,13 @@
 }
 
 .notice {
-  color: #087269;
-  background: #e8faf6;
+  color: var(--ft-teal-dark);
+  background: var(--ops-success-bg);
 }
 
 .error {
-  color: #a62338;
-  background: #fff0f2;
+  color: var(--ops-danger-ink);
+  background: var(--ops-danger-bg);
 }
 
 .state {
@@ -194,7 +194,7 @@
   gap: 12px;
   border: 1px dashed var(--ft-line);
   color: var(--ft-ink-soft);
-  background: #fff;
+  background: var(--ft-surface);
   text-align: center;
   font-size: 12px;
   line-height: 1.9;
@@ -202,9 +202,9 @@
 
 .errorBlock {
   border-style: solid;
-  border-color: #f2c8cf;
-  color: #8b2537;
-  background: #fff7f8;
+  border-color: var(--ops-danger-line);
+  color: var(--ops-danger-ink);
+  background: var(--ops-surface-subtle);
 }
 
 .errorBlock p {
@@ -222,7 +222,7 @@
   display: grid;
   gap: 12px;
   border: 1px solid var(--ft-line);
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .cardHeader {
@@ -251,7 +251,7 @@
   min-width: 0;
   border-radius: 10px;
   padding: 9px;
-  background: #f6f7fa;
+  background: var(--ops-surface-subtle);
 }
 
 .metadata dt {
@@ -277,7 +277,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #85510b;
+  color: var(--ops-warning-ink);
   font-size: 11px;
   line-height: 1.8;
 }
@@ -332,7 +332,7 @@
 .card {
   border-color: var(--ft-line);
   border-radius: 14px;
-  background-color: #fff;
+  background-color: var(--ft-surface);
 }
 
 .card {
@@ -340,13 +340,13 @@
 }
 
 .filters {
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .field input,
 .field select,
 .field textarea {
-  border-color: #cfd9e1;
+  border-color: var(--ft-line);
   border-radius: 9px;
 }
 

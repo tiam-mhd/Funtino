@@ -26,6 +26,12 @@
 - The user name and access label open a compact account menu containing account security and sign-out actions.
 - On mobile, the same scope selector stays at the top of the sidebar drawer while the active branch remains visible in the page header.
 
+## Workspace appearance
+
+- The explicit light and dark appearance choice is shared by every Operations Web page and is remembered in the browser. It also applies to the standalone account-security page.
+- Before sign-in, the sun/moon control stays in the entry header. In the workspace, the same animated icon control is centered in the sidebar footer; the sidebar expand/collapse action is in the header as a three-line menu button. On mobile that button opens the sidebar drawer.
+- Page surfaces, text, borders, fields, tables, notices, and status colors use the Operations-only theme palette. The sidebar keeps its dark brand surface in light mode and deepens in dark mode for consistent contrast.
+
 ## Responsive presentation and assets
 
 - The phone, code, optional management-password, and scope-selection screens use an RTL responsive layout. Sign-in, code-entry, and scope-selection states share the same visual frame; the page offers explicit light and dark choices through sun and moon icons with a smoothly animated active indicator before and after sign-in. Login, verification, password, scope, and status cards use a lightly translucent surface with 3px background blur so the park remains subtly visible while text stays readable. The desktop introduction uses a high-contrast glass panel and grouped highlights. Motion respects reduced-motion preferences.

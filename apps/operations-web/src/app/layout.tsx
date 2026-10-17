@@ -5,6 +5,7 @@ import '@fontsource/estedad/arabic.css';
 import '@funtino/design-system/styles.css';
 import '@funtino/forms-renderer/forms.css';
 import './globals.css';
+import { OperationsThemeProvider } from '../components/workspace-shell/OperationsThemeProvider';
 
 export const metadata: Metadata = {
   title: 'فانتینو | پنل عملیات',
@@ -16,8 +17,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fa" dir="rtl">
-      <body>{children}</body>
+    <html lang="fa" dir="rtl" data-operations-theme="dark">
+      <body>
+        <OperationsThemeProvider>{children}</OperationsThemeProvider>
+      </body>
     </html>
   );
 }

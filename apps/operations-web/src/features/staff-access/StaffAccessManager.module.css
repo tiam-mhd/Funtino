@@ -89,7 +89,7 @@
   gap: 14px;
   border: 1px solid var(--ft-line);
   border-radius: 20px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .form,
@@ -120,12 +120,12 @@
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  border: 1px solid #d9dce8;
+  border: 1px solid var(--ft-line);
   border-radius: 12px;
   padding: 9px 11px;
   outline: none;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -149,7 +149,7 @@
 .field select:disabled,
 .field textarea:disabled {
   color: var(--ft-muted);
-  background: #f6f7fa;
+  background: var(--ops-surface-subtle);
 }
 
 .filters {
@@ -212,20 +212,20 @@
 
 .status_active,
 .allowTag {
-  color: #176a4a;
-  background: #e4f7ee;
+  color: var(--ops-success-ink);
+  background: var(--ops-success-bg);
 }
 
 .status_pending {
-  color: #865a13;
-  background: #fff3d8;
+  color: var(--ops-warning-ink);
+  background: var(--ops-warning-bg);
 }
 
 .status_suspended,
 .status_revoked,
 .denyTag {
-  color: #9b3444;
-  background: #fff0f2;
+  color: var(--ops-danger-ink);
+  background: var(--ops-danger-bg);
 }
 
 .memberDetails,
@@ -263,7 +263,7 @@
   border: 1px solid var(--ft-line);
   border-radius: 14px;
   padding: 14px;
-  background: #fcfcfe;
+  background: var(--ft-surface);
 }
 
 .inlineForm h3,
@@ -295,7 +295,7 @@
   gap: 5px;
   border: 1px solid var(--ft-line);
   border-radius: 13px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .overrideHeading {
@@ -337,20 +337,20 @@
 
 .warning {
   border: 1px solid rgb(203 143 39 / 25%);
-  color: #805519;
-  background: #fff8eb;
+  color: var(--ops-warning-ink);
+  background: var(--ops-warning-bg);
 }
 
 .notice {
   border: 1px solid rgb(34 126 87 / 20%);
-  color: #176a4a;
-  background: #effaf4;
+  color: var(--ops-success-ink);
+  background: var(--ops-surface-subtle);
 }
 
 .error {
   border: 1px solid rgb(216 91 105 / 22%);
-  color: #a23c4b;
-  background: #fff5f6;
+  color: var(--ft-ink-soft);
+  background: var(--ops-surface-subtle);
 }
 
 .errorBlock {
@@ -379,7 +379,7 @@
   display: grid;
   gap: 12px;
   border-color: rgb(120 80 223 / 20%);
-  background: #fcfbff;
+  background: var(--ft-surface);
 }
 
 .mfaPanel h3 {
@@ -389,11 +389,11 @@
 .secretCode {
   display: block;
   overflow-wrap: anywhere;
-  border: 1px dashed #a9a2cb;
+  border: 1px dashed var(--ops-purple-ink);
   border-radius: 12px;
   padding: 14px;
-  color: #31265e;
-  background: #f7f4ff;
+  color: var(--ops-purple-ink);
+  background: var(--ops-surface-subtle);
   font-size: 18px;
   letter-spacing: 0.08em;
   text-align: center;
@@ -409,7 +409,7 @@
   border-radius: 12px;
   padding: 14px 30px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .recoveryCodes code {
@@ -459,7 +459,7 @@
   width: 20px;
   height: 20px;
   flex: 0 0 auto;
-  border: 2px solid #dff5f2;
+  border: 2px solid var(--ops-success-line);
   border-top-color: var(--ft-teal-dark);
   border-radius: 50%;
   animation: spin 800ms linear infinite;
@@ -531,7 +531,7 @@
 .mfaPanel {
   border-color: var(--ft-line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .rosterSection,
@@ -548,13 +548,13 @@
 .overrideCard {
   border-color: var(--ft-line);
   border-radius: 11px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .field input,
 .field select,
 .field textarea {
-  border-color: #cfd9e1;
+  border-color: var(--ft-line);
   border-radius: 9px;
 }
 

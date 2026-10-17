@@ -58,14 +58,14 @@
   display: grid;
   gap: 11px;
   border: 1px solid var(--ft-line);
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .mfaPanel {
   display: grid;
   gap: 12px;
-  border: 1px solid #e4dece;
-  background: #fffdf8;
+  border: 1px solid var(--ops-warning-line);
+  background: var(--ops-surface-subtle);
   box-shadow: none;
 }
 .mfaHeading {
@@ -92,7 +92,7 @@
   border-radius: 10px;
   padding: 10px 12px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font-size: 13px;
 }
 .recoveryCodes {
@@ -104,7 +104,7 @@
   border-radius: 12px;
   padding: 14px 32px 14px 14px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font-size: 12px;
 }
 .recoveryCodes code {
@@ -135,12 +135,12 @@
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  border: 1px solid #d9dce8;
+  border: 1px solid var(--ft-line);
   border-radius: 12px;
   padding: 9px 11px;
   outline: none;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -160,7 +160,7 @@
 .field select:disabled,
 .field textarea:disabled {
   color: var(--ft-muted);
-  background: #f6f7fa;
+  background: var(--ops-surface-subtle);
 }
 .formActions {
   grid-column: 1 / -1;
@@ -180,7 +180,7 @@
   justify-content: space-between;
   gap: 12px;
   border: 1px solid var(--ft-line);
-  background: #fff;
+  background: var(--ft-surface);
 }
 .metric span {
   color: var(--ft-ink-soft);
@@ -197,7 +197,7 @@
   align-items: end;
   gap: 10px;
   border: 1px solid var(--ft-line);
-  background: #fff;
+  background: var(--ft-surface);
 }
 .filters > .field:first-child {
   grid-column: span 2;
@@ -233,7 +233,7 @@
   display: grid;
   gap: 12px;
   border: 1px solid var(--ft-line);
-  background: #fff;
+  background: var(--ft-surface);
 }
 .deviceHeader {
   align-items: center;
@@ -295,25 +295,25 @@
   line-height: 1.9;
 }
 .unknownNote {
-  border: 1px solid #e1e3ea;
-  color: #51566d;
-  background: #f6f7fa;
+  border: 1px solid var(--ft-line);
+  color: var(--ft-ink-soft);
+  background: var(--ops-surface-subtle);
 }
 .warning {
   border: 1px solid rgb(203 143 39 / 25%);
-  color: #805519;
-  background: #fff8eb;
+  color: var(--ops-warning-ink);
+  background: var(--ops-warning-bg);
 }
 .notice {
   border: 1px solid rgb(34 126 87 / 20%);
-  color: #176a4a;
-  background: #effaf4;
+  color: var(--ops-success-ink);
+  background: var(--ops-surface-subtle);
 }
 .error,
 .errorBlock {
   border: 1px solid rgb(216 91 105 / 22%);
-  color: #a23c4b;
-  background: #fff5f6;
+  color: var(--ft-ink-soft);
+  background: var(--ops-surface-subtle);
 }
 .errorBlock {
   display: flex;
@@ -346,13 +346,13 @@
   margin-top: 12px;
   border-radius: 13px;
   padding: 12px;
-  background: #f8f9fc;
+  background: var(--ops-surface-subtle);
 }
 .state {
   display: grid;
   justify-items: center;
   gap: 8px;
-  border: 1px dashed #d8dce8;
+  border: 1px dashed var(--ft-line);
   text-align: center;
 }
 .state h3 {
@@ -369,7 +369,7 @@
 .spinner {
   width: 24px;
   height: 24px;
-  border: 3px solid #dff5f2;
+  border: 3px solid var(--ops-success-line);
   border-top-color: var(--ft-teal-dark);
   border-radius: 50%;
   animation: spin 800ms linear infinite;
@@ -485,11 +485,11 @@
 .state {
   border-color: var(--ft-line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .filters {
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .deviceCard {
@@ -499,7 +499,7 @@
 .field input,
 .field select,
 .field textarea {
-  border-color: #cfd9e1;
+  border-color: var(--ft-line);
   border-radius: 9px;
 }
 

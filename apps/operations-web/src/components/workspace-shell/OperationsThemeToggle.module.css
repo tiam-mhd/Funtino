@@ -1,0 +1,109 @@
+.control {
+  position: relative;
+  display: grid;
+  width: 78px;
+  box-sizing: border-box;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  direction: rtl;
+  gap: 3px;
+  isolation: isolate;
+  border: 1px solid var(--ops-theme-toggle-border);
+  border-radius: 999px;
+  padding: 3px;
+  background: var(--ops-theme-toggle-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.control::before {
+  z-index: 0;
+  grid-area: 1 / 1 / 2 / 2;
+  border-radius: 999px;
+  background: #f2b64c;
+  box-shadow: 0 4px 14px rgb(242 182 76 / 38%);
+  content: '';
+  pointer-events: none;
+  transition:
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 300ms ease;
+}
+
+.control[data-active-theme='dark']::before {
+  transform: translateX(calc(-100% - 3px));
+}
+
+.button {
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  min-height: 30px;
+  grid-row: 1;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  color: var(--ops-theme-toggle-text);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    color 220ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.button:nth-child(1) {
+  grid-column: 1;
+}
+
+.button:nth-child(2) {
+  grid-column: 2;
+}
+
+.button[aria-pressed='true'] {
+  color: #252014;
+}
+
+.button:hover:not([aria-pressed='true']) {
+  transform: translateY(-1px);
+}
+
+.icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  place-self: center;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.button[aria-pressed='true'] .icon {
+  animation: themeIconActivate 440ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ops-theme-toggle-focus);
+}
+
+@keyframes themeIconActivate {
+  0% {
+    transform: scale(0.68) rotate(-14deg);
+  }
+
+  66% {
+    transform: scale(1.16) rotate(5deg);
+  }
+
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .control::before,
+  .button {
+    transition-duration: 0.01ms;
+  }
+}

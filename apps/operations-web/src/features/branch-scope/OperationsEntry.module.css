@@ -10,7 +10,7 @@
 .pageActive {
   overflow: visible;
   padding: 0;
-  background: #f6f7fb;
+  background: var(--ops-page);
 }
 
 .ambient {
@@ -19,7 +19,7 @@
   inset: 0;
   background:
     radial-gradient(ellipse at 12% 18%, rgb(14 207 193 / 12%), transparent 36%),
-    radial-gradient(ellipse at 90% 76%, rgb(120 80 223 / 9%), transparent 34%), #f6f7fb;
+    radial-gradient(ellipse at 90% 76%, rgb(120 80 223 / 9%), transparent 34%), var(--ops-page);
   pointer-events: none;
 }
 
@@ -532,15 +532,15 @@
 }
 
 .page {
-  background: #f3f6f8;
+  background: var(--ops-page);
 }
 
 .pageActive {
-  background: #f3f6f8;
+  background: var(--ops-page);
 }
 
 .ambient {
-  background: #f3f6f8;
+  background: var(--ops-page);
 }
 
 .topbar {
@@ -552,10 +552,10 @@
 .stateCard,
 .scopeSection,
 .workspace {
-  border-color: #dfe6ec;
+  border-color: var(--ft-line);
   border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(15 23 42 / 5%);
+  background: var(--ft-surface);
+  box-shadow: var(--ft-shadow-sm);
 }
 
 .authCard {
@@ -571,7 +571,7 @@
 
 .form input {
   min-height: 48px;
-  border-color: #cfd9e1;
+  border-color: var(--ops-input-border);
   border-radius: 9px;
 }
 

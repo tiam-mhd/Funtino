@@ -70,15 +70,15 @@
   border: 1px solid var(--ft-line);
   border-radius: 20px;
   padding: 18px;
-  background: #fff;
-  box-shadow: 0 12px 35px rgb(32 35 65 / 4%);
+  background: var(--ft-surface);
+  box-shadow: var(--ft-shadow-sm);
 }
 
 .aggregateReport {
   border: 1px solid var(--ft-line);
   border-radius: 18px;
   padding: 16px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .aggregateBranches {
@@ -101,14 +101,14 @@
   height: 9px;
   overflow: hidden;
   border-radius: 99px;
-  background: #edf1f6;
+  background: var(--ops-surface-subtle);
 }
 
 .aggregateBar i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--ft-teal), #69d9c6);
+  background: linear-gradient(90deg, var(--ft-teal), var(--ops-success-bg));
 }
 
 .sidebar {
@@ -137,13 +137,13 @@
   border-radius: 14px;
   padding: 12px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   text-align: right;
 }
 
 .formItemActive {
   border-color: var(--ft-teal);
-  background: #effcfb;
+  background: var(--ops-success-bg);
   box-shadow: inset -3px 0 var(--ft-teal);
 }
 
@@ -250,7 +250,7 @@
   border: 1px solid var(--ft-line);
   border-radius: 16px;
   padding: 14px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .themeSettings h4 {
@@ -302,7 +302,7 @@
 
 .fieldEditor {
   margin: 10px 0 0;
-  background: #fcfdff;
+  background: var(--ft-surface);
 }
 
 .fieldEditor[draggable='true'] {
@@ -345,11 +345,11 @@
 .templateField textarea {
   width: 100%;
   min-height: 42px;
-  border: 1px solid #dce2ec;
+  border: 1px solid var(--ft-line);
   border-radius: 10px;
   padding: 9px 10px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font: inherit;
   font-size: 12px;
 }
@@ -423,7 +423,7 @@
   border: 1px solid var(--ft-line);
   border-radius: 14px;
   padding: 13px;
-  background: #fafbfe;
+  background: var(--ops-surface-subtle);
 }
 
 .actions,
@@ -442,18 +442,18 @@
 }
 
 .notice {
-  color: #075c55;
-  background: #e8faf7;
+  color: var(--ft-teal-dark);
+  background: var(--ops-success-bg);
 }
 
 .error {
-  color: #8f2e38;
-  background: #fff0f1;
+  color: var(--ops-danger-ink);
+  background: var(--ops-danger-bg);
 }
 
 .empty {
   color: var(--ft-muted);
-  background: #f7f8fb;
+  background: var(--ops-surface-subtle);
   text-align: center;
 }
 
@@ -488,13 +488,13 @@
   border-radius: 13px;
   padding: 11px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   text-align: right;
 }
 
 .responseActive {
   border-color: var(--ft-teal);
-  background: #effcfb;
+  background: var(--ops-success-bg);
 }
 
 .responseItem small,
@@ -545,8 +545,8 @@
   margin-inline-start: 6px;
   border-radius: 20px;
   padding: 2px 6px;
-  color: #8e4b00;
-  background: #fff4db;
+  color: var(--ops-warning-ink);
+  background: var(--ops-warning-bg);
 }
 
 .piiNotice {
@@ -554,8 +554,8 @@
   flex-wrap: wrap;
   border-radius: 12px;
   padding: 11px;
-  color: #6c4a08;
-  background: #fff7e5;
+  color: var(--ops-warning-ink);
+  background: var(--ops-warning-bg);
 }
 
 .piiNotice p {
@@ -590,7 +590,7 @@
 .notes li {
   border-radius: 10px;
   padding: 10px;
-  background: #f7f8fb;
+  background: var(--ops-surface-subtle);
 }
 
 .notes p {
@@ -610,7 +610,7 @@
   border: 1px solid var(--ft-line);
   border-radius: 14px;
   padding: 14px;
-  background: #fbfcfe;
+  background: var(--ft-surface);
 }
 
 .correctionHistory {
@@ -623,7 +623,7 @@
 .correctionHistory > li {
   border-radius: 10px;
   padding: 11px;
-  background: #f7f8fb;
+  background: var(--ops-surface-subtle);
 }
 
 .correctionHistory p {
@@ -658,9 +658,9 @@
 
 .retention {
   margin: 0;
-  border: 1px solid #f0e1b5;
-  color: #735611;
-  background: #fff9e9;
+  border: 1px solid var(--ops-warning-line);
+  color: var(--ops-warning-ink);
+  background: var(--ops-warning-bg);
 }
 
 @media (max-width: 980px) {
@@ -842,11 +842,11 @@
 .settingsFields select {
   width: 100%;
   min-height: 44px;
-  border: 1px solid #dce2ec;
+  border: 1px solid var(--ft-line);
   border-radius: 12px;
   padding: 9px 12px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font: inherit;
   font-size: 13px;
 }
@@ -897,7 +897,7 @@
   border-radius: 18px;
   padding: 16px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   text-align: right;
   cursor: pointer;
   transition:
@@ -956,7 +956,12 @@
   border: 1px solid var(--ft-line);
   border-radius: 18px;
   padding: 18px;
-  background: linear-gradient(110deg, #f4f5f9 8%, #fff 18%, #f4f5f9 33%);
+  background: linear-gradient(
+    110deg,
+    var(--ops-skeleton-start) 8%,
+    var(--ops-skeleton-mid) 18%,
+    var(--ops-skeleton-start) 33%
+  );
   background-size: 200% 100%;
   animation: forms-loading 1.2s linear infinite;
 }
@@ -988,11 +993,11 @@
   display: grid;
   justify-items: center;
   gap: 8px;
-  border: 1px dashed #d9dce8;
+  border: 1px dashed var(--ft-line);
   border-radius: 18px;
   padding: 32px 20px;
   color: var(--ft-muted);
-  background: #fafbfe;
+  background: var(--ops-surface-subtle);
   text-align: center;
 }
 
@@ -1019,7 +1024,7 @@
   place-items: center;
   border-radius: 15px;
   color: var(--ft-teal-dark);
-  background: #e8faf7;
+  background: var(--ops-success-bg);
   font-size: 24px;
   font-weight: 900;
 }
@@ -1067,11 +1072,11 @@
 .createForm select {
   width: 100%;
   min-height: 44px;
-  border: 1px solid #dce2ec;
+  border: 1px solid var(--ft-line);
   border-radius: 12px;
   padding: 9px 12px;
   color: var(--ft-ink);
-  background: #fff;
+  background: var(--ft-surface);
   font: inherit;
   font-size: 13px;
 }
@@ -1104,7 +1109,7 @@
 
 .templateChoice:has(input:checked) {
   border-color: var(--ft-teal-dark);
-  background: #f0fcfa;
+  background: var(--ops-success-bg);
 }
 
 .templateChoice input {
@@ -1133,7 +1138,7 @@
   border-radius: 12px;
   padding: 10px 12px;
   color: var(--ft-teal-dark);
-  background: #effbf9;
+  background: var(--ops-success-bg);
   font-size: 12px;
   font-weight: 800;
 }
@@ -1245,7 +1250,7 @@
   border: 1px solid var(--ft-line);
   border-radius: 15px;
   padding: 6px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .pageDragHandle,
@@ -1281,8 +1286,8 @@
 }
 
 .pageTabActive {
-  color: #075c55;
-  background: #eafaf7;
+  color: var(--ft-teal-dark);
+  background: var(--ops-success-bg);
 }
 
 .pageTab span,
@@ -1332,7 +1337,7 @@
   border: 1px solid var(--ft-line);
   border-radius: 16px;
   padding: 14px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .fieldListPanel .sectionHeading h6,
@@ -1369,7 +1374,7 @@
 .fieldListItem:focus-within,
 .fieldListItem:hover {
   border-color: var(--ft-line);
-  background: #fafbfe;
+  background: var(--ops-surface-subtle);
 }
 
 .fieldSelect,
@@ -1388,8 +1393,8 @@
 }
 
 .fieldSelectActive {
-  border-color: #b7e9e3;
-  background: #effbf9;
+  border-color: var(--ops-success-line);
+  background: var(--ops-success-bg);
 }
 
 .fieldSelectTop {
@@ -1420,7 +1425,7 @@
 }
 
 .fieldInspector {
-  background: #fafbfe;
+  background: var(--ops-surface-subtle);
 }
 
 .fieldInspector .fieldEditor {
@@ -1550,10 +1555,10 @@
 .settingsFields input[type='color'] {
   width: 100%;
   min-height: 44px;
-  border: 1px solid #dce2ec;
+  border: 1px solid var(--ft-line);
   border-radius: 12px;
   padding: 4px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .sharePanel,
@@ -1609,7 +1614,7 @@
   border: 1px solid var(--ft-line);
   border-radius: 18px;
   padding: 16px;
-  background: #f6f7fb;
+  background: var(--ops-surface-subtle);
 }
 
 .previewMobile {
@@ -1623,11 +1628,11 @@
 }
 
 .validationSummary {
-  border: 1px solid #f0d69e;
+  border: 1px solid var(--ops-warning-line);
   border-radius: 14px;
   padding: 12px 16px;
-  color: #735611;
-  background: #fff9e9;
+  color: var(--ops-warning-ink);
+  background: var(--ops-warning-bg);
 }
 
 .validationSummary h4 {
@@ -1638,7 +1643,7 @@
 .validationSummary button {
   border: 0;
   padding: 0;
-  color: #735611;
+  color: var(--ops-warning-ink);
   background: transparent;
   font: inherit;
   text-align: right;
@@ -1795,8 +1800,8 @@
 }
 
 .formItemActive {
-  border-color: #9ecbc6;
-  background: #f1f8f7;
+  border-color: var(--ops-success-line);
+  background: var(--ops-surface-subtle);
   box-shadow: inset -3px 0 #0a7775;
 }
 
@@ -1808,5 +1813,5 @@
 
 .formCard:hover,
 .responseItem:hover {
-  border-color: #bdced5;
+  border-color: var(--ops-info-line);
 }

@@ -1,7 +1,7 @@
 .panel {
   display: grid;
   gap: 14px;
-  border-top: 1px solid var(--ft-border, #e4e9ee);
+  border-top: 1px solid var(--ft-border, var(--ft-line));
   padding-top: 20px;
 }
 
@@ -20,13 +20,13 @@
 
 .header h2 {
   margin: 4px 0;
-  color: var(--ft-ink, #142c3a);
+  color: var(--ft-ink, var(--ft-ink));
   font-size: clamp(18px, 2.5vw, 22px);
 }
 
 .eyebrow {
   margin: 0;
-  color: var(--ft-teal-dark, #087c77);
+  color: var(--ft-teal-dark, var(--ft-teal-dark));
   font-size: 11px;
   font-weight: 800;
 }
@@ -34,7 +34,7 @@
 .helper,
 .empty {
   margin: 0;
-  color: var(--ft-ink-soft, #586a75);
+  color: var(--ft-ink-soft, var(--ft-ink-soft));
   font-size: 13px;
   line-height: 1.9;
 }
@@ -53,7 +53,7 @@
 
 .form h3 {
   margin: 0;
-  color: var(--ft-ink, #142c3a);
+  color: var(--ft-ink, var(--ft-ink));
   font-size: 17px;
 }
 
@@ -62,14 +62,14 @@
   gap: 10px;
   min-width: 0;
   margin: 0;
-  border: 1px solid var(--ft-border, #e4e9ee);
+  border: 1px solid var(--ft-border, var(--ft-line));
   border-radius: 14px;
   padding: 12px;
 }
 
 .lookup legend {
   padding-inline: 5px;
-  color: var(--ft-ink, #142c3a);
+  color: var(--ft-ink, var(--ft-ink));
   font-size: 13px;
   font-weight: 700;
 }
@@ -77,7 +77,7 @@
 .field {
   display: grid;
   gap: 6px;
-  color: var(--ft-ink, #142c3a);
+  color: var(--ft-ink, var(--ft-ink));
   font-size: 13px;
   font-weight: 700;
 }
@@ -87,10 +87,10 @@
 .field textarea {
   width: 100%;
   min-height: 44px;
-  border: 1px solid var(--ft-border, #d5dfe5);
+  border: 1px solid var(--ft-border, var(--ft-line));
   border-radius: 11px;
-  background: var(--ft-surface, #fff);
-  color: var(--ft-ink, #142c3a);
+  background: var(--ft-surface, var(--ft-surface));
+  color: var(--ft-ink, var(--ft-ink));
   padding: 10px 12px;
   font: inherit;
   font-weight: 400;
@@ -103,7 +103,7 @@
 
 .field :focus-visible,
 .confirm input:focus-visible {
-  outline: 3px solid var(--ft-focus, #63b8ca);
+  outline: 3px solid var(--ft-focus, var(--ft-focus));
   outline-offset: 2px;
 }
 
@@ -111,7 +111,7 @@
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  color: var(--ft-ink, #142c3a);
+  color: var(--ft-ink, var(--ft-ink));
   font-size: 13px;
   line-height: 1.8;
 }
@@ -138,7 +138,7 @@
 }
 
 .itemHeader small {
-  color: var(--ft-ink-soft, #586a75);
+  color: var(--ft-ink-soft, var(--ft-ink-soft));
   font-size: 11px;
 }
 
@@ -152,17 +152,17 @@
 }
 
 .error {
-  background: #fff1f0;
-  color: #9b2923;
+  background: var(--ops-danger-bg);
+  color: var(--ops-danger-ink);
 }
 
 .notice {
-  background: #eaf7f2;
-  color: #176348;
+  background: var(--ops-success-bg);
+  color: var(--ops-success-ink);
 }
 
 .empty {
-  border: 1px dashed var(--ft-border, #d5dfe5);
+  border: 1px dashed var(--ft-border, var(--ft-line));
   border-radius: 12px;
   padding: 16px;
   text-align: center;
@@ -185,14 +185,14 @@
 .item {
   border-color: var(--ft-line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--ft-surface);
   box-shadow: var(--ft-shadow-sm);
 }
 
 .field input,
 .field select,
 .field textarea {
-  border-color: #cfd9e1;
+  border-color: var(--ft-line);
   border-radius: 9px;
 }
 

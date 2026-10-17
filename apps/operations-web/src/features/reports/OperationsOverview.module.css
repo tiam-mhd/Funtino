@@ -12,12 +12,12 @@
   justify-content: space-between;
   gap: 24px;
   overflow: hidden;
-  border: 1px solid #d8eeeb;
+  border: 1px solid var(--ops-success-line);
   border-radius: 22px;
   padding: clamp(20px, 3.5vw, 36px);
   background:
     radial-gradient(circle at 8% 115%, rgb(120 80 223 / 12%), transparent 36%),
-    linear-gradient(115deg, #fff 10%, #effaf8 100%);
+    linear-gradient(115deg, var(--ft-surface) 10%, var(--ops-surface-subtle) 100%);
 }
 
 .hero::after {
@@ -101,10 +101,10 @@
   display: flex;
   align-items: center;
   gap: 13px;
-  border-color: #f1d4d7;
+  border-color: var(--ops-danger-line);
   padding: 15px 18px;
-  color: #7e3b48;
-  background: #fffafa;
+  color: var(--ft-ink-soft);
+  background: var(--ops-surface-subtle);
   box-shadow: none;
 }
 
@@ -131,8 +131,8 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: 12px;
-  color: #b64c5b;
-  background: #fce9eb;
+  color: var(--ft-muted);
+  background: var(--ops-danger-bg);
 }
 .stateIcon svg {
   width: 20px;
@@ -157,7 +157,7 @@
 .spinner {
   width: 22px;
   height: 22px;
-  border: 2px solid #d7efeb;
+  border: 2px solid var(--ops-success-line);
   border-top-color: var(--ft-teal-dark);
   border-radius: 50%;
   animation: spin 750ms linear infinite;
@@ -223,39 +223,39 @@
   border-top: 3px solid #10a9a2;
 }
 .metric_teal .metricIcon {
-  color: #007b79;
-  background: #e4f8f5;
+  color: var(--ft-teal-dark);
+  background: var(--ops-success-bg);
 }
 .metric_purple {
   border-top: 3px solid #7850df;
 }
 .metric_purple .metricIcon {
-  color: #7850df;
-  background: #f0ebfc;
+  color: var(--ops-purple-ink);
+  background: var(--ops-purple-bg);
 }
 .metric_orange {
-  border-top: 3px solid #e79b2d;
+  border-top: 3px solid var(--ops-warning-line);
 }
 .metric_orange .metricIcon {
-  color: #a56b12;
-  background: #fff4df;
+  color: var(--ops-warning-ink);
+  background: var(--ops-warning-bg);
 }
 .metric_green {
   border-top: 3px solid #3aaf78;
 }
 .metric_green .metricIcon {
-  color: #267e55;
-  background: #e7f7ef;
+  color: var(--ops-success-ink);
+  background: var(--ops-success-bg);
 }
 .metric_blue {
   border-top: 3px solid #599ce7;
 }
 .metric_blue .metricIcon {
-  color: #3172b7;
-  background: #e9f4ff;
+  color: var(--ops-info-ink);
+  background: var(--ops-info-bg);
 }
 .metricEmphasized .metricValue {
-  color: #a56b12;
+  color: var(--ops-warning-ink);
 }
 
 .emptyNotice {
@@ -285,8 +285,8 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: 13px;
-  color: #007c80;
-  background: #e5f8f5;
+  color: var(--ft-teal-dark);
+  background: var(--ops-success-bg);
 }
 .emptyIcon svg {
   width: 20px;
@@ -307,14 +307,14 @@
   font-size: 10px;
 }
 .coverage {
-  border: 1px solid #e5eef1;
+  border: 1px solid var(--ft-line);
   border-radius: 12px;
   padding: 10px 13px;
-  background: #fbfdff;
+  background: var(--ft-surface);
 }
 .coverage > span {
   display: grid;
-  color: #45718d;
+  color: var(--ops-info-ink);
 }
 .coverage svg,
 .reportMeta svg {
@@ -376,7 +376,7 @@
   border: 1px solid var(--ft-line);
   border-radius: 11px;
   padding: 3px;
-  background: #fafafd;
+  background: var(--ops-surface-subtle);
 }
 .rangeControl button {
   min-height: 30px;
@@ -403,7 +403,7 @@
 }
 .rangeControl .rangeActive {
   color: var(--ft-teal-dark);
-  background: #e6f7f4;
+  background: var(--ops-success-bg);
 }
 
 .chartWrap {
@@ -418,9 +418,9 @@
   align-items: flex-end;
   gap: 5px;
   overflow-x: auto;
-  border-bottom: 1px solid #e7e9f0;
+  border-bottom: 1px solid var(--ft-line);
   padding: 0 2px;
-  scrollbar-color: #c9d6db transparent;
+  scrollbar-color: var(--ft-line) transparent;
   scrollbar-width: thin;
 }
 .chartColumn {
@@ -434,7 +434,7 @@
 .chartValue {
   overflow: hidden;
   max-width: 100%;
-  color: #71778e;
+  color: var(--ft-muted);
   font-size: 8px;
   font-weight: 700;
   text-overflow: ellipsis;
@@ -446,7 +446,7 @@
   align-items: flex-end;
   justify-content: center;
   border-radius: 8px 8px 3px 3px;
-  background: repeating-linear-gradient(to top, #f2f4f7 0 1px, transparent 1px 32px);
+  background: repeating-linear-gradient(to top, var(--ops-grid-line) 0 1px, transparent 1px 32px);
 }
 .chartBar {
   width: 100%;
@@ -456,7 +456,7 @@
   transition: height 240ms ease;
 }
 .chartLabel {
-  color: #777d93;
+  color: var(--ft-muted);
   font-size: 8px;
   white-space: nowrap;
 }
@@ -522,8 +522,8 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: 12px;
-  color: #007b79;
-  background: #e4f8f5;
+  color: var(--ft-teal-dark);
+  background: var(--ops-success-bg);
 }
 .healthPulse svg {
   width: 19px;
@@ -559,7 +559,7 @@
   height: 7px;
   overflow: hidden;
   border-radius: 999px;
-  background: #eff1f5;
+  background: var(--ops-surface-subtle);
 }
 .healthValue {
   display: block;
@@ -598,7 +598,7 @@
   min-width: 0;
   align-items: center;
   gap: 12px;
-  border-top: 1px solid #eff0f5;
+  border-top: 1px solid var(--ft-line);
   padding: 12px 0;
 }
 .branchRow:first-child {
@@ -613,7 +613,7 @@
   place-items: center;
   border-radius: 12px;
   color: var(--ft-teal-dark);
-  background: #e6f7f4;
+  background: var(--ops-success-bg);
 }
 .branchMark svg {
   width: 19px;
@@ -666,7 +666,7 @@
   margin: 0;
   border-top: 1px solid var(--ft-line);
   padding-top: 12px;
-  color: #795817;
+  color: var(--ops-warning-ink);
   font-size: 9px;
   line-height: 1.8;
 }
@@ -694,7 +694,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 18px;
-  border-top: 1px solid #eff0f5;
+  border-top: 1px solid var(--ft-line);
   padding-top: 15px;
 }
 .singleBranchTitle {
@@ -736,9 +736,9 @@
 .reportMeta {
   flex-wrap: wrap;
   justify-content: space-between;
-  border-top: 1px solid #e7e9f0;
+  border-top: 1px solid var(--ft-line);
   padding: 11px 3px 0;
-  color: #72788b;
+  color: var(--ft-muted);
   font-size: 9px;
 }
 .reportMeta > span {
@@ -749,7 +749,7 @@
 .reportMeta code {
   max-width: 280px;
   overflow: hidden;
-  color: #626783;
+  color: var(--ft-ink-soft);
   text-overflow: ellipsis;
 }
 
@@ -871,7 +871,7 @@
   min-height: 148px;
   border-color: var(--ft-line);
   border-radius: 16px;
-  background: #fff;
+  background: var(--ft-surface);
   box-shadow: var(--ft-shadow-sm);
 }
 
@@ -882,7 +882,7 @@
 .metricCard {
   border-top: 1px solid var(--ft-line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--ft-surface);
 }
 
 .metric_teal,
@@ -895,19 +895,19 @@
 
 .metric_purple .metricIcon,
 .metric_blue .metricIcon {
-  color: #356781;
-  background: #edf5f7;
+  color: var(--ops-info-ink);
+  background: var(--ops-surface-subtle);
 }
 
 .metric_orange .metricIcon {
-  color: #8c671d;
-  background: #fbf5e9;
+  color: var(--ops-warning-ink);
+  background: var(--ops-warning-bg);
 }
 
 .metric_green .metricIcon,
 .metric_teal .metricIcon {
-  color: #176c68;
-  background: #eaf5f3;
+  color: var(--ft-teal-dark);
+  background: var(--ops-surface-subtle);
 }
 
 .refreshButton,

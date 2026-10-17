@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Button, Surface } from '@funtino/design-system';
 import { ApiRequestError } from '../../lib/api/client';
 import { StaffInvitationInbox } from '../staff-access/StaffInvitationInbox';
+import { useOperationsTheme } from '../../components/workspace-shell/OperationsThemeProvider';
 import {
   OperationsWorkspaceShell,
   workspaceHref,
@@ -38,13 +39,11 @@ type View =
   | 'no-access'
   | 'unavailable';
 
-type ThemeMode = 'light' | 'dark';
-
 export function OperationsEntry({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [view, setView] = useState<View>('loading');
-  const [themeMode, setThemeMode] = useState<ThemeMode>('dark');
+  const { themeMode, setThemeMode } = useOperationsTheme();
   const [user, setUser] = useState<OperationsUser | null>(null);
   const [scopes, setScopes] = useState<OperationsScopeOption[]>([]);
   const [activeScope, setActiveScope] = useState<OperationsScopeOption | null>(null);
