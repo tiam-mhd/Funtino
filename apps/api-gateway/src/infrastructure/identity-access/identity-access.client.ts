@@ -72,6 +72,19 @@ const staffMembershipSchema = z.object({
   role: roleSummarySchema,
   version: z.number().int().positive(),
   maskedPhone: z.string().nullable().optional(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+  invitation: z
+    .object({
+      id: uuidSchema,
+      status: z.enum(['pending', 'accepted', 'revoked', 'expired']),
+      maskedPhone: z.string(),
+      createdAt: z.string().datetime({ offset: true }),
+      expiresAt: z.string().datetime({ offset: true }),
+      acceptedAt: z.string().datetime({ offset: true }).nullable(),
+      revokedAt: z.string().datetime({ offset: true }).nullable(),
+    })
+    .nullable(),
 });
 const staffListSchema = z.object({
   data: z.array(staffMembershipSchema),
@@ -493,12 +506,24 @@ export class IdentityAccessClient {
     userId: string,
     scope: AccessScopeDto,
     correlationId: string,
-    pagination: { cursor?: string; pageSize?: number; roleId?: string } = {},
+    pagination: {
+      cursor?: string;
+      pageSize?: number;
+      roleId?: string;
+      status?: 'pending' | 'active' | 'suspended' | 'revoked';
+      staffScopeView?: 'exact' | 'organizationTree';
+      branchFilterId?: string;
+      membershipId?: string;
+    } = {},
   ) {
     const query = this.scopeQuery(scope);
     if (pagination.cursor) query.set('cursor', pagination.cursor);
     if (pagination.pageSize !== undefined) query.set('pageSize', String(pagination.pageSize));
     if (pagination.roleId) query.set('roleId', pagination.roleId);
+    if (pagination.status) query.set('status', pagination.status);
+    if (pagination.staffScopeView) query.set('staffScopeView', pagination.staffScopeView);
+    if (pagination.branchFilterId) query.set('branchFilterId', pagination.branchFilterId);
+    if (pagination.membershipId) query.set('membershipId', pagination.membershipId);
     return this.parse(
       staffListSchema,
       await this.request(`/internal/v1/staff?${query.toString()}`, userId, correlationId),

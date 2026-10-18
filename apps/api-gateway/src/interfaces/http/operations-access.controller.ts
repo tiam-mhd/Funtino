@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -107,9 +108,51 @@ const roleDetailQuerySchema = z
     validateRoleScopeView(value, context);
   });
 const staffQuerySchema = z
-  .object({ ...scopedQueryFields, roleId: z.string().uuid().optional() })
+  .object({
+    ...scopedQueryFields,
+    roleId: z.string().uuid().optional(),
+    status: z.enum(['pending', 'active', 'suspended', 'revoked']).optional(),
+    staffScopeView: roleScopeViewSchema,
+    branchFilterId: z.string().uuid().optional(),
+    search: z.string().trim().min(1).max(80).optional(),
+  })
   .strict()
-  .superRefine(validateScopeQuery);
+  .superRefine((value, context) => {
+    validateScopeQuery(value, context);
+    const type =
+      value.scopeType ??
+      (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
+    if (value.staffScopeView === 'organizationTree' && type !== 'organization') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Organization tree staff view requires organization scope.',
+        path: ['staffScopeView'],
+      });
+    }
+    if (value.branchFilterId && (type !== 'organization' || value.staffScopeView !== 'organizationTree')) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A branch filter requires organization tree staff view.',
+        path: ['branchFilterId'],
+      });
+    }
+  });
+const staffDetailQuerySchema = z
+  .object({ ...scopedQueryFields, staffScopeView: roleScopeViewSchema })
+  .strict()
+  .superRefine((value, context) => {
+    validateScopeQuery(value, context);
+    const type =
+      value.scopeType ??
+      (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
+    if (value.staffScopeView === 'organizationTree' && type !== 'organization') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Organization tree staff view requires organization scope.',
+        path: ['staffScopeView'],
+      });
+    }
+  });
 const auditQuerySchema = z
   .object({
     scopeType: z.enum(['global', 'organization', 'branch']).optional(),
@@ -237,8 +280,13 @@ const overrideCreateSchema = z
   .strict();
 type RolesQuery = z.infer<typeof rolesQuerySchema>;
 type StaffQuery = z.infer<typeof staffQuerySchema>;
+type StaffDetailQuery = z.infer<typeof staffDetailQuerySchema>;
 type ScopedQuery = z.infer<typeof scopedQuerySchema>;
 type AuditQuery = z.infer<typeof auditQuerySchema>;
+type EnrichedStaffMember =
+  Awaited<ReturnType<IdentityAccessClient['listStaff']>>['data'][number] & {
+    identity: { displayName: string | null; firstName: string | null; lastName: string | null } | null;
+  };
 
 @Controller('api/v1/operations')
 @UseGuards(SessionGuard)
@@ -437,32 +485,58 @@ export class OperationsAccessController {
     @Query(new ZodValidationPipe(staffQuerySchema)) query: StaffQuery,
     @Req() request: AuthenticatedRequest,
   ) {
-    const page = await this.identityAccess.listStaff(
-      user.id,
-      this.queryScope(query),
-      requestCorrelationId(request),
-      { cursor: query.cursor, pageSize: query.pageSize, roleId: query.roleId },
-    );
-    const identities = await this.auth.getUserIdentitySummaries(
-      page.data.map((member) => member.userId),
-    );
-    const identitiesByUserId = new Map(identities.map((identity) => [identity.userId, identity]));
+    const scope = this.queryScope(query);
+    const correlationId = requestCorrelationId(request);
+    const filters = {
+      roleId: query.roleId,
+      status: query.status,
+      staffScopeView: query.staffScopeView,
+      branchFilterId: query.branchFilterId,
+    };
+    if (!query.search) {
+      const page = await this.identityAccess.listStaff(user.id, scope, correlationId, {
+        cursor: query.cursor,
+        pageSize: query.pageSize,
+        ...filters,
+      });
+      return success({ ...page, data: await this.enrichStaffMembers(page.data) }, request);
+    }
+
+    const data: EnrichedStaffMember[] = [];
+    const normalizedSearch = normalizeMemberSearch(query.search);
+    let cursor = query.cursor;
+    let nextCursor: string | null = null;
+    let policyVersion = 1;
+    let scans = 0;
+    const maxPagesPerSearch = 5;
+    let terminal = false;
+
+    while (data.length < query.pageSize && scans < maxPagesPerSearch) {
+      const page = await this.identityAccess.listStaff(user.id, scope, correlationId, {
+        ...filters,
+        cursor,
+        pageSize: 100,
+      });
+      policyVersion = page.policyVersion;
+      const enriched = await this.enrichStaffMembers(page.data);
+      for (let index = 0; index < enriched.length; index += 1) {
+        const member = enriched[index]!;
+        if (!memberMatchesSearch(member, normalizedSearch)) continue;
+        data.push(member);
+        if (data.length === query.pageSize) {
+          nextCursor = index < enriched.length - 1 || page.nextCursor ? member.membershipId : null;
+          terminal = true;
+          break;
+        }
+      }
+      if (terminal) break;
+      cursor = page.nextCursor ?? undefined;
+      nextCursor = page.nextCursor;
+      scans += 1;
+      if (!cursor) break;
+    }
     return success(
-      {
-        ...page,
-        data: page.data.map((member) => ({
-          ...member,
-          ...(identitiesByUserId.get(member.userId)
-            ? {
-                identity: {
-                  displayName: identitiesByUserId.get(member.userId)!.displayName,
-                  firstName: identitiesByUserId.get(member.userId)!.firstName,
-                  lastName: identitiesByUserId.get(member.userId)!.lastName,
-                },
-              }
-            : { identity: null }),
-        })),
-      },
+      { data, nextCursor, policyVersion },
       request,
     );
   }
@@ -568,6 +642,29 @@ export class OperationsAccessController {
       ),
       request,
     );
+  }
+
+  @Get('staff/:membershipId')
+  async staffMemberDetail(
+    @CurrentUser() user: { id: string },
+    @Param('membershipId', new ZodValidationPipe(uuid)) membershipId: string,
+    @Query(new ZodValidationPipe(staffDetailQuerySchema)) query: StaffDetailQuery,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const page = await this.identityAccess.listStaff(
+      user.id,
+      this.queryScope(query),
+      requestCorrelationId(request),
+      {
+        pageSize: 1,
+        membershipId,
+        staffScopeView: query.staffScopeView ?? 'exact',
+      },
+    );
+    const member = page.data[0];
+    if (!member) throw new NotFoundException('Staff membership not found in this scope.');
+    const [enriched] = await this.enrichStaffMembers([member]);
+    return success(enriched, request);
   }
 
   @Patch('staff/:membershipId')
@@ -763,6 +860,28 @@ export class OperationsAccessController {
     return { type: 'branch', organizationId: query.organizationId, branchId: query.branchId };
   }
 
+  private async enrichStaffMembers(
+    members: Awaited<ReturnType<IdentityAccessClient['listStaff']>>['data'],
+  ): Promise<EnrichedStaffMember[]> {
+    const identities = await this.auth.getUserIdentitySummaries(
+      members.map((member) => member.userId),
+    );
+    const identitiesByUserId = new Map(identities.map((identity) => [identity.userId, identity]));
+    return members.map((member) => {
+      const identity = identitiesByUserId.get(member.userId);
+      return {
+        ...member,
+        identity: identity
+          ? {
+              displayName: identity.displayName,
+              firstName: identity.firstName,
+              lastName: identity.lastName,
+            }
+          : null,
+      };
+    });
+  }
+
   private idempotencyKey(value: string | undefined): string {
     if (!value || value.length < 16 || value.length > 128)
       throw new BadRequestException('A valid Idempotency-Key is required.');
@@ -878,6 +997,34 @@ export class OperationsAccessController {
     }
     return described;
   }
+}
+
+function normalizeMemberSearch(value: string): string {
+  return value
+    .normalize('NFKC')
+    .replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 0x06f0))
+    .replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 0x0660))
+    .replace(/[يى]/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+    .toLocaleLowerCase('fa-IR')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function memberMatchesSearch(member: EnrichedStaffMember, search: string): boolean {
+  const searchable = normalizeMemberSearch(
+    [
+      member.identity?.displayName,
+      member.identity?.firstName,
+      member.identity?.lastName,
+      member.role.name,
+      member.maskedPhone,
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
+  return searchable.includes(search);
 }
 
 async function mapWithConcurrency<T, R>(

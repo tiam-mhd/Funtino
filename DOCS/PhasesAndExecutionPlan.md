@@ -188,6 +188,8 @@
 
 وضعیت 2026-10-14: ورود Operations از نشست audience=`management` استفاده می‌کند؛ انتخاب scope نقش/عضویت تازه نمی‌سازد. نقش‌ها و scopeهای فعال همان `userId` و منبع هویت آن در [ADR-0025](decisions/0025-management-audience-optional-password-and-risk-policy.md) تشریح می‌شوند.
 
+وضعیت 2026-10-18: فهرست «اعضا» طبق [ADR-0029](decisions/0029-operations-scoped-member-management.md) در Operations Web به scope دقیق شعبه یا درخت مجموعه محدود است؛ فهرست سازمانی به تفکیک مجموعه/شعبه نمایش داده می‌شود. جست‌وجوی نام در Gateway روی رکوردهای ابتدا محدودشده توسط IAM انجام می‌شود؛ افزودن، تغییر نقش، تعلیق و لغو به lifecycle واقعی دعوت/عضویت متصل‌اند و جزئیات عضو نقش، مجوزها، دعوت، overrideهای مجاز و هم‌نقش‌ها را نمایش می‌دهد. typecheck سه بخش Operations Web، API Gateway و Identity & Access موفق است؛ تست‌ها اجرا نشده‌اند. انتشار و بازبینی مرورگر واقعی انجام نشده و این وضعیت اعلام تکمیل O0 یا مجوز انتشار نیست.
+
 - ورود و session پنل؛
 - انتخاب سازمان و شعبه؛
 - shell و navigation عملیاتی؛

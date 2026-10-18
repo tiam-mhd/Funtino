@@ -11,6 +11,10 @@ export function OperationsManagementList({
   onSearchChange,
   searchLabel,
   searchPlaceholder,
+  toolbarLabel = 'عملیات فهرست نقش‌ها',
+  filterTitle = 'فیلتر نقش‌ها',
+  filterDescription = 'وضعیت و نوع نقش را انتخاب کنید. جست‌وجوی نام از کادر بالای فهرست انجام می‌شود.',
+  loadMoreLabel = 'نمایش نقش‌های بیشتر',
   filterFields,
   onApplyFilters,
   onClearFilters,
@@ -27,6 +31,10 @@ export function OperationsManagementList({
   onSearchChange: (value: string) => void;
   searchLabel: string;
   searchPlaceholder: string;
+  toolbarLabel?: string;
+  filterTitle?: string;
+  filterDescription?: string;
+  loadMoreLabel?: string;
   filterFields: ReactNode;
   onApplyFilters: () => void;
   onClearFilters: () => void;
@@ -65,7 +73,7 @@ export function OperationsManagementList({
         <div className={styles.headerActions}>{toolbarActions}</div>
       </header>
 
-      <div className={styles.toolbar} aria-label="عملیات فهرست نقش‌ها">
+      <div className={styles.toolbar} aria-label={toolbarLabel}>
         <label className={styles.searchField}>
           <span className={styles.searchIcon} aria-hidden="true">
             <svg viewBox="0 0 24 24" focusable="false">
@@ -112,7 +120,7 @@ export function OperationsManagementList({
           type="button"
           tone="ghost"
         >
-          {pagination.busy ? 'در حال دریافت…' : 'نمایش نقش‌های بیشتر'}
+          {pagination.busy ? 'در حال دریافت…' : loadMoreLabel}
         </Button>
       )}
 
@@ -133,10 +141,8 @@ export function OperationsManagementList({
         <div className={styles.dialogBody}>
           <header className={styles.dialogHeader}>
             <div>
-              <h3 id="operations-list-filter-title">فیلتر نقش‌ها</h3>
-              <p id="operations-list-filter-description">
-                وضعیت و نوع نقش را انتخاب کنید. جست‌وجوی نام از کادر بالای فهرست انجام می‌شود.
-              </p>
+              <h3 id="operations-list-filter-title">{filterTitle}</h3>
+              <p id="operations-list-filter-description">{filterDescription}</p>
             </div>
             <button
               aria-label="بستن فیلترها"

@@ -704,9 +704,29 @@ paths:
           required: false
           description: Restrict roster results to memberships assigned to this role.
           schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          required: false
+          description: Restrict results to a membership lifecycle state.
+          schema: { type: string, enum: [pending, active, suspended, revoked] }
+        - name: staffScopeView
+          in: query
+          required: false
+          description: exact returns memberships owned by the requested scope; organizationTree returns the organization and its child branches and is valid only for organization scope. Omission preserves the existing applicable roster view.
+          schema: { type: string, enum: [exact, organizationTree] }
+        - name: branchFilterId
+          in: query
+          required: false
+          description: Restrict an organizationTree roster to one branch owned by the requested organization.
+          schema: { type: string, format: uuid }
+        - name: membershipId
+          in: query
+          required: false
+          description: Return the one membership with this identifier if it is visible in the requested scope view.
+          schema: { type: string, format: uuid }
       responses:
         '200':
-          description: Minimal staff records and masked phone numbers in authorized scope.
+          description: Staff records, masked contact and lifecycle metadata in the authorized scope. Names and other Gateway-owned identity data are not returned.
           content:
             application/json:
               schema:
@@ -1772,7 +1792,7 @@ components:
           type: array
           items:
             type: object
-            required: [membershipId, userId, status, scope, role, version]
+            required: [membershipId, userId, status, scope, role, version, createdAt, updatedAt, invitation]
             properties:
               membershipId:
                 type: string
@@ -1783,6 +1803,24 @@ components:
               maskedPhone:
                 type: string
                 nullable: true
+              createdAt:
+                type: string
+                format: date-time
+              updatedAt:
+                type: string
+                format: date-time
+              invitation:
+                type: object
+                nullable: true
+                required: [id, status, maskedPhone, createdAt, expiresAt, acceptedAt, revokedAt]
+                properties:
+                  id: { type: string, format: uuid }
+                  status: { type: string, enum: [pending, accepted, revoked, expired] }
+                  maskedPhone: { type: string }
+                  createdAt: { type: string, format: date-time }
+                  expiresAt: { type: string, format: date-time }
+                  acceptedAt: { type: string, format: date-time, nullable: true }
+                  revokedAt: { type: string, format: date-time, nullable: true }
               status:
                 type: string
                 enum: [pending, active, suspended, revoked]

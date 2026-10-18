@@ -1,0 +1,414 @@
+.results {
+  display: grid;
+  gap: 16px;
+}
+
+.groups,
+.group,
+.memberList {
+  display: grid;
+  gap: 12px;
+}
+
+.groupHeading {
+  margin: 8px 0 0;
+  color: var(--ft-ink);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.memberCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  border-color: var(--ft-line);
+  padding: 14px;
+}
+
+.avatar {
+  display: inline-grid;
+  flex: 0 0 46px;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--ft-teal-dark) 22%, transparent);
+  border-radius: 15px;
+  color: var(--ft-teal-dark);
+  background: color-mix(in srgb, var(--ft-teal-dark) 9%, var(--ft-surface));
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.memberMain {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 5px;
+  min-width: 0;
+}
+
+.memberTitle,
+.memberMeta,
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.memberTitle strong {
+  color: var(--ft-ink);
+  font-size: 14px;
+}
+
+.memberMain p {
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.memberMeta {
+  color: var(--ft-muted);
+  font-size: 10px;
+  line-height: 1.8;
+}
+
+.memberMeta span + span::before {
+  content: '·';
+  margin-inline-end: 8px;
+  color: var(--ft-line-strong, var(--ft-muted));
+}
+
+.rowActions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+}
+
+.iconButton {
+  display: inline-grid;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--ft-line);
+  border-radius: 12px;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+
+.iconButton svg,
+.emptyIcon svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.iconButton:hover:not(:disabled) {
+  border-color: var(--ft-teal-dark);
+  color: var(--ft-teal-dark);
+}
+
+.iconButton:focus-visible,
+.closeButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.iconButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.dangerButton {
+  color: var(--ft-danger, #b42318);
+}
+
+.notice,
+.error {
+  margin: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.notice {
+  color: var(--ft-teal-dark);
+  background: color-mix(in srgb, var(--ft-teal-dark) 9%, var(--ft-surface));
+}
+
+.error {
+  color: var(--ft-danger, #b42318);
+  background: color-mix(in srgb, var(--ft-danger, #b42318) 8%, var(--ft-surface));
+}
+
+.state {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: clamp(18px, 4vw, 28px);
+}
+
+.state h2 {
+  margin: 0;
+  color: var(--ft-ink);
+  font-size: 16px;
+}
+
+.state > p:not(.error) {
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+.emptyIcon {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  border-radius: 18px;
+  color: var(--ft-teal-dark);
+  background: color-mix(in srgb, var(--ft-teal-dark) 9%, var(--ft-surface));
+}
+
+.emptyIcon svg {
+  width: 25px;
+  height: 25px;
+}
+
+.loadingMore {
+  margin: 0;
+  color: var(--ft-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.field {
+  display: grid;
+  gap: 7px;
+  color: var(--ft-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--ft-line);
+  border-radius: 11px;
+  padding: 9px 11px;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  font: inherit;
+  font-size: 13px;
+}
+
+.field textarea {
+  min-height: 92px;
+  resize: vertical;
+  line-height: 1.8;
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible {
+  outline: none;
+  border-color: var(--ft-teal-dark);
+  box-shadow: var(--ft-focus);
+}
+
+.fieldHint {
+  color: var(--ft-muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.8;
+}
+
+.optional,
+.required {
+  margin-inline-start: 4px;
+  color: var(--ft-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.required {
+  color: var(--ft-danger, #b42318);
+}
+
+.dialog,
+.mfaDialog {
+  width: min(520px, calc(100vw - 24px));
+  max-height: min(86vh, 760px);
+  overflow: auto;
+  border: 1px solid var(--ft-line);
+  border-radius: 20px;
+  padding: 0;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  box-shadow: 0 22px 70px rgb(0 0 0 / 25%);
+}
+
+.dialog::backdrop,
+.mfaDialog::backdrop {
+  background: rgb(8 15 25 / 62%);
+  backdrop-filter: blur(3px);
+}
+
+.mfaDialog {
+  z-index: 2;
+  width: min(560px, calc(100vw - 24px));
+}
+
+.dialogBody {
+  display: grid;
+  gap: 18px;
+  padding: clamp(16px, 4vw, 24px);
+}
+
+.dialogHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.dialogHeader h2 {
+  margin: 4px 0 6px;
+  color: var(--ft-ink);
+  font-size: 19px;
+  line-height: 1.5;
+}
+
+.dialogHeader p:last-child {
+  max-width: 380px;
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--ft-teal-dark);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.closeButton {
+  display: grid;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--ft-line);
+  border-radius: 12px;
+  color: var(--ft-ink);
+  background: transparent;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.form {
+  display: grid;
+  gap: 16px;
+}
+
+.memberIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--ft-line);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--ops-surface-subtle, var(--ft-surface));
+}
+
+.memberIdentity > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.memberIdentity strong {
+  color: var(--ft-ink);
+  font-size: 13px;
+}
+
+.memberIdentity span:not(.avatar) {
+  color: var(--ft-muted);
+  font-size: 10px;
+  line-height: 1.7;
+}
+
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+  border-top: 1px solid var(--ft-line);
+  padding-top: 14px;
+}
+
+.destructiveButton {
+  color: var(--ft-danger, #b42318) !important;
+}
+
+.visuallyHidden {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 720px) {
+  .memberCard {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .memberMain {
+    flex: 1 1 calc(100% - 64px);
+  }
+
+  .rowActions {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    border-top: 1px solid var(--ft-line);
+    padding-top: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .memberCard {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .avatar {
+    flex-basis: 40px;
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+  }
+
+  .memberTitle {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

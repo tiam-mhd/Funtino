@@ -19,7 +19,18 @@ export type OperationsStaffMember = {
   scope: OperationsScope;
   role: OperationsAccessRole;
   version: number;
+  createdAt: string;
+  updatedAt: string;
   maskedPhone?: string | null;
+  invitation?: {
+    id: string;
+    status: 'pending' | 'accepted' | 'revoked' | 'expired';
+    maskedPhone: string;
+    createdAt: string;
+    expiresAt: string;
+    acceptedAt: string | null;
+    revokedAt: string | null;
+  } | null;
   identity?: {
     displayName: string | null;
     firstName: string | null;
@@ -79,6 +90,13 @@ export type OperationsPage<T> = {
   policyVersion?: number;
 };
 
+export type OperationsStaffFilters = {
+  search?: string;
+  status?: 'pending' | 'active' | 'suspended' | 'revoked';
+  staffScopeView?: 'exact' | 'organizationTree';
+  branchFilterId?: string;
+};
+
 export type OperationsMfaStatus = {
   enabled: boolean;
   enrollmentPending: boolean;
@@ -130,8 +148,30 @@ export function listOperationsStaff(
   scope: OperationsScope,
   cursor?: string,
   roleId?: string,
+  filters: OperationsStaffFilters = {},
 ): Promise<OperationsPage<OperationsStaffMember>> {
-  return apiRequest(scopedPath('/api/v1/operations/staff', scope, cursor, { roleId }));
+  return apiRequest(
+    scopedPath('/api/v1/operations/staff', scope, cursor, {
+      roleId,
+      search: filters.search,
+      status: filters.status,
+      staffScopeView: filters.staffScopeView,
+      branchFilterId: filters.branchFilterId,
+    }),
+  );
+}
+
+export function getOperationsStaffMember(
+  scope: OperationsScope,
+  membershipId: string,
+  staffScopeView: 'exact' | 'organizationTree',
+): Promise<OperationsStaffMember> {
+  const query = new URLSearchParams({ scopeType: scope.type, staffScopeView });
+  query.set('organizationId', scope.organizationId);
+  if (scope.type === 'branch') query.set('branchId', scope.branchId);
+  return apiRequest(
+    `/api/v1/operations/staff/${encodeURIComponent(membershipId)}?${query.toString()}`,
+  );
 }
 
 export type OperationsRoleFilters = {
@@ -308,7 +348,7 @@ export function changeOperationsStaffRole(
 
 export function changeOperationsStaffStatus(
   membershipId: string,
-  action: 'suspend' | 'reactivate',
+  action: 'suspend' | 'reactivate' | 'revoke',
   reason: string | undefined,
   idempotencyKey: string,
 ): Promise<unknown> {

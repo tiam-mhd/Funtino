@@ -1121,10 +1121,24 @@ export class AccessManagementService {
   async listStaff(
     actorUserId: string,
     scope: AccessScope,
-    pagination: { cursor?: string; pageSize: number; roleId?: string },
+    pagination: {
+      cursor?: string;
+      pageSize: number;
+      roleId?: string;
+      status?: 'pending' | 'active' | 'suspended' | 'revoked';
+      staffScopeView?: 'exact' | 'organizationTree';
+      branchFilterId?: string;
+      membershipId?: string;
+    },
     meta: Pick<AccessCommandMeta, 'correlationId'>,
   ) {
     this.validatePagination(pagination.pageSize);
+    if (pagination.cursor && pagination.membershipId)
+      throw new BadRequestException('A membership lookup cannot be combined with a cursor.');
+    if (pagination.staffScopeView === 'organizationTree' && scope.type !== 'organization')
+      throw new BadRequestException('The organization tree staff view requires organization scope.');
+    if (pagination.branchFilterId && (scope.type !== 'organization' || pagination.staffScopeView !== 'organizationTree'))
+      throw new BadRequestException('A branch filter is valid only for an organization tree staff view.');
     return this.withSnapshot(async (tx) => {
       const { contexts, policyVersion } = await this.loadActorContexts(tx, actorUserId);
       this.requirePermissions(contexts, actorUserId, policyVersion, scope, ['staff.read'], {
@@ -1134,24 +1148,36 @@ export class AccessManagementService {
         scope,
         correlationId: meta.correlationId,
       });
+      const exactView = pagination.staffScopeView === 'exact';
       const scopeFilter: Prisma.StaffMembershipWhereInput =
         scope.type === 'global'
           ? { scopeType: 'global' }
           : scope.type === 'organization'
-            ? { organizationId: scope.organizationId }
-            : {
-                organizationId: scope.organizationId,
-                OR: [
-                  { scopeType: 'organization' },
-                  { scopeType: 'branch', branchId: scope.branchId },
-                ],
-              };
+            ? exactView
+              ? { scopeType: 'organization', organizationId: scope.organizationId }
+              : { organizationId: scope.organizationId }
+            : exactView
+              ? {
+                  scopeType: 'branch',
+                  organizationId: scope.organizationId,
+                  branchId: scope.branchId,
+                }
+              : {
+                  organizationId: scope.organizationId,
+                  OR: [
+                    { scopeType: 'organization' },
+                    { scopeType: 'branch', branchId: scope.branchId },
+                  ],
+                };
+      const filters: Prisma.StaffMembershipWhereInput[] = [scopeFilter];
+      if (pagination.branchFilterId)
+        filters.push({ scopeType: 'branch', branchId: pagination.branchFilterId });
+      if (pagination.roleId) filters.push({ roleId: pagination.roleId });
+      if (pagination.status) filters.push({ status: pagination.status });
+      if (pagination.membershipId) filters.push({ id: pagination.membershipId });
       const cursor = pagination.cursor
         ? await tx.staffMembership.findFirst({
-            where: {
-              id: pagination.cursor,
-              AND: [scopeFilter, ...(pagination.roleId ? [{ roleId: pagination.roleId }] : [])],
-            },
+            where: { id: pagination.cursor, AND: filters },
             select: { createdAt: true, id: true },
           })
         : null;
@@ -1159,8 +1185,7 @@ export class AccessManagementService {
         throw new BadRequestException('Staff cursor is invalid for this scope.');
       const where: Prisma.StaffMembershipWhereInput = {
         AND: [
-          scopeFilter,
-          ...(pagination.roleId ? [{ roleId: pagination.roleId }] : []),
+          ...filters,
           ...(cursor
             ? [
                 {
@@ -1182,11 +1207,20 @@ export class AccessManagementService {
       const hasMore = rows.length > pagination.pageSize;
       const page = rows.slice(0, pagination.pageSize);
       const invitations = await tx.staffInvitation.findMany({
-        where: { membershipId: { in: page.map(({ id }) => id) }, status: 'accepted' },
-        select: { membershipId: true, maskedPhone: true },
+        where: { membershipId: { in: page.map(({ id }) => id) } },
+        select: {
+          id: true,
+          membershipId: true,
+          status: true,
+          maskedPhone: true,
+          createdAt: true,
+          expiresAt: true,
+          acceptedAt: true,
+          revokedAt: true,
+        },
       });
-      const phones = new Map(
-        invitations.map(({ membershipId, maskedPhone }) => [membershipId, maskedPhone]),
+      const invitationsByMembership = new Map(
+        invitations.map((invitation) => [invitation.membershipId, invitation]),
       );
       await this.journal.recordSensitiveAccess(tx, {
         actorUserId,
@@ -1206,9 +1240,22 @@ export class AccessManagementService {
           scope: scopeFromColumns(row),
           role: roleSummary(row.role),
           version: row.version,
-          maskedPhone: phones.get(row.id) ?? null,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          maskedPhone: invitationsByMembership.get(row.id)?.maskedPhone ?? null,
+          invitation: invitationsByMembership.get(row.id)
+            ? {
+                id: invitationsByMembership.get(row.id)!.id,
+                status: invitationsByMembership.get(row.id)!.status,
+                maskedPhone: invitationsByMembership.get(row.id)!.maskedPhone,
+                createdAt: invitationsByMembership.get(row.id)!.createdAt,
+                expiresAt: invitationsByMembership.get(row.id)!.expiresAt,
+                acceptedAt: invitationsByMembership.get(row.id)!.acceptedAt,
+                revokedAt: invitationsByMembership.get(row.id)!.revokedAt,
+              }
+            : null,
         })),
-        nextCursor: hasMore ? page.at(-1)!.id : null,
+        nextCursor: hasMore && !pagination.membershipId ? page.at(-1)!.id : null,
         policyVersion,
       };
     });
@@ -1272,6 +1319,19 @@ export class AccessManagementService {
         }
         if (current.roleId !== nextRole.id && !hasValidReason(reason)) {
           throw new BadRequestException('Changing a staff membership role requires a reason.');
+        }
+        if (current.status === 'pending' && current.roleId !== nextRole.id) {
+          const invitation = await tx.staffInvitation.updateMany({
+            where: {
+              membershipId: current.id,
+              status: 'pending',
+              expiresAt: { gt: new Date() },
+            },
+            data: { roleId: nextRole.id, roleVersion: nextRole.version },
+          });
+          if (invitation.count !== 1) {
+            throw new ConflictException('The pending invitation is no longer active.');
+          }
         }
         this.requireDelegation(
           contexts,

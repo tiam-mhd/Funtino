@@ -1,5 +1,5 @@
-import { OperationsWorkspacePage } from '../../../features/branch-scope/OperationsWorkspacePage';
+import { StaffMembersPage } from '../../../features/staff-access/StaffMembersPage';
 
 export default function StaffPage() {
-  return <OperationsWorkspacePage section="staff" />;
+  return <StaffMembersPage />;
 }

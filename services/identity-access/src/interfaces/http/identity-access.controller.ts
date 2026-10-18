@@ -132,9 +132,40 @@ const roleDetailQuerySchema = z
     validateRoleScopeView(value, context);
   });
 const staffQuerySchema = z
-  .object({ ...scopedQueryFields, roleId: uuid.optional() })
+  .object({
+    ...scopedQueryFields,
+    roleId: uuid.optional(),
+    status: z.enum(['pending', 'active', 'suspended', 'revoked']).optional(),
+    staffScopeView: roleScopeViewSchema.optional(),
+    branchFilterId: uuid.optional(),
+    membershipId: uuid.optional(),
+  })
   .strict()
-  .superRefine(validateScopeQuery);
+  .superRefine((value, context) => {
+    validateScopeQuery(value, context);
+    const scopeType = value.scopeType ?? (value.branchId ? 'branch' : 'organization');
+    if (value.staffScopeView === 'organizationTree' && scopeType !== 'organization') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['staffScopeView'],
+        message: 'The organization tree staff view requires organization scope.',
+      });
+    }
+    if (value.branchFilterId && (scopeType !== 'organization' || value.staffScopeView !== 'organizationTree')) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['branchFilterId'],
+        message: 'A branch filter is valid only for an organization tree staff view.',
+      });
+    }
+    if (value.membershipId && value.cursor) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['membershipId'],
+        message: 'A membership lookup cannot be combined with a cursor.',
+      });
+    }
+  });
 const auditQuerySchema = z
   .object({
     scopeType: z.enum(['global', 'organization', 'branch']).optional(),
@@ -498,7 +529,15 @@ export class IdentityAccessController {
     return this.accessManagement.listStaff(
       this.actor(this.header(headers, 'x-funtino-actor-user-id')),
       this.queryScope(query),
-      { cursor: query.cursor, pageSize: query.pageSize, roleId: query.roleId },
+      {
+        cursor: query.cursor,
+        pageSize: query.pageSize,
+        roleId: query.roleId,
+        status: query.status,
+        staffScopeView: query.staffScopeView,
+        branchFilterId: query.branchFilterId,
+        membershipId: query.membershipId,
+      },
       { correlationId: this.correlation(this.header(headers, 'x-correlation-id')) },
     );
   }

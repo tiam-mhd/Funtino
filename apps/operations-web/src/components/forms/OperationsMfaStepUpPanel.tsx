@@ -22,6 +22,7 @@ type Props = {
   mfaStepUpUntil: number | null;
   onMfaStepUp: (validUntil: number) => void;
   onSessionExpired: () => void;
+  onComplete?: () => void;
 };
 
 export function OperationsMfaStepUpPanel({
@@ -29,6 +30,7 @@ export function OperationsMfaStepUpPanel({
   mfaStepUpUntil,
   onMfaStepUp,
   onSessionExpired,
+  onComplete,
 }: Props) {
   const [status, setStatus] = useState<OperationsMfaStatus | null>(null);
   const [stage, setStage] = useState<Stage | null>(null);
@@ -94,6 +96,7 @@ export function OperationsMfaStepUpPanel({
       onMfaStepUp(Date.parse(proof.validUntil));
       setCode('');
       setStage(null);
+      onComplete?.();
     } catch (failure) {
       handleFailure(failure);
     } finally {
@@ -134,6 +137,7 @@ export function OperationsMfaStepUpPanel({
     onMfaStepUp(Date.parse(recovery.validUntil));
     setRecovery(null);
     setStage(null);
+    onComplete?.();
   }
 
   function handleFailure(failure: unknown) {

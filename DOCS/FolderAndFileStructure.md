@@ -299,6 +299,8 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
           page.tsx
           branches/page.tsx
           staff/page.tsx
+          staff/
+            members/[membershipId]/page.tsx
           invitations/
             received/page.tsx
             issued/page.tsx
@@ -328,6 +330,11 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
           OperationsEntry.tsx
           OperationsWorkspaceContext.tsx
         staff-access/
+          StaffMembersPage.tsx
+          StaffMembersPage.module.css
+          StaffMemberDetails.tsx
+          StaffMemberDetails.module.css
+          staff-member-display.ts
         security/
         cashier/
         devices/

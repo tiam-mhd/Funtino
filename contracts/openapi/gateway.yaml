@@ -2018,9 +2018,28 @@ paths:
           required: false
           description: Restrict the roster to members assigned to this role.
           schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [pending, active, suspended, revoked] }
+        - name: staffScopeView
+          in: query
+          required: false
+          description: exact returns memberships owned by the requested scope; organizationTree includes the organization and child branches and is valid only for organization scope. Omission preserves the existing applicable roster view.
+          schema: { type: string, enum: [exact, organizationTree] }
+        - name: branchFilterId
+          in: query
+          required: false
+          description: Restrict an organizationTree roster to a selected child branch.
+          schema: { type: string, format: uuid }
+        - name: search
+          in: query
+          required: false
+          description: Case-insensitive search across display name, first name, last name, role name and masked phone. Gateway enriches only scoped IAM rows. A cursor may advance through scanned rows even when a page has no matches; nextCursor means more matching rows may be found.
+          schema: { type: string, minLength: 1, maxLength: 80 }
       responses:
         '200':
-          description: Minimal staff membership data in the authorized scope.
+          description: Staff membership data in the authorized scope, enriched with safe identity summaries. Search may return fewer than pageSize results while advancing the cursor.
           content:
             application/json:
               schema:
@@ -2191,6 +2210,29 @@ paths:
   /api/v1/operations/staff/{membershipId}:
     security:
       - managementSessionCookie: []
+    get:
+      x-funtino-availability: implemented
+      operationId: getOperationsStaffMember
+      parameters:
+        - $ref: '#/components/parameters/MembershipId'
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+        - name: staffScopeView
+          in: query
+          required: false
+          description: exact returns a member owned by the selected scope; organizationTree lets a manager in organization scope view a member of one of its child branches.
+          schema: { type: string, enum: [exact, organizationTree] }
+      responses:
+        '200':
+          description: Full member summary, safe identity data and lifecycle metadata in the authorized scope.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StaffMemberSuccess' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Member not found in the requested scope. }
+        '503': { description: Access policy service is unavailable; access must fail closed. }
     patch:
       x-funtino-availability: implemented
       operationId: updateOperationsStaffMembership
@@ -3926,6 +3968,28 @@ components:
         version:
           type: integer
           minimum: 1
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        invitation:
+          type: object
+          nullable: true
+          required: [id, status, maskedPhone, createdAt, expiresAt, acceptedAt, revokedAt]
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [pending, accepted, revoked, expired] }
+            maskedPhone: { type: string }
+            createdAt: { type: string, format: date-time }
+            expiresAt: { type: string, format: date-time }
+            acceptedAt: { type: string, format: date-time, nullable: true }
+            revokedAt: { type: string, format: date-time, nullable: true }
+        identity:
+          type: object
+          nullable: true
+          required: [displayName, firstName, lastName]
+          properties:
+            displayName: { type: string, nullable: true }
+            firstName: { type: string, nullable: true }
+            lastName: { type: string, nullable: true }
     DeviceLifecycleStatus:
       type: string
       enum: [active, suspended, retired]
@@ -4429,7 +4493,7 @@ components:
             data:
               type: array
               items:
-                $ref: '#/components/schemas/StaffSummary'
+                $ref: '#/components/schemas/StaffListSummary'
             nextCursor:
               type: string
               nullable: true
@@ -4438,6 +4502,41 @@ components:
               minimum: 1
         meta:
           $ref: '#/components/schemas/ResponseMeta'
+    StaffMemberSuccess:
+      type: object
+      required: [status, data, meta]
+      properties:
+        status: { type: string, enum: [success] }
+        data: { $ref: '#/components/schemas/StaffListSummary' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    StaffListSummary:
+      allOf:
+        - $ref: '#/components/schemas/StaffSummary'
+        - type: object
+          required: [createdAt, updatedAt, invitation, identity]
+          properties:
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+            invitation:
+              type: object
+              nullable: true
+              required: [id, status, maskedPhone, createdAt, expiresAt, acceptedAt, revokedAt]
+              properties:
+                id: { type: string, format: uuid }
+                status: { type: string, enum: [pending, accepted, revoked, expired] }
+                maskedPhone: { type: string }
+                createdAt: { type: string, format: date-time }
+                expiresAt: { type: string, format: date-time }
+                acceptedAt: { type: string, format: date-time, nullable: true }
+                revokedAt: { type: string, format: date-time, nullable: true }
+            identity:
+              type: object
+              nullable: true
+              required: [displayName, firstName, lastName]
+              properties:
+                displayName: { type: string, nullable: true }
+                firstName: { type: string, nullable: true }
+                lastName: { type: string, nullable: true }
     StaffMembershipUpdate:
       type: object
       additionalProperties: false

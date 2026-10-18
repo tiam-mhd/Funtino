@@ -163,6 +163,7 @@ Repository فقط abstraction دسترسی مالک داده است و query ر�
 ### الگوی فهرست پنل‌های مدیریت
 
 - `operations-web` و `system-web` هرکدام یک component فهرست در shell خود دارند؛ هر دو از قرارداد بصری و تعاملی بخش ۴.۱ `ImplementationRules.md` پیروی می‌کنند.
+- صفحه‌های نقش و اعضای scoped در Operations فقط طبق ADR-0028 و ADR-0029 می‌توانند جست‌وجوی inline و modal ساخت/ویرایش داشته باشند؛ متن‌ها و رفتار عمومی component فهرست از feature قابل تنظیم است.
 - component فهرست فقط چیدمان، نوار ابزار، dialog فیلتر، نتیجه، صفحه‌بندی cursor و stateهای عمومی را می‌سازد. query، مجوز، scope، مدل ردیف و mutation در feature مالک باقی می‌ماند.
 - feature فقط اقدام‌های پشتیبانی‌شده در API را به component می‌دهد؛ component مجوز یا endpoint را حدس نمی‌زند.
 - routeهای ایجاد، ویرایش و جزئیات در app router و feature مالک ساخته می‌شوند. فهرست ویرایش را در modal یا row expansion نگه نمی‌دارد؛ جزئیات فقط از API یا پاسخ فهرست مجاز همان کاربر می‌آید.

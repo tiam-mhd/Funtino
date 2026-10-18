@@ -97,7 +97,7 @@ const sectionLabels: Record<WorkspaceSection, string> = {
 const sectionDescriptions: Record<WorkspaceSection, string> = {
   overview: 'وضعیت شعب و دستگاه‌های مجموعه',
   branches: 'فهرست شعب فعال و وضعیت عملیاتی آن‌ها',
-  staff: 'اعضای فعال در مجموعه یا شعبه‌ی انتخاب‌شده',
+  staff: 'اعضا و عضویت‌های مجموعه یا شعبه‌ی انتخاب‌شده',
   staffRoles: 'تعریف نقش‌ها و دسترسی‌های همین محدوده',
   invitationsReceived: 'دعوت‌هایی که برای حساب شما فرستاده شده‌اند',
   invitationsIssued: 'دعوت‌های کاری فرستاده‌شده برای همکاران',
@@ -201,6 +201,7 @@ const sectionHrefs: Record<WorkspaceSection, string> = {
 
 export function workspaceSectionFromPath(pathname: string): WorkspaceSection {
   const path = pathname.replace(/\/$/, '') || '/';
+  if (path.startsWith('/staff/members/')) return 'staff';
   if (path.startsWith('/staff/roles/')) return 'staffRoles';
   const section = Object.entries(sectionHrefs).find(([, href]) => href === path)?.[0];
   return (section as WorkspaceSection | undefined) ?? 'overview';

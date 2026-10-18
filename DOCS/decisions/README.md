@@ -44,3 +44,4 @@
 - [ADR-0026: تفکیک صفحه‌های فهرستی پنل‌های Operations و System](0026-separate-management-list-pages.md)
 - [ADR-0027: قالب یکپارچه‌ی فهرست پنل‌های مدیریت و مرز چرخه‌ی حذف](0027-management-list-page-and-deletion-lifecycle.md)
 - [ADR-0028: مدیریت نقش‌های scoped در پنل Operations](0028-operations-scoped-role-management.md)
+- [ADR-0029: مدیریت اعضای scoped در پنل Operations](0029-operations-scoped-member-management.md)
