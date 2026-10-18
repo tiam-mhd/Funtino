@@ -304,7 +304,9 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
           invitations/
             received/page.tsx
             issued/page.tsx
-          devices/page.tsx
+          devices/
+            page.tsx
+            [deviceId]/page.tsx
           cards/
             inventory/page.tsx
             assignments/page.tsx
@@ -338,6 +340,10 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
         security/
         cashier/
         devices/
+          DeviceManagement.tsx
+          DeviceManagement.module.css
+          DeviceDetails.tsx
+          DeviceDetails.module.css
         products-pricing/
         campaigns/
         reports/

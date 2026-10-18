@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { Badge, Button, Surface } from '@funtino/design-system';
+import { OperationsManagementList } from '../../components/workspace-shell/OperationsManagementList';
 import { ApiRequestError } from '../../lib/api/client';
 import {
-  normalizeDigits,
   scopeKey,
   type OperationsScope,
   type OperationsScopeOption,
@@ -32,7 +33,13 @@ type DeviceDraft = {
   displayName: string;
   status: '' | OperationsDevice['status'];
   reason: string;
-  confirmRetirement: boolean;
+};
+type DeviceFilters = {
+  health: HealthFilter;
+  type: DeviceTypeFilter;
+  status: StatusFilter;
+  branchId: string;
+  followUp: boolean;
 };
 type RegistrationDraft = {
   branchId: string;
@@ -99,7 +106,15 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [branchFilter, setBranchFilter] = useState('all');
   const [showFollowUp, setShowFollowUp] = useState(false);
+  const [filterDraft, setFilterDraft] = useState<DeviceFilters>({
+    health: 'all',
+    type: 'all',
+    status: 'all',
+    branchId: 'all',
+    followUp: false,
+  });
   const [registrationOpen, setRegistrationOpen] = useState(false);
+  const [retirementDevice, setRetirementDevice] = useState<OperationsDevice | null>(null);
   const [registrationDraft, setRegistrationDraft] = useState<RegistrationDraft>({
     branchId: scope.type === 'branch' ? scope.branchId : '',
     adapterKey: 'manual',
@@ -113,8 +128,10 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
     displayName: '',
     status: '',
     reason: '',
-    confirmRetirement: false,
   });
+  const registrationDialogRef = useRef<HTMLDialogElement>(null);
+  const editDialogRef = useRef<HTMLDialogElement>(null);
+  const retirementDialogRef = useRef<HTMLDialogElement>(null);
   const scopeRef = useRef(scope);
   const scopeOptionRef = useRef(scopeOption);
   const statusFilterRef = useRef(statusFilter);
@@ -128,6 +145,24 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
   const branchBusy = useRef(false);
   const lastRegistrationAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
   const lastUpdateAttempt = useRef<{ fingerprint: string; key: string } | null>(null);
+
+  useEffect(() => {
+    const dialog = registrationDialogRef.current;
+    if (registrationOpen && dialog && !dialog.open) dialog.showModal();
+    if (!registrationOpen && dialog?.open) dialog.close();
+  }, [registrationOpen]);
+
+  useEffect(() => {
+    const dialog = editDialogRef.current;
+    if (editingDeviceId && dialog && !dialog.open) dialog.showModal();
+    if (!editingDeviceId && dialog?.open) dialog.close();
+  }, [editingDeviceId]);
+
+  useEffect(() => {
+    const dialog = retirementDialogRef.current;
+    if (retirementDevice && dialog && !dialog.open) dialog.showModal();
+    if (!retirementDevice && dialog?.open) dialog.close();
+  }, [retirementDevice]);
 
   const loadBranchPage = useCallback(
     async (cursor?: string) => {
@@ -197,7 +232,7 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
             {
               id: activeScope.branchId,
               organizationId: activeScope.organizationId,
-              name: activeOption.branch?.name ?? 'شعبه انتخاب‌شده',
+              name: activeOption.branch?.name.trim() || 'شعبه بدون نام نمایشی',
               city: activeOption.branch?.city ?? '',
             },
           ]);
@@ -230,7 +265,7 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
             {
               id: activeScope.branchId,
               organizationId: activeScope.organizationId,
-              name: activeOption.branch?.name ?? 'شعبه انتخاب‌شده',
+              name: activeOption.branch?.name.trim() || 'شعبه بدون نام نمایشی',
               city: activeOption.branch?.city ?? '',
             },
           ]
@@ -243,7 +278,10 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
     setStatusFilter('all');
     setBranchFilter('all');
     setShowFollowUp(false);
+    setFilterDraft({ health: 'all', type: 'all', status: 'all', branchId: 'all', followUp: false });
     setRegistrationOpen(false);
+    setEditingDeviceId(null);
+    setRetirementDevice(null);
     setRegistrationDraft({
       branchId: activeScope.type === 'branch' ? activeScope.branchId : '',
       adapterKey: 'manual',
@@ -298,7 +336,7 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
       if (normalizedSearch) {
         const branchName = branchNames.get(device.branchId) ?? '';
         const haystack = normalizeSearch(
-          [device.displayName, device.adapterKey, device.externalDeviceId, branchName].join(' '),
+          [deviceDisplayName(device), typeLabels[device.deviceType], branchName].join(' '),
         );
         if (!haystack.includes(normalizedSearch)) return false;
       }
@@ -320,6 +358,20 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
     statusFilter,
     typeFilter,
   ]);
+  const deviceGroups = useMemo(() => {
+    if (scope.type !== 'organization')
+      return [{ key: 'active-branch', heading: '', devices: visibleDevices }];
+    const groups = new Map<string, { key: string; heading: string; devices: OperationsDevice[] }>();
+    for (const device of visibleDevices) {
+      const heading = branchNames.get(device.branchId)?.trim() || 'شعبه بدون نام نمایشی';
+      const group = groups.get(device.branchId) ?? { key: device.branchId, heading, devices: [] };
+      group.devices.push(device);
+      groups.set(device.branchId, group);
+    }
+    return [...groups.values()].sort((left, right) =>
+      left.heading.localeCompare(right.heading, 'fa'),
+    );
+  }, [branchNames, scope.type, visibleDevices]);
 
   const healthCounts = useMemo(
     () => ({
@@ -410,10 +462,6 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
   async function submitDeviceUpdate(event: FormEvent<HTMLFormElement>, device: OperationsDevice) {
     event.preventDefault();
     if (!capabilities.canManage || actionBusy) return;
-    if (deviceDraft.status === 'retired' && !deviceDraft.confirmRetirement) {
-      setActionError('برای بازنشستگی دائمی دستگاه، تأیید صریح را ثبت کنید.');
-      return;
-    }
     const body: { displayName?: string; status?: OperationsDevice['status']; reason?: string } = {};
     if (deviceDraft.reason.trim()) body.reason = deviceDraft.reason.trim();
     const nextName = deviceDraft.displayName.trim();
@@ -447,155 +495,101 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
     }
   }
 
+  async function retireDevice() {
+    const device = retirementDevice;
+    if (!device || !capabilities.canManage || actionBusy) return;
+    const body = { status: 'retired' as const };
+    const fingerprint = JSON.stringify([device.id, device.version, body]);
+    const key =
+      lastUpdateAttempt.current?.fingerprint === fingerprint
+        ? lastUpdateAttempt.current.key
+        : crypto.randomUUID();
+    lastUpdateAttempt.current = { fingerprint, key };
+    setActionBusy(true);
+    setActionError('');
+    setNotice('');
+    try {
+      await updateOperationsDevice(device, body, key);
+      lastUpdateAttempt.current = null;
+      setRetirementDevice(null);
+      setNotice('دستگاه بازنشسته شد و دیگر قابل فعال‌سازی نیست.');
+      await refresh(true);
+    } catch (failure) {
+      if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
+      else setActionError(messageFor(failure));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   return (
-    <section className={styles.manager} aria-labelledby="device-management-title">
-      <div className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>ثبت پایدار و پایش heartbeat</p>
-          <h2 id="device-management-title">دستگاه‌های شعبه</h2>
-          <p className={styles.explainer}>
-            وضعیت سلامت از آخرین مشاهده‌ی معتبر Device Integration محاسبه می‌شود؛ این صفحه امکان ثبت
-            سلامت دستی ندارد.
-          </p>
-        </div>
-        <div className={styles.actions}>
-          <Button
-            type="button"
-            tone="ghost"
-            disabled={loading || loadingMore}
-            onClick={() => void refresh(false)}
-          >
-            تازه‌سازی
-          </Button>
-          {canRegister && (
-            <Button type="button" onClick={() => setRegistrationOpen((open) => !open)}>
-              {registrationOpen ? 'بستن فرم ثبت' : 'ثبت دستگاه'}
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {notice && (
-        <p className={styles.notice} role="status">
-          {notice}
-        </p>
-      )}
-      {actionError && (
-        <p className={styles.error} role="alert">
-          {actionError}
-        </p>
-      )}
-      {scope.type === 'organization' &&
-        capabilities.canRegister &&
-        !capabilities.canReadBranches && (
-          <p className={styles.warning} role="status">
-            برای ثبت دستگاه در محدوده‌ی مجموعه، مجوز مشاهده‌ی شعب (branch.read) نیز لازم است.
-          </p>
-        )}
-      {loadError && (
-        <div className={styles.errorBlock} role="alert">
-          <p>{loadError}</p>
-          <Button type="button" tone="ghost" onClick={() => void refresh(false)}>
-            تلاش دوباره
-          </Button>
-        </div>
-      )}
-
-      {registrationOpen && canRegister && (
-        <Surface className={styles.panel}>
-          <h3>ثبت هویت دستگاه</h3>
-          <p className={styles.helper}>
-            شناسه‌ی دستگاه باید با شناسه‌ای که آداپتر مجاز گزارش می‌کند یکسان باشد؛ آن را با شماره
-            یا شناسه‌ی کارت مشتری اشتباه نگیرید.
-          </p>
-          <form className={styles.formGrid} onSubmit={submitRegistration}>
-            {scope.type === 'organization' && (
-              <label className={styles.field} htmlFor="device-registration-branch">
-                شعبه مقصد
-                <select
-                  id="device-registration-branch"
-                  required
-                  value={registrationDraft.branchId}
-                  onChange={(event) =>
-                    setRegistrationDraft((current) => ({
-                      ...current,
-                      branchId: event.currentTarget.value,
-                    }))
-                  }
-                >
-                  <option value="">انتخاب شعبه</option>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name} — {branch.city}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <label className={styles.field} htmlFor="device-display-name">
-              نام نمایشی
-              <input
-                id="device-display-name"
-                required
-                minLength={1}
-                maxLength={120}
-                value={registrationDraft.displayName}
-                onChange={(event) =>
-                  setRegistrationDraft((current) => ({
-                    ...current,
-                    displayName: event.currentTarget.value,
-                  }))
-                }
-              />
-            </label>
-            <label className={styles.field} htmlFor="device-adapter-key">
-              کلید آداپتر
-              <input
-                id="device-adapter-key"
-                required
-                pattern="[a-zA-Z0-9][a-zA-Z0-9._-]*"
-                minLength={1}
-                maxLength={60}
-                dir="ltr"
-                value={registrationDraft.adapterKey}
-                onChange={(event) =>
-                  setRegistrationDraft((current) => ({
-                    ...current,
-                    adapterKey: event.currentTarget.value,
-                  }))
-                }
-              />
-            </label>
-            <label className={styles.field} htmlFor="device-external-id">
-              شناسه در سامانه دستگاه
-              <input
-                id="device-external-id"
-                required
-                minLength={1}
-                maxLength={160}
-                dir="ltr"
-                autoComplete="off"
-                value={registrationDraft.externalDeviceId}
-                onChange={(event) =>
-                  setRegistrationDraft((current) => ({
-                    ...current,
-                    externalDeviceId: event.currentTarget.value,
-                  }))
-                }
-              />
-            </label>
-            <label className={styles.field} htmlFor="device-type">
-              نوع دستگاه
+    <div className={styles.manager}>
+      <OperationsManagementList
+        title="دستگاه‌ها"
+        description="فهرست دستگاه‌ها و وضعیت سلامت دریافتی از سامانه‌ی مالک را مدیریت کنید."
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchLabel="جست‌وجوی نام دستگاه، نوع یا شعبه"
+        searchPlaceholder="نام دستگاه، نوع یا شعبه را جست‌وجو کنید"
+        toolbarLabel="جست‌وجو و فیلتر دستگاه‌ها"
+        filterTitle="فیلتر دستگاه‌ها"
+        filterDescription="وضعیت چرخه‌عمر از سرور دریافت می‌شود؛ سلامت، نوع، شعبه و جست‌وجو فقط روی صفحه‌های دریافت‌شده اعمال می‌شوند."
+        loadMoreLabel="بارگذاری دستگاه‌های بیشتر"
+        filterFields={
+          <>
+            <label className={styles.field} htmlFor="device-health-filter">
+              سلامت
               <select
-                id="device-type"
-                value={registrationDraft.deviceType}
+                id="device-health-filter"
+                value={filterDraft.health}
                 onChange={(event) =>
-                  setRegistrationDraft((current) => ({
+                  setFilterDraft((current) => ({
                     ...current,
-                    deviceType: event.currentTarget.value as OperationsDevice['deviceType'],
+                    health: event.currentTarget.value as HealthFilter,
                   }))
                 }
               >
+                <option value="all">همه‌ی وضعیت‌ها</option>
+                {Object.entries(healthLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.field} htmlFor="device-lifecycle-filter">
+              وضعیت چرخه‌عمر
+              <select
+                id="device-lifecycle-filter"
+                value={filterDraft.status}
+                onChange={(event) =>
+                  setFilterDraft((current) => ({
+                    ...current,
+                    status: event.currentTarget.value as StatusFilter,
+                  }))
+                }
+              >
+                <option value="all">همه‌ی وضعیت‌ها</option>
+                {Object.entries(lifecycleLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className={styles.field} htmlFor="device-type-filter">
+              نوع دستگاه
+              <select
+                id="device-type-filter"
+                value={filterDraft.type}
+                onChange={(event) =>
+                  setFilterDraft((current) => ({
+                    ...current,
+                    type: event.currentTarget.value as DeviceTypeFilter,
+                  }))
+                }
+              >
+                <option value="all">همه‌ی انواع</option>
                 {Object.entries(typeLabels).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
@@ -603,25 +597,41 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
                 ))}
               </select>
             </label>
-            <label className={styles.field} htmlFor="device-registration-reason">
-              دلیل ثبت (اختیاری)
-              <textarea
-                id="device-registration-reason"
-                maxLength={500}
-                value={registrationDraft.reason}
+            {scope.type === 'organization' && capabilities.canReadBranches && (
+              <label className={styles.field} htmlFor="device-branch-filter">
+                شعبه
+                <select
+                  id="device-branch-filter"
+                  value={filterDraft.branchId}
+                  onChange={(event) =>
+                    setFilterDraft((current) => ({
+                      ...current,
+                      branchId: event.currentTarget.value,
+                    }))
+                  }
+                >
+                  <option value="all">همه‌ی شعب</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name.trim() || 'شعبه بدون نام نمایشی'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className={styles.checkField}>
+              <input
+                type="checkbox"
+                checked={filterDraft.followUp}
                 onChange={(event) =>
-                  setRegistrationDraft((current) => ({
+                  setFilterDraft((current) => ({
                     ...current,
-                    reason: event.currentTarget.value,
+                    followUp: event.currentTarget.checked,
                   }))
                 }
               />
+              فقط دستگاه‌های نیازمند پیگیری
             </label>
-            {scope.type === 'organization' && branchesError && (
-              <p className={styles.warning} role="status">
-                {branchesError} ثبت در سطح مجموعه تا انتخاب شعبه‌ی مجاز ممکن نیست.
-              </p>
-            )}
             {scope.type === 'organization' && branchCursor && (
               <Button
                 type="button"
@@ -629,388 +639,634 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
                 disabled={loadingBranches}
                 onClick={() => void loadBranchPage(branchCursor)}
               >
-                {loadingBranches ? 'در حال دریافت…' : 'دریافت شعب بیشتر'}
+                {loadingBranches ? 'در حال دریافت شعب…' : 'دریافت شعب بیشتر'}
               </Button>
             )}
-            <div className={styles.formActions}>
-              <Button
-                type="submit"
-                disabled={actionBusy || (scope.type === 'organization' && branches.length === 0)}
-              >
-                {actionBusy ? 'در حال ثبت…' : 'ثبت دستگاه'}
-              </Button>
-              <Button
-                type="button"
-                tone="ghost"
-                disabled={actionBusy}
-                onClick={() => setRegistrationOpen(false)}
-              >
-                انصراف
-              </Button>
-            </div>
-          </form>
-        </Surface>
-      )}
-
-      {!loading && !loadError && (
-        <div className={styles.summary} aria-label="خلاصه‌ی سلامت دستگاه‌های بارگذاری‌شده">
-          <Surface className={styles.metric}>
-            <span>آنلاین</span>
-            <strong>{toPersianDigits(healthCounts.online)}</strong>
-          </Surface>
-          <Surface className={styles.metric}>
-            <span>نیازمند پیگیری</span>
-            <strong>{toPersianDigits(healthCounts.attention)}</strong>
-          </Surface>
-          <Surface className={styles.metric}>
-            <span>بدون مشاهده معتبر</span>
-            <strong>{toPersianDigits(healthCounts.unknown)}</strong>
-          </Surface>
-        </div>
-      )}
-
-      <Surface className={styles.filters} aria-label="فیلتر دستگاه‌ها">
-        <label className={styles.field} htmlFor="device-search">
-          جست‌وجو
-          <input
-            id="device-search"
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.currentTarget.value)}
-            placeholder="نام، آداپتر یا شناسه"
-          />
-        </label>
-        <label className={styles.field} htmlFor="device-health-filter">
-          سلامت
-          <select
-            id="device-health-filter"
-            value={healthFilter}
-            onChange={(event) => setHealthFilter(event.currentTarget.value as HealthFilter)}
-          >
-            <option value="all">همه وضعیت‌ها</option>
-            {Object.entries(healthLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={styles.field} htmlFor="device-lifecycle-filter">
-          وضعیت چرخه عمر
-          <select
-            id="device-lifecycle-filter"
-            value={statusFilter}
-            onChange={(event) => setStatusFilter(event.currentTarget.value as StatusFilter)}
-          >
-            <option value="all">همه</option>
-            {Object.entries(lifecycleLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={styles.field} htmlFor="device-type-filter">
-          نوع دستگاه
-          <select
-            id="device-type-filter"
-            value={typeFilter}
-            onChange={(event) => setTypeFilter(event.currentTarget.value as DeviceTypeFilter)}
-          >
-            <option value="all">همه انواع</option>
-            {Object.entries(typeLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {scope.type === 'organization' && branches.length > 0 && (
-          <label className={styles.field} htmlFor="device-branch-filter">
-            شعبه
-            <select
-              id="device-branch-filter"
-              value={branchFilter}
-              onChange={(event) => setBranchFilter(event.currentTarget.value)}
+          </>
+        }
+        onApplyFilters={() => {
+          setHealthFilter(filterDraft.health);
+          setTypeFilter(filterDraft.type);
+          setStatusFilter(filterDraft.status);
+          setBranchFilter(filterDraft.branchId);
+          setShowFollowUp(filterDraft.followUp);
+        }}
+        onClearFilters={() => {
+          setFilterDraft({
+            health: 'all',
+            type: 'all',
+            status: 'all',
+            branchId: 'all',
+            followUp: false,
+          });
+          setHealthFilter('all');
+          setTypeFilter('all');
+          setStatusFilter('all');
+          setBranchFilter('all');
+          setShowFollowUp(false);
+        }}
+        appliedFilterCount={
+          Number(healthFilter !== 'all') +
+          Number(typeFilter !== 'all') +
+          Number(statusFilter !== 'all') +
+          Number(branchFilter !== 'all') +
+          Number(showFollowUp)
+        }
+        filtersBusy={loading || loadingBranches}
+        showHeading={false}
+        pagination={{
+          hasMore: Boolean(nextCursor),
+          busy: loadingMore || loading,
+          onLoadMore: () => void loadMoreDevices(),
+        }}
+        toolbarActions={
+          <div className={styles.actions}>
+            <Button
+              type="button"
+              tone="ghost"
+              disabled={loading || loadingMore}
+              onClick={() => void refresh(false)}
             >
-              <option value="all">همه شعب بارگذاری‌شده</option>
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>
-                  {branch.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              تازه‌سازی
+            </Button>
+            {canRegister && (
+              <Button
+                className={styles.addButton}
+                type="button"
+                onClick={() => setRegistrationOpen(true)}
+              >
+                <DeviceIcon kind="add" />
+                افزودن دستگاه
+              </Button>
+            )}
+          </div>
+        }
+      >
+        {notice && (
+          <p className={styles.notice} role="status">
+            {notice}
+          </p>
         )}
-        <label className={styles.checkField}>
-          <input
-            type="checkbox"
-            checked={showFollowUp}
-            onChange={(event) => setShowFollowUp(event.currentTarget.checked)}
-          />{' '}
-          فقط نیازمند پیگیری (اختلال، داده کهنه یا آفلاین)
-        </label>
-        {scope.type === 'organization' && branchCursor && (
-          <Button
-            type="button"
-            tone="ghost"
-            disabled={loadingBranches}
-            onClick={() => void loadBranchPage(branchCursor)}
+        {actionError && (
+          <p className={styles.error} role="alert">
+            {actionError}
+          </p>
+        )}
+        {scope.type === 'organization' &&
+          capabilities.canRegister &&
+          !capabilities.canReadBranches && (
+            <p className={styles.warning} role="status">
+              برای ثبت دستگاه در محدوده‌ی مجموعه، مجوز مشاهده‌ی شعب (branch.read) نیز لازم است.
+            </p>
+          )}
+        {loadError && (
+          <div className={styles.errorBlock} role="alert">
+            <p>{loadError}</p>
+            <Button type="button" tone="ghost" onClick={() => void refresh(false)}>
+              تلاش دوباره
+            </Button>
+          </div>
+        )}
+
+        {registrationOpen && canRegister && (
+          <dialog
+            aria-labelledby="device-registration-title"
+            className={styles.dialog}
+            onCancel={(event) => {
+              event.preventDefault();
+              setRegistrationOpen(false);
+            }}
+            onClose={() => setRegistrationOpen(false)}
+            ref={registrationDialogRef}
           >
-            {loadingBranches ? 'در حال دریافت شعب…' : 'دریافت شعب بیشتر برای فیلتر'}
-          </Button>
-        )}
-        <p className={styles.filterNote}>
-          فیلتر سلامت، نوع، شعبه و جست‌وجو روی صفحات بارگذاری‌شده اعمال می‌شود؛ وضعیت چرخه عمر از
-          سرور فیلتر می‌شود.
-        </p>
-      </Surface>
-
-      {loading && devices.length === 0 ? (
-        <Surface className={styles.state} role="status" aria-live="polite">
-          <span className={styles.spinner} aria-hidden="true" />
-          در حال دریافت وضعیت واقعی دستگاه‌ها…
-        </Surface>
-      ) : null}
-      {!loading && !loadError && devices.length === 0 && (
-        <Surface className={styles.state}>
-          <h3>دستگاهی در این محدوده ثبت نشده</h3>
-          <p>پس از ثبت در شعبه، سلامت دستگاه تا رسیدن مشاهده معتبر «ناشناخته» می‌ماند.</p>
-        </Surface>
-      )}
-      {!loading && !loadError && devices.length > 0 && visibleDevices.length === 0 && (
-        <Surface className={styles.state}>
-          <h3>نتیجه‌ای با این فیلترها پیدا نشد</h3>
-          <p>فیلترها را تغییر دهید یا فهرست بیشتری بارگذاری کنید.</p>
-        </Surface>
-      )}
-
-      {visibleDevices.length > 0 && (
-        <div className={styles.deviceList} aria-live="polite">
-          {visibleDevices.map((device) => {
-            const allowedTransitions =
-              device.status === 'active'
-                ? (['suspended', 'retired'] as const)
-                : device.status === 'suspended'
-                  ? (['active', 'retired'] as const)
-                  : [];
-            return (
-              <Surface className={styles.deviceCard} key={device.id}>
-                <div className={styles.deviceHeader}>
-                  <div className={styles.deviceIdentity}>
-                    <div className={styles.titleLine}>
-                      <h3>{device.displayName}</h3>
-                      <Badge tone={healthTones[device.healthState]}>
-                        {healthLabels[device.healthState]}
-                      </Badge>
-                    </div>
-                    <p>
-                      {typeLabels[device.deviceType]} ·{' '}
-                      {branchNames.get(device.branchId) ?? `شعبه ${device.branchId.slice(0, 8)}`}
-                    </p>
-                  </div>
-                  <Badge
-                    tone={
-                      device.status === 'active'
-                        ? 'success'
-                        : device.status === 'suspended'
-                          ? 'warning'
-                          : 'neutral'
-                    }
-                  >
-                    {lifecycleLabels[device.status]}
-                  </Badge>
+            <div className={styles.dialogBody}>
+              <header className={styles.dialogHeader}>
+                <div>
+                  <h3 id="device-registration-title">افزودن دستگاه</h3>
+                  <p>
+                    هویت دستگاه ثبت می‌شود؛ وضعیت سلامت تا دریافت مشاهده‌ی معتبر نامشخص می‌ماند.
+                  </p>
                 </div>
-                <dl className={styles.details}>
-                  <div>
-                    <dt>آداپتر</dt>
-                    <dd dir="ltr">{device.adapterKey}</dd>
-                  </div>
-                  <div>
-                    <dt>شناسه دستگاه</dt>
-                    <dd dir="ltr">{device.externalDeviceId}</dd>
-                  </div>
-                  <div>
-                    <dt>آخرین مشاهده معتبر</dt>
-                    <dd>
-                      {device.latestObservedAt
-                        ? formatDate(device.latestObservedAt)
-                        : 'هنوز مشاهده معتبر دریافت نشده'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>تازگی داده</dt>
-                    <dd>
-                      {device.freshnessSeconds === null
-                        ? 'نامشخص'
-                        : formatAge(device.freshnessSeconds)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>گزارش آداپتر</dt>
-                    <dd>
-                      {device.latestReportedState
-                        ? healthLabels[device.latestReportedState]
-                        : 'بدون گزارش'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>نسخه رکورد</dt>
-                    <dd dir="ltr">{toPersianDigits(device.version)}</dd>
-                  </div>
-                </dl>
-                {device.healthState === 'unknown' && (
-                  <p className={styles.unknownNote}>
-                    این دستگاه ثبت شده اما هنوز heartbeat یا مشاهده‌ی معتبر برای آن دریافت نشده؛ آن
-                    را آنلاین فرض نکنید.
-                  </p>
-                )}
-                {['degraded', 'stale', 'offline'].includes(device.healthState) && (
-                  <p className={styles.warning}>
-                    نیازمند پیگیری: وضعیت بالا از مشاهده‌ی معتبر/آستانه تازگی محاسبه شده است. اتصال
-                    فیزیکی و رخدادها را در سامانه‌ی مالک بررسی کنید.
-                  </p>
-                )}
-                {capabilities.canManage && device.status !== 'retired' && (
-                  <details
-                    className={styles.manageDetails}
-                    open={editingDeviceId === device.id}
-                    onToggle={(event) => {
-                      if (
-                        !(event.currentTarget as HTMLDetailsElement).open &&
-                        editingDeviceId === device.id
-                      )
-                        setEditingDeviceId(null);
-                    }}
-                  >
-                    <summary
-                      onClick={(event) => {
-                        if (editingDeviceId !== device.id) {
-                          setDeviceDraft({
-                            displayName: device.displayName,
-                            status: '',
-                            reason: '',
-                            confirmRetirement: false,
-                          });
-                          setActionError('');
-                          setEditingDeviceId(device.id);
-                        } else {
-                          event.preventDefault();
-                          setEditingDeviceId(null);
+                <button
+                  aria-label="بستن فرم افزودن دستگاه"
+                  className={styles.closeButton}
+                  onClick={() => setRegistrationOpen(false)}
+                  type="button"
+                >
+                  ×
+                </button>
+              </header>
+              <Surface className={styles.panel}>
+                <p className={styles.helper}>
+                  شناسه‌ی دستگاه باید با شناسه‌ای که آداپتر مجاز گزارش می‌کند یکسان باشد؛ آن را با
+                  شماره یا شناسه‌ی کارت مشتری اشتباه نگیرید.
+                </p>
+                <form className={styles.formGrid} onSubmit={submitRegistration}>
+                  {scope.type === 'organization' && (
+                    <label className={styles.field} htmlFor="device-registration-branch">
+                      شعبه مقصد
+                      <select
+                        id="device-registration-branch"
+                        required
+                        value={registrationDraft.branchId}
+                        onChange={(event) =>
+                          setRegistrationDraft((current) => ({
+                            ...current,
+                            branchId: event.currentTarget.value,
+                          }))
                         }
-                      }}
-                    >
-                      مدیریت چرخه عمر
-                    </summary>
-                    {editingDeviceId === device.id && (
-                      <form
-                        className={styles.editForm}
-                        onSubmit={(event) => void submitDeviceUpdate(event, device)}
                       >
-                        <label className={styles.field} htmlFor={`device-name-${device.id}`}>
-                          نام نمایشی
-                          <input
-                            id={`device-name-${device.id}`}
-                            maxLength={120}
-                            value={deviceDraft.displayName}
-                            onChange={(event) =>
-                              setDeviceDraft((current) => ({
-                                ...current,
-                                displayName: event.currentTarget.value,
-                              }))
-                            }
-                          />
-                        </label>
-                        <label className={styles.field} htmlFor={`device-status-${device.id}`}>
-                          تغییر وضعیت
-                          <select
-                            id={`device-status-${device.id}`}
-                            value={deviceDraft.status}
-                            onChange={(event) =>
-                              setDeviceDraft((current) => ({
-                                ...current,
-                                status: event.currentTarget.value as DeviceDraft['status'],
-                                confirmRetirement: false,
-                              }))
-                            }
-                          >
-                            <option value="">بدون تغییر ({lifecycleLabels[device.status]})</option>
-                            {allowedTransitions.map((status) => (
-                              <option key={status} value={status}>
-                                {lifecycleLabels[status]}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className={styles.field} htmlFor={`device-reason-${device.id}`}>
-                          دلیل تغییر (اختیاری)
-                          <textarea
-                            id={`device-reason-${device.id}`}
-                            maxLength={500}
-                            value={deviceDraft.reason}
-                            onChange={(event) =>
-                              setDeviceDraft((current) => ({
-                                ...current,
-                                reason: event.currentTarget.value,
-                              }))
-                            }
-                          />
-                        </label>
-                        {deviceDraft.status === 'retired' && (
-                          <label className={styles.checkField}>
-                            <input
-                              type="checkbox"
-                              required
-                              checked={deviceDraft.confirmRetirement}
-                              onChange={(event) =>
-                                setDeviceDraft((current) => ({
-                                  ...current,
-                                  confirmRetirement: event.currentTarget.checked,
-                                }))
-                              }
-                            />
-                            بازنشستگی دائمی است و قابل فعال‌سازی مجدد نیست؛ تأیید می‌کنم
-                          </label>
-                        )}
-                        <div className={styles.formActions}>
-                          <Button type="submit" disabled={actionBusy}>
-                            {actionBusy ? 'در حال ذخیره…' : 'ذخیره تغییر'}
-                          </Button>
-                        </div>
-                      </form>
-                    )}
-                  </details>
-                )}
+                        <option value="">انتخاب شعبه</option>
+                        {branches.map((branch) => (
+                          <option key={branch.id} value={branch.id}>
+                            {[branch.name.trim() || 'شعبه بدون نام نمایشی', branch.city]
+                              .filter(Boolean)
+                              .join(' — ')}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <label className={styles.field} htmlFor="device-display-name">
+                    نام نمایشی
+                    <input
+                      id="device-display-name"
+                      required
+                      minLength={1}
+                      maxLength={120}
+                      value={registrationDraft.displayName}
+                      onChange={(event) =>
+                        setRegistrationDraft((current) => ({
+                          ...current,
+                          displayName: event.currentTarget.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className={styles.field} htmlFor="device-adapter-key">
+                    کلید آداپتر
+                    <input
+                      id="device-adapter-key"
+                      required
+                      pattern="[a-zA-Z0-9][a-zA-Z0-9._-]*"
+                      minLength={1}
+                      maxLength={60}
+                      dir="ltr"
+                      value={registrationDraft.adapterKey}
+                      onChange={(event) =>
+                        setRegistrationDraft((current) => ({
+                          ...current,
+                          adapterKey: event.currentTarget.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className={styles.field} htmlFor="device-external-id">
+                    شناسه در سامانه دستگاه
+                    <input
+                      id="device-external-id"
+                      required
+                      minLength={1}
+                      maxLength={160}
+                      dir="ltr"
+                      autoComplete="off"
+                      value={registrationDraft.externalDeviceId}
+                      onChange={(event) =>
+                        setRegistrationDraft((current) => ({
+                          ...current,
+                          externalDeviceId: event.currentTarget.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className={styles.field} htmlFor="device-type">
+                    نوع دستگاه
+                    <select
+                      id="device-type"
+                      value={registrationDraft.deviceType}
+                      onChange={(event) =>
+                        setRegistrationDraft((current) => ({
+                          ...current,
+                          deviceType: event.currentTarget.value as OperationsDevice['deviceType'],
+                        }))
+                      }
+                    >
+                      {Object.entries(typeLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className={styles.field} htmlFor="device-registration-reason">
+                    دلیل ثبت (اختیاری)
+                    <textarea
+                      id="device-registration-reason"
+                      maxLength={500}
+                      value={registrationDraft.reason}
+                      onChange={(event) =>
+                        setRegistrationDraft((current) => ({
+                          ...current,
+                          reason: event.currentTarget.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  {scope.type === 'organization' && branchesError && (
+                    <p className={styles.warning} role="status">
+                      {branchesError} ثبت در سطح مجموعه تا انتخاب شعبه‌ی مجاز ممکن نیست.
+                    </p>
+                  )}
+                  {scope.type === 'organization' && branchCursor && (
+                    <Button
+                      type="button"
+                      tone="ghost"
+                      disabled={loadingBranches}
+                      onClick={() => void loadBranchPage(branchCursor)}
+                    >
+                      {loadingBranches ? 'در حال دریافت…' : 'دریافت شعب بیشتر'}
+                    </Button>
+                  )}
+                  <div className={styles.formActions}>
+                    <Button
+                      type="submit"
+                      disabled={
+                        actionBusy || (scope.type === 'organization' && branches.length === 0)
+                      }
+                    >
+                      {actionBusy ? 'در حال ثبت…' : 'ثبت دستگاه'}
+                    </Button>
+                    <Button
+                      type="button"
+                      tone="ghost"
+                      disabled={actionBusy}
+                      onClick={() => setRegistrationOpen(false)}
+                    >
+                      انصراف
+                    </Button>
+                  </div>
+                </form>
               </Surface>
-            );
-          })}
-        </div>
-      )}
+            </div>
+          </dialog>
+        )}
 
-      {nextCursor && (
-        <Button
-          className={styles.loadMore}
-          type="button"
-          tone="secondary"
-          disabled={loadingMore || loading}
-          onClick={() => void loadMoreDevices()}
-        >
-          {loadingMore ? 'در حال دریافت…' : 'بارگذاری دستگاه‌های بیشتر'}
-        </Button>
-      )}
-      {pagesLoaded.current > 1 && (
-        <p className={styles.lastUpdated} role="status">
-          با بارگذاری صفحات بعدی، تازه‌سازی خودکار متوقف است؛ تازه‌سازی دستی فهرست را به صفحه‌ی نخست
-          بازمی‌گرداند.
-        </p>
-      )}
-      {lastUpdatedAt !== null && (
-        <p className={styles.lastUpdated} role="status">
-          آخرین دریافت: {formatDate(new Date(lastUpdatedAt).toISOString())} · تازه‌سازی خودکار هر ۶۰
-          ثانیه در زمان فعال بودن صفحه
-        </p>
-      )}
-    </section>
+        {!loading && !loadError && (
+          <div className={styles.summary} aria-label="خلاصه‌ی سلامت دستگاه‌های بارگذاری‌شده">
+            <Surface className={styles.metric}>
+              <span>آنلاین</span>
+              <strong>{toPersianDigits(healthCounts.online)}</strong>
+            </Surface>
+            <Surface className={styles.metric}>
+              <span>نیازمند پیگیری</span>
+              <strong>{toPersianDigits(healthCounts.attention)}</strong>
+            </Surface>
+            <Surface className={styles.metric}>
+              <span>بدون مشاهده معتبر</span>
+              <strong>{toPersianDigits(healthCounts.unknown)}</strong>
+            </Surface>
+          </div>
+        )}
+
+        {loading && devices.length === 0 ? (
+          <Surface className={styles.state} role="status" aria-live="polite">
+            <span className={styles.spinner} aria-hidden="true" />
+            در حال دریافت وضعیت واقعی دستگاه‌ها…
+          </Surface>
+        ) : null}
+        {!loading && !loadError && devices.length === 0 && (
+          <Surface className={styles.state}>
+            <h3>دستگاهی در این محدوده ثبت نشده</h3>
+            <p>پس از ثبت در شعبه، سلامت دستگاه تا رسیدن مشاهده معتبر «ناشناخته» می‌ماند.</p>
+          </Surface>
+        )}
+        {!loading && !loadError && devices.length > 0 && visibleDevices.length === 0 && (
+          <Surface className={styles.state}>
+            <h3>نتیجه‌ای با این فیلترها پیدا نشد</h3>
+            <p>فیلترها را تغییر دهید یا فهرست بیشتری بارگذاری کنید.</p>
+          </Surface>
+        )}
+
+        {visibleDevices.length > 0 && (
+          <div className={styles.deviceList} aria-live="polite">
+            {deviceGroups.map((group) => (
+              <section
+                className={styles.deviceGroup}
+                key={group.key}
+                aria-label={group.heading || 'دستگاه‌های شعبه'}
+              >
+                {group.heading && <h3 className={styles.groupHeading}>{group.heading}</h3>}
+                <div className={styles.groupRows}>
+                  {group.devices.map((device) => (
+                    <Surface className={styles.deviceCard} key={device.id}>
+                      <div className={styles.deviceHeader}>
+                        <div className={styles.deviceIdentity}>
+                          <div className={styles.titleLine}>
+                            <h3>{deviceDisplayName(device)}</h3>
+                            <Badge tone={healthTones[device.healthState]}>
+                              {healthLabels[device.healthState]}
+                            </Badge>
+                          </div>
+                          <p>
+                            {typeLabels[device.deviceType]} ·{' '}
+                            {branchNames.get(device.branchId)?.trim() || 'نام شعبه در دسترس نیست'}
+                          </p>
+                        </div>
+                        <Badge
+                          tone={
+                            device.status === 'active'
+                              ? 'success'
+                              : device.status === 'suspended'
+                                ? 'warning'
+                                : 'neutral'
+                          }
+                        >
+                          {lifecycleLabels[device.status]}
+                        </Badge>
+                      </div>
+                      <dl className={styles.rowDetails}>
+                        <div>
+                          <dt>آخرین مشاهده معتبر</dt>
+                          <dd>
+                            {device.latestObservedAt
+                              ? formatDate(device.latestObservedAt)
+                              : 'هنوز مشاهده معتبر دریافت نشده'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>تازگی داده</dt>
+                          <dd>
+                            {device.freshnessSeconds === null
+                              ? 'نامشخص'
+                              : formatAge(device.freshnessSeconds)}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div
+                        className={styles.rowActions}
+                        aria-label={`عملیات ${deviceDisplayName(device)}`}
+                      >
+                        <Link
+                          className={styles.iconButton}
+                          href={`/devices/${encodeURIComponent(device.id)}`}
+                          aria-label={`جزئیات ${deviceDisplayName(device)}`}
+                          title="جزئیات"
+                        >
+                          <DeviceIcon kind="details" />
+                        </Link>
+                        {capabilities.canManage && device.status !== 'retired' && (
+                          <>
+                            <button
+                              className={styles.iconButton}
+                              type="button"
+                              aria-label={`ویرایش ${deviceDisplayName(device)}`}
+                              title="ویرایش"
+                              onClick={() => {
+                                setDeviceDraft({
+                                  displayName: device.displayName,
+                                  status: '',
+                                  reason: '',
+                                });
+                                setActionError('');
+                                setEditingDeviceId(device.id);
+                              }}
+                            >
+                              <DeviceIcon kind="edit" />
+                            </button>
+                            <button
+                              className={`${styles.iconButton} ${styles.dangerIconButton}`}
+                              type="button"
+                              aria-label={`بازنشسته‌سازی دائمی ${deviceDisplayName(device)}`}
+                              title="بازنشسته‌سازی دائمی"
+                              onClick={() => {
+                                setActionError('');
+                                setRetirementDevice(device);
+                              }}
+                            >
+                              <DeviceIcon kind="delete" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                      {device.healthState === 'unknown' && (
+                        <p className={styles.unknownNote}>
+                          این دستگاه ثبت شده اما هنوز heartbeat یا مشاهده‌ی معتبر برای آن دریافت
+                          نشده؛ آن را آنلاین فرض نکنید.
+                        </p>
+                      )}
+                      {['degraded', 'stale', 'offline'].includes(device.healthState) && (
+                        <p className={styles.warning}>
+                          نیازمند پیگیری: وضعیت بالا از مشاهده‌ی معتبر/آستانه تازگی محاسبه شده است.
+                          اتصال فیزیکی و رخدادها را در سامانه‌ی مالک بررسی کنید.
+                        </p>
+                      )}
+                    </Surface>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+        {pagesLoaded.current > 1 && (
+          <p className={styles.lastUpdated} role="status">
+            با بارگذاری صفحات بعدی، تازه‌سازی خودکار متوقف است؛ تازه‌سازی دستی فهرست را به صفحه‌ی
+            نخست بازمی‌گرداند.
+          </p>
+        )}
+        {lastUpdatedAt !== null && (
+          <p className={styles.lastUpdated} role="status">
+            آخرین دریافت: {formatDate(new Date(lastUpdatedAt).toISOString())} · تازه‌سازی خودکار هر
+            ۶۰ ثانیه در زمان فعال بودن صفحه
+          </p>
+        )}
+        {editingDeviceId && devices.some((device) => device.id === editingDeviceId) && (
+          <dialog
+            aria-labelledby="device-edit-title"
+            className={styles.dialog}
+            onCancel={(event) => {
+              event.preventDefault();
+              setEditingDeviceId(null);
+            }}
+            onClose={() => setEditingDeviceId(null)}
+            ref={editDialogRef}
+          >
+            {(() => {
+              const device = devices.find((item) => item.id === editingDeviceId)!;
+              const nextStatus = device.status === 'active' ? 'suspended' : 'active';
+              return (
+                <div className={styles.dialogBody}>
+                  <header className={styles.dialogHeader}>
+                    <div>
+                      <h3 id="device-edit-title">ویرایش {deviceDisplayName(device)}</h3>
+                      <p>نام یا وضعیت چرخه‌عمر دستگاه را به‌روزرسانی کنید.</p>
+                    </div>
+                    <button
+                      aria-label="بستن فرم ویرایش"
+                      className={styles.closeButton}
+                      onClick={() => setEditingDeviceId(null)}
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  </header>
+                  <form
+                    className={styles.editForm}
+                    onSubmit={(event) => void submitDeviceUpdate(event, device)}
+                  >
+                    <label className={styles.field} htmlFor="device-edit-name">
+                      نام نمایشی
+                      <input
+                        id="device-edit-name"
+                        maxLength={120}
+                        value={deviceDraft.displayName}
+                        onChange={(event) =>
+                          setDeviceDraft((current) => ({
+                            ...current,
+                            displayName: event.currentTarget.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className={styles.field} htmlFor="device-edit-status">
+                      وضعیت چرخه‌عمر
+                      <select
+                        id="device-edit-status"
+                        value={deviceDraft.status}
+                        onChange={(event) =>
+                          setDeviceDraft((current) => ({
+                            ...current,
+                            status: event.currentTarget.value as DeviceDraft['status'],
+                          }))
+                        }
+                      >
+                        <option value="">بدون تغییر ({lifecycleLabels[device.status]})</option>
+                        <option value={nextStatus}>{lifecycleLabels[nextStatus]}</option>
+                      </select>
+                    </label>
+                    <label className={styles.field} htmlFor="device-edit-reason">
+                      دلیل تغییر (اختیاری)
+                      <textarea
+                        id="device-edit-reason"
+                        maxLength={500}
+                        value={deviceDraft.reason}
+                        onChange={(event) =>
+                          setDeviceDraft((current) => ({
+                            ...current,
+                            reason: event.currentTarget.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    {actionError && (
+                      <p className={styles.error} role="alert">
+                        {actionError}
+                      </p>
+                    )}
+                    <div className={styles.formActions}>
+                      <Button type="submit" disabled={actionBusy}>
+                        {actionBusy ? 'در حال ذخیره…' : 'ذخیره تغییرات'}
+                      </Button>
+                      <Button
+                        type="button"
+                        tone="ghost"
+                        disabled={actionBusy}
+                        onClick={() => setEditingDeviceId(null)}
+                      >
+                        انصراف
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              );
+            })()}
+          </dialog>
+        )}
+        {retirementDevice && (
+          <dialog
+            aria-labelledby="device-retirement-title"
+            aria-describedby="device-retirement-description"
+            className={styles.dialog}
+            onCancel={(event) => {
+              event.preventDefault();
+              setRetirementDevice(null);
+            }}
+            onClose={() => setRetirementDevice(null)}
+            ref={retirementDialogRef}
+          >
+            <div className={styles.dialogBody}>
+              <header className={styles.dialogHeader}>
+                <div>
+                  <h3 id="device-retirement-title">بازنشسته‌سازی دائمی دستگاه</h3>
+                  <p id="device-retirement-description">
+                    «{deviceDisplayName(retirementDevice)}» بازنشسته می‌شود و طبق چرخه‌عمر دستگاه
+                    قابل فعال‌سازی مجدد نیست.
+                  </p>
+                </div>
+                <button
+                  aria-label="بستن تأیید بازنشستگی"
+                  className={styles.closeButton}
+                  onClick={() => setRetirementDevice(null)}
+                  type="button"
+                >
+                  ×
+                </button>
+              </header>
+              {actionError && (
+                <p className={styles.error} role="alert">
+                  {actionError}
+                </p>
+              )}
+              <div className={styles.formActions}>
+                <Button
+                  type="button"
+                  tone="danger"
+                  disabled={actionBusy}
+                  onClick={() => void retireDevice()}
+                >
+                  {actionBusy ? 'در حال ثبت…' : 'تأیید بازنشستگی'}
+                </Button>
+                <Button
+                  type="button"
+                  tone="ghost"
+                  disabled={actionBusy}
+                  onClick={() => setRetirementDevice(null)}
+                >
+                  انصراف
+                </Button>
+              </div>
+            </div>
+          </dialog>
+        )}
+      </OperationsManagementList>
+    </div>
+  );
+}
+
+function DeviceIcon({ kind }: { kind: 'add' | 'details' | 'edit' | 'delete' }) {
+  if (kind === 'add')
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    );
+  if (kind === 'details')
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z" />
+        <circle cx="12" cy="12" r="2.5" />
+      </svg>
+    );
+  if (kind === 'edit')
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m4 16.5-.8 4.3 4.3-.8L19.8 7.7a2.4 2.4 0 0 0-3.4-3.4L4 16.5Z" />
+        <path d="m14.8 5.9 3.4 3.4" />
+      </svg>
+    );
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 4v5m4-5v5" />
+    </svg>
   );
 }
 
@@ -1048,6 +1304,10 @@ function appendUnique(current: OperationsDeviceBranch[], incoming: OperationsDev
   const byId = new Map(current.map((item) => [item.id, item]));
   for (const item of incoming) byId.set(item.id, item);
   return [...byId.values()];
+}
+
+function deviceDisplayName(device: OperationsDevice) {
+  return device.displayName.trim() || 'دستگاه بدون نام نمایشی';
 }
 
 function toPersianDigits(value: number) {

@@ -203,6 +203,7 @@ export function workspaceSectionFromPath(pathname: string): WorkspaceSection {
   const path = pathname.replace(/\/$/, '') || '/';
   if (path.startsWith('/staff/members/')) return 'staff';
   if (path.startsWith('/staff/roles/')) return 'staffRoles';
+  if (path.startsWith('/devices/')) return 'devices';
   const section = Object.entries(sectionHrefs).find(([, href]) => href === path)?.[0];
   return (section as WorkspaceSection | undefined) ?? 'overview';
 }
