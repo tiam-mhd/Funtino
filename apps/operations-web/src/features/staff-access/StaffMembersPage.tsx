@@ -59,6 +59,7 @@ export function StaffMembersPage() {
     onSessionExpired,
   } = useOperationsWorkspace();
   const scope = activeScope.scope;
+  const scopeKey = scopeValue(scope);
   const scopeView = scope.type === 'organization' ? 'organizationTree' : 'exact';
   const [members, setMembers] = useState<OperationsStaffMember[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -90,6 +91,7 @@ export function StaffMembersPage() {
   const [loadedContext, setLoadedContext] = useState('');
   const requestSequence = useRef(0);
   const activeRequest = useRef('');
+  const previousFilterScopeKey = useRef(scopeKey);
   const mfaJobRef = useRef<MfaJob | null>(null);
   const editorDialogRef = useRef<HTMLDialogElement>(null);
   const actionDialogRef = useRef<HTMLDialogElement>(null);
@@ -120,6 +122,17 @@ export function StaffMembersPage() {
     () => roles.filter((role) => isStaffRoleAssignable(role, inviteScope)),
     [inviteScope, roles],
   );
+  const filterRoles = useMemo(
+    () =>
+      roles.filter((role) => {
+        if (!sameId(role.scope.organizationId, scope.organizationId)) return false;
+        if (scope.type === 'organization') {
+          return role.scope.type === 'organization' || role.scope.type === 'branch';
+        }
+        return role.scope.type === 'branch' && sameId(role.scope.branchId, scope.branchId);
+      }),
+    [roles, scope],
+  );
   const editRoles = useMemo(
     () => {
       if (editor?.kind !== 'edit') return [];
@@ -136,6 +149,13 @@ export function StaffMembersPage() {
     const timer = window.setTimeout(() => setSearch(searchInput.trim()), 280);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
+
+  useEffect(() => {
+    if (previousFilterScopeKey.current === scopeKey) return;
+    previousFilterScopeKey.current = scopeKey;
+    setFilters((current) => ({ ...current, roleId: '', branchFilterId: '' }));
+    setFilterDraft((current) => ({ ...current, roleId: '', branchFilterId: '' }));
+  }, [scopeKey]);
 
   useEffect(() => setFilterDraft(filters), [filters]);
 
@@ -436,7 +456,7 @@ export function StaffMembersPage() {
                 value={filterDraft.roleId}
               >
                 <option value="">همه‌ی نقش‌ها</option>
-                {roles.map((role) => (
+                {filterRoles.map((role) => (
                   <option key={role.id} value={role.id}>
                     {role.name.trim() || 'نقش بدون نام نمایشی'} · {operationsStaffScopeLabel(role.scope, scopeOptions)}
                   </option>
@@ -474,7 +494,7 @@ export function StaffMembersPage() {
         showHeading={false}
         title="اعضا"
         toolbarActions={
-          <Button onClick={openInvite} type="button">
+          <Button className={styles.addMemberButton} onClick={openInvite} type="button">
             <Icon kind="add" />
             افزودن عضو
           </Button>

@@ -1,3 +1,9 @@
+.addMemberButton {
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+}
+
 .results {
   display: grid;
   gap: 16px;
