@@ -138,6 +138,7 @@ export type OperationsRoleFilters = {
   search?: string;
   lifecycle?: 'active' | 'disabled' | 'deleted';
   kind?: 'custom' | 'system';
+  roleScopeView?: 'exact' | 'organizationTree';
 };
 
 export function listOperationsRoles(
@@ -150,6 +151,7 @@ export function listOperationsRoles(
       search: filters.search,
       lifecycle: filters.lifecycle,
       kind: filters.kind,
+      roleScopeView: filters.roleScopeView,
     }),
   );
 }
@@ -157,9 +159,12 @@ export function listOperationsRoles(
 export function getOperationsRole(
   scope: OperationsScope,
   roleId: string,
+  roleScopeView?: 'exact' | 'organizationTree',
 ): Promise<OperationsAccessRole> {
   return apiRequest(
-    scopedPath(`/api/v1/operations/roles/${encodeURIComponent(roleId)}`, scope),
+    scopedPath(`/api/v1/operations/roles/${encodeURIComponent(roleId)}`, scope, undefined, {
+      roleScopeView,
+    }),
   );
 }
 

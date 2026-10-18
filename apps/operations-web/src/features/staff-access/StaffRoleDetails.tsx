@@ -14,10 +14,11 @@ import {
   type OperationsStaffMember,
 } from '../../lib/api/operations-staff';
 import { useOperationsWorkspace } from '../branch-scope/OperationsWorkspaceContext';
+import { operationsRolePermissionLabel, operationsRoleScopeLabel } from './role-display';
 import styles from './StaffRoleDetails.module.css';
 
 export function StaffRoleDetails({ roleId }: { roleId: string }) {
-  const { activeScope, onSessionExpired } = useOperationsWorkspace();
+  const { activeScope, scopeOptions, onSessionExpired } = useOperationsWorkspace();
   const scope = activeScope.scope;
   const queryKey = JSON.stringify([scopeKey(scope), roleId]);
   const activeQueryKey = useRef(queryKey);
@@ -44,11 +45,20 @@ export function StaffRoleDetails({ roleId }: { roleId: string }) {
     setRoleError('');
     setMembersError('');
     setMembersForbidden(false);
-    const [roleResult, membersResult, permissionsResult] = await Promise.allSettled([
-      getOperationsRole(scope, roleId),
-      listOperationsStaff(scope, undefined, roleId),
+    const roleScopeView = scope.type === 'organization' ? 'organizationTree' : 'exact';
+    const [roleResult, permissionsResult] = await Promise.allSettled([
+      getOperationsRole(scope, roleId, roleScopeView),
       listOperationsPermissions(),
     ]);
+    let membersResult: PromiseSettledResult<
+      Awaited<ReturnType<typeof listOperationsStaff>>
+    > | null = null;
+    if (roleResult.status === 'fulfilled') {
+      const [result] = await Promise.allSettled([
+        listOperationsStaff(roleResult.value.scope, undefined, roleId),
+      ]);
+      membersResult = result;
+    }
     if (!isCurrentRequest()) return;
     if (roleResult.status === 'fulfilled') {
       setRole(roleResult.value);
@@ -59,10 +69,10 @@ export function StaffRoleDetails({ roleId }: { roleId: string }) {
       setRole(null);
       setRoleError(messageFor(roleResult.reason));
     }
-    if (membersResult.status === 'fulfilled') {
+    if (membersResult?.status === 'fulfilled') {
       setMembers(membersResult.value.data);
       setMembersCursor(membersResult.value.nextCursor);
-    } else {
+    } else if (membersResult?.status === 'rejected') {
       setMembersForbidden(
         membersResult.reason instanceof ApiRequestError && membersResult.reason.status === 403,
       );
@@ -72,6 +82,9 @@ export function StaffRoleDetails({ roleId }: { roleId: string }) {
       setMembers([]);
       setMembersCursor(null);
       setMembersError(messageFor(membersResult.reason));
+    } else {
+      setMembers([]);
+      setMembersCursor(null);
     }
     if (permissionsResult.status === 'fulfilled') setPermissions(permissionsResult.value);
     setLoadedQueryKey(requestKey);
@@ -99,28 +112,19 @@ export function StaffRoleDetails({ roleId }: { roleId: string }) {
     setMembersError('');
     setMembersForbidden(false);
     try {
-      const page = await listOperationsStaff(scope, membersCursor, roleId);
-      if (
-        activeQueryKey.current !== requestKey ||
-        membersRequestSequence.current !== sequence
-      )
+      const page = await listOperationsStaff(role?.scope ?? scope, membersCursor, roleId);
+      if (activeQueryKey.current !== requestKey || membersRequestSequence.current !== sequence)
         return;
       setMembers((current) => mergeById(current, page.data));
       setMembersCursor(page.nextCursor);
     } catch (failure) {
-      if (
-        activeQueryKey.current !== requestKey ||
-        membersRequestSequence.current !== sequence
-      )
+      if (activeQueryKey.current !== requestKey || membersRequestSequence.current !== sequence)
         return;
       setMembersForbidden(failure instanceof ApiRequestError && failure.status === 403);
       if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
       setMembersError(messageFor(failure));
     } finally {
-      if (
-        activeQueryKey.current === requestKey &&
-        membersRequestSequence.current === sequence
-      ) {
+      if (activeQueryKey.current === requestKey && membersRequestSequence.current === sequence) {
         setMembersLoading(false);
       }
     }
@@ -137,10 +141,16 @@ export function StaffRoleDetails({ roleId }: { roleId: string }) {
   if (!role) {
     return (
       <Surface className={styles.state}>
-        <p className={styles.error} role="alert">{roleError || 'جزئیات این نقش در دسترس نیست.'}</p>
+        <p className={styles.error} role="alert">
+          {roleError || 'جزئیات این نقش در دسترس نیست.'}
+        </p>
         <div className={styles.actions}>
-          <Button onClick={() => void load()} type="button" tone="ghost">تلاش دوباره</Button>
-          <Link className={styles.backLink} href="/staff/roles">بازگشت به نقش‌ها</Link>
+          <Button onClick={() => void load()} type="button" tone="ghost">
+            تلاش دوباره
+          </Button>
+          <Link className={styles.backLink} href="/staff/roles">
+            بازگشت به نقش‌ها
+          </Link>
         </div>
       </Surface>
     );
@@ -150,7 +160,9 @@ export function StaffRoleDetails({ roleId }: { roleId: string }) {
   return (
     <section className={styles.page} aria-labelledby="staff-role-details-title">
       <div className={styles.topLine}>
-        <Link className={styles.backLink} href="/staff/roles">← بازگشت به نقش‌ها</Link>
+        <Link className={styles.backLink} href="/staff/roles">
+          ← بازگشت به نقش‌ها
+        </Link>
         <Badge tone={role.deletedAt ? 'danger' : role.status === 'active' ? 'success' : 'neutral'}>
           {role.deletedAt ? 'حذف‌شده' : role.status === 'active' ? 'فعال' : 'غیرفعال'}
         </Badge>
@@ -160,10 +172,28 @@ export function StaffRoleDetails({ roleId }: { roleId: string }) {
         <p className={styles.eyebrow}>نمای کامل نقش</p>
         <h2 id="staff-role-details-title">{role.name}</h2>
         <dl className={styles.facts}>
-          <div><dt>محدوده</dt><dd>{scopeLabel(role.scope)}</dd></div>
-          <div><dt>نوع نقش</dt><dd>{role.systemManaged ? 'سیستمی' : 'سفارشی'}</dd></div>
-          <div><dt>وضعیت</dt><dd>{role.deletedAt ? 'حذف‌شده و قابل‌بازیابی' : role.status === 'active' ? 'فعال' : 'غیرفعال'}</dd></div>
-          <div><dt>نسخه</dt><dd>{role.version.toLocaleString('fa-IR')}</dd></div>
+          <div>
+            <dt>محدوده</dt>
+            <dd>{operationsRoleScopeLabel(role.scope, scopeOptions)}</dd>
+          </div>
+          <div>
+            <dt>نوع نقش</dt>
+            <dd>{role.systemManaged ? 'سیستمی' : 'سفارشی'}</dd>
+          </div>
+          <div>
+            <dt>وضعیت</dt>
+            <dd>
+              {role.deletedAt
+                ? 'حذف‌شده و قابل‌بازیابی'
+                : role.status === 'active'
+                  ? 'فعال'
+                  : 'غیرفعال'}
+            </dd>
+          </div>
+          <div>
+            <dt>نسخه</dt>
+            <dd>{role.version.toLocaleString('fa-IR')}</dd>
+          </div>
         </dl>
       </Surface>
 
@@ -180,11 +210,11 @@ export function StaffRoleDetails({ roleId }: { roleId: string }) {
             <p className={styles.empty}>برای این نقش مجوزی ثبت نشده است.</p>
           ) : (
             <ul className={styles.permissionList}>
-              {role.permissionKeys.map((key) => {
+              {role.permissionKeys.map((key, index) => {
                 const definition = permissionByKey.get(key);
                 return (
                   <li className={styles.permission} key={key}>
-                    <strong dir="ltr">{key}</strong>
+                    <strong>{operationsRolePermissionLabel(key, index)}</strong>
                     <span>
                       {definition
                         ? `محدوده‌های مجاز: ${definition.scopes.map(scopeName).join('، ')}${definition.delegable ? ' · قابل واگذاری' : ''}${definition.stepUp ? ' · نیازمند تأیید دوباره' : ''}`
@@ -211,21 +241,37 @@ export function StaffRoleDetails({ roleId }: { roleId: string }) {
                 {membersError}
                 {membersForbidden ? ' برای مشاهده‌ی اعضا مجوز staff.read لازم است.' : ''}
               </p>
-              <Button disabled={membersLoading} onClick={() => void load()} type="button" tone="ghost">
+              <Button
+                disabled={membersLoading}
+                onClick={() => void load()}
+                type="button"
+                tone="ghost"
+              >
                 تلاش دوباره
               </Button>
             </div>
           ) : members.length === 0 ? (
-            <p className={styles.empty}>عضوی با این نقش در محدوده‌ی فعال پیدا نشد.</p>
+            <p className={styles.empty}>عضوی با این نقش پیدا نشد.</p>
           ) : (
             <ul className={styles.memberList}>
               {members.map((member) => (
                 <li className={styles.member} key={member.membershipId}>
                   <div>
-                    <strong>{member.identity?.displayName || member.maskedPhone || 'عضو بدون نام نمایشی'}</strong>
-                    <span>{member.maskedPhone || 'شماره‌ی پوشیده در دسترس نیست'} · {scopeLabel(member.scope)}</span>
+                    <strong>{memberDisplayName(member)}</strong>
+                    <span>
+                      {member.maskedPhone || 'شماره‌ی پوشیده در دسترس نیست'} ·{' '}
+                      {operationsRoleScopeLabel(member.scope, scopeOptions)}
+                    </span>
                   </div>
-                  <Badge tone={member.status === 'active' ? 'success' : member.status === 'revoked' ? 'danger' : 'warning'}>
+                  <Badge
+                    tone={
+                      member.status === 'active'
+                        ? 'success'
+                        : member.status === 'revoked'
+                          ? 'danger'
+                          : 'warning'
+                    }
+                  >
                     {memberStatus(member.status)}
                   </Badge>
                 </li>
@@ -233,7 +279,12 @@ export function StaffRoleDetails({ roleId }: { roleId: string }) {
             </ul>
           )}
           {membersCursor && !membersError && (
-            <Button disabled={membersLoading} onClick={() => void loadMoreMembers()} type="button" tone="ghost">
+            <Button
+              disabled={membersLoading}
+              onClick={() => void loadMoreMembers()}
+              type="button"
+              tone="ghost"
+            >
               {membersLoading ? 'در حال دریافت…' : 'نمایش اعضای بیشتر'}
             </Button>
           )}
@@ -249,10 +300,12 @@ function mergeById<T extends { membershipId: string }>(current: T[], next: T[]) 
   return [...merged.values()];
 }
 
-function scopeLabel(scope: OperationsAccessRole['scope']): string {
-  return scope.type === 'organization'
-    ? `مجموعه · ${scope.organizationId}`
-    : `شعبه · ${scope.branchId}`;
+function memberDisplayName(member: OperationsStaffMember): string {
+  return (
+    member.identity?.displayName?.trim() ||
+    [member.identity?.firstName, member.identity?.lastName].filter(Boolean).join(' ').trim() ||
+    'عضو بدون نام نمایشی'
+  );
 }
 
 function scopeName(scope: 'global' | 'organization' | 'branch'): string {
@@ -260,7 +313,13 @@ function scopeName(scope: 'global' | 'organization' | 'branch'): string {
 }
 
 function memberStatus(status: OperationsStaffMember['status']): string {
-  return status === 'active' ? 'فعال' : status === 'pending' ? 'در انتظار' : status === 'suspended' ? 'معلق' : 'لغوشده';
+  return status === 'active'
+    ? 'فعال'
+    : status === 'pending'
+      ? 'در انتظار'
+      : status === 'suspended'
+        ? 'معلق'
+        : 'لغوشده';
 }
 
 function messageFor(failure: unknown): string {

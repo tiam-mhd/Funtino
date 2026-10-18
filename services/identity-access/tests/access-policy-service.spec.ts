@@ -80,6 +80,7 @@ function makeService(
   journalOverrides: Partial<
     Pick<AccessMutationJournalService, 'recordSensitiveAccess' | 'recordDeniedAttempt'>
   > = {},
+  roleQueryCapture?: { where?: unknown },
 ) {
   const tx = {
     staffMembership: {
@@ -89,7 +90,12 @@ function makeService(
       findUnique: async () => ({ id: 1, version: 7, updatedAt: new Date() }),
     },
     accessRole: {
-      findMany: async () => roles,
+      findMany: async (args?: { where?: unknown }) => {
+        if (roleQueryCapture) roleQueryCapture.where = args?.where;
+        return roles;
+      },
+      findUnique: async (args: { where: { id: string } }) =>
+        roles.find((role) => role.id === args.where.id) ?? null,
     },
     mfaCredential: {
       findUnique: async () => credential,
@@ -261,6 +267,77 @@ test('role listings are scope-filtered and return a bounded keyset page', async 
   const result = await service.listRoles(userId, organizationId, undefined, { pageSize: 1 });
   assert.equal(result.data.length, 1);
   assert.equal(result.nextCursor, '00000000-0000-4000-8000-000000000001');
+});
+
+test('role scope views separate an exact branch from its organization tree', async () => {
+  const roleQueryCapture: { where?: unknown } = {};
+  const service = makeService(
+    [makeMembership({ id: 'membership-a', organizationId, permissionKeys: ['access.role.read'] })],
+    [
+      makeRole({
+        id: 'org-role',
+        scopeType: 'organization',
+        organizationId,
+        branchId: null,
+      }),
+      makeRole({ id: 'branch-role-a', scopeType: 'branch', organizationId, branchId }),
+      makeRole({
+        id: 'branch-role-b',
+        scopeType: 'branch',
+        organizationId,
+        branchId: 'branch-b',
+      }),
+      makeRole({
+        id: 'other-organization-role',
+        scopeType: 'branch',
+        organizationId: 'org-b',
+        branchId: 'branch-c',
+      }),
+    ],
+    null,
+    {},
+    roleQueryCapture,
+  );
+
+  const organizationRoles = await service.listRolesInScope(
+    userId,
+    { type: 'organization', organizationId },
+    { pageSize: 25, roleScopeView: 'organizationTree' },
+  );
+  assert.deepEqual(organizationRoles.data.map((role) => role.id).sort(), [
+    'branch-role-a',
+    'branch-role-b',
+    'org-role',
+  ]);
+  const organizationWhere = roleQueryCapture.where as {
+    organizationId: string;
+    OR: Array<{ scopeType: string; branchId: unknown }>;
+  };
+  assert.equal(organizationWhere.organizationId, organizationId);
+  assert.ok(
+    organizationWhere.OR.some(
+      (condition) => condition.scopeType === 'branch' && typeof condition.branchId === 'object',
+    ),
+  );
+
+  const branchRoles = await service.listRolesInScope(
+    userId,
+    { type: 'branch', organizationId, branchId },
+    { pageSize: 25, roleScopeView: 'exact' },
+  );
+  assert.deepEqual(
+    branchRoles.data.map((role) => role.id),
+    ['branch-role-a'],
+  );
+
+  const branchDetail = await service.getRoleInScope(
+    userId,
+    'branch-role-b',
+    { type: 'organization', organizationId },
+    'correlation-a',
+    'organizationTree',
+  );
+  assert.equal(branchDetail.data.id, 'branch-role-b');
 });
 
 test('role reads audit successful listings and denied template access', async () => {

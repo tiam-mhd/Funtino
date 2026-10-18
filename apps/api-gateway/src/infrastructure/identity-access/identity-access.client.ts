@@ -335,6 +335,7 @@ export class IdentityAccessClient {
       search?: string;
       lifecycle?: 'active' | 'disabled' | 'deleted';
       kind?: 'custom' | 'system';
+      roleScopeView?: 'exact' | 'organizationTree';
     } = {},
   ) {
     const query = this.scopeQuery(scope);
@@ -343,6 +344,7 @@ export class IdentityAccessClient {
     if (pagination.search) query.set('search', pagination.search);
     if (pagination.lifecycle) query.set('lifecycle', pagination.lifecycle);
     if (pagination.kind) query.set('kind', pagination.kind);
+    if (pagination.roleScopeView) query.set('roleScopeView', pagination.roleScopeView);
     const result = this.parse(
       roleListSchema,
       await this.request(`/internal/v1/roles?${query.toString()}`, userId, correlationId),
@@ -355,11 +357,14 @@ export class IdentityAccessClient {
     scope: AccessScopeDto,
     roleId: string,
     correlationId: string,
+    roleScopeView?: 'exact' | 'organizationTree',
   ) {
+    const query = this.scopeQuery(scope);
+    if (roleScopeView) query.set('roleScopeView', roleScopeView);
     return this.parse(
       mutationResultSchema(roleSummarySchema),
       await this.request(
-        `/internal/v1/roles/${encodeURIComponent(roleId)}?${this.scopeQuery(scope).toString()}`,
+        `/internal/v1/roles/${encodeURIComponent(roleId)}?${query.toString()}`,
         userId,
         correlationId,
       ),

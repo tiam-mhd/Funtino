@@ -123,10 +123,65 @@ function authorizationContext(
   };
 }
 
-function isScopeApplicable(role: RoleSummary, target: AccessScope): boolean {
+type RoleScopeView = 'applicable' | 'exact' | 'organizationTree';
+
+function roleScopeWhere(target: AccessScope, view: RoleScopeView): Prisma.AccessRoleWhereInput {
+  if (view === 'exact') {
+    if (target.type === 'global') {
+      return { scopeType: 'global', organizationId: null, branchId: null };
+    }
+    if (target.type === 'branch') {
+      return {
+        scopeType: 'branch',
+        organizationId: target.organizationId,
+        branchId: target.branchId,
+      };
+    }
+    return { scopeType: 'organization', organizationId: target.organizationId, branchId: null };
+  }
+
+  if (view === 'organizationTree' && target.type === 'organization') {
+    return {
+      organizationId: target.organizationId,
+      OR: [
+        { scopeType: 'organization', branchId: null },
+        { scopeType: 'branch', branchId: { not: null } },
+      ],
+    };
+  }
+
+  if (target.type === 'global') {
+    return { scopeType: 'global', organizationId: null, branchId: null };
+  }
+  if (target.type === 'branch') {
+    return {
+      organizationId: target.organizationId,
+      OR: [
+        { scopeType: 'organization', branchId: null },
+        { scopeType: 'branch', branchId: target.branchId },
+      ],
+    };
+  }
+  return { scopeType: 'organization', organizationId: target.organizationId, branchId: null };
+}
+
+function isScopeApplicable(
+  role: RoleSummary,
+  target: AccessScope,
+  view: RoleScopeView = 'applicable',
+): boolean {
+  if (view === 'exact') {
+    if (role.scope.type === 'global' || target.type === 'global') {
+      return role.scope.type === 'global' && target.type === 'global';
+    }
+    if (role.scope.organizationId !== target.organizationId) return false;
+    if (role.scope.type === 'organization') return target.type === 'organization';
+    return target.type === 'branch' && role.scope.branchId === target.branchId;
+  }
   if (role.scope.type === 'global') return target.type === 'global';
   if (target.type === 'global' || role.scope.organizationId !== target.organizationId) return false;
   if (role.scope.type === 'organization') return true;
+  if (view === 'organizationTree') return target.type === 'organization';
   return target.type === 'branch' && role.scope.branchId === target.branchId;
 }
 
@@ -286,6 +341,7 @@ export class AccessPolicyService {
       search?: string;
       lifecycle?: 'active' | 'disabled' | 'deleted';
       kind?: 'custom' | 'system';
+      roleScopeView?: Exclude<RoleScopeView, 'applicable'>;
     } = { pageSize: 25 },
     correlationId: string = randomUUID(),
   ): Promise<{ status: 'success'; data: RoleSummary[]; nextCursor: string | null }> {
@@ -296,6 +352,10 @@ export class AccessPolicyService {
     ) {
       throw new BadRequestException('Invalid role page size.');
     }
+    if (pagination.roleScopeView === 'organizationTree' && targetScope.type !== 'organization') {
+      throw new BadRequestException('Organization tree role view requires organization scope.');
+    }
+    const roleScopeView = pagination.roleScopeView ?? 'applicable';
 
     return this.inSnapshot(async (tx) => {
       const { contexts, policyVersion } = await this.loadContexts(tx, userId);
@@ -329,21 +389,7 @@ export class AccessPolicyService {
                 ...(pagination.lifecycle ? { status: pagination.lifecycle } : {}),
               }),
           ...(pagination.kind ? { systemManaged: pagination.kind === 'system' } : {}),
-          ...(targetScope.type === 'global'
-            ? { scopeType: 'global', organizationId: null, branchId: null }
-            : targetScope.type === 'branch'
-              ? {
-                  organizationId: targetScope.organizationId,
-                  OR: [
-                    { scopeType: 'organization', branchId: null },
-                    { scopeType: 'branch', branchId: targetScope.branchId },
-                  ],
-                }
-              : {
-                  scopeType: 'organization',
-                  organizationId: targetScope.organizationId,
-                  branchId: null,
-                }),
+          ...roleScopeWhere(targetScope, roleScopeView),
         },
         include: { permissions: true },
         orderBy: { id: 'asc' },
@@ -363,7 +409,9 @@ export class AccessPolicyService {
       });
       return {
         status: 'success',
-        data: page.map(summarizeRole).filter((role) => isScopeApplicable(role, targetScope)),
+        data: page
+          .map(summarizeRole)
+          .filter((role) => isScopeApplicable(role, targetScope, roleScopeView)),
         nextCursor: hasMore ? (page.at(-1)?.id ?? null) : null,
       };
     });
@@ -374,7 +422,12 @@ export class AccessPolicyService {
     roleId: string,
     targetScope: AccessScope,
     correlationId: string,
+    roleScopeView: Exclude<RoleScopeView, 'applicable'> | undefined = undefined,
   ): Promise<{ data: RoleSummary; policyVersion: number }> {
+    if (roleScopeView === 'organizationTree' && targetScope.type !== 'organization') {
+      throw new BadRequestException('Organization tree role view requires organization scope.');
+    }
+    const resolvedRoleScopeView = roleScopeView ?? 'applicable';
     return this.inSnapshot(async (tx) => {
       const { contexts, policyVersion } = await this.loadContexts(tx, userId);
       const decision = evaluateAuthorizationAcrossMemberships(
@@ -398,7 +451,7 @@ export class AccessPolicyService {
         include: { permissions: true },
       });
       const summary = role ? summarizeRole(role) : null;
-      if (!summary || !isScopeApplicable(summary, targetScope)) {
+      if (!summary || !isScopeApplicable(summary, targetScope, resolvedRoleScopeView)) {
         throw new NotFoundException('Role not found in the requested scope.');
       }
       await this.journal.recordSensitiveAccess(tx, {

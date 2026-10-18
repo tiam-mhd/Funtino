@@ -62,39 +62,75 @@ const scopedQueryFields = {
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 };
 const validateScopeQuery = (
-  value: { scopeType?: 'global' | 'organization' | 'branch'; organizationId?: string; branchId?: string },
+  value: {
+    scopeType?: 'global' | 'organization' | 'branch';
+    organizationId?: string;
+    branchId?: string;
+  },
   context: z.RefinementCtx,
 ) => {
-    const type =
-      value.scopeType ??
-      (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
-    if (!type)
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'A valid scope is required.' });
-    if (type === 'global' && (value.organizationId || value.branchId))
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Global scope cannot include organization identifiers.',
-      });
-    if (type !== 'global' && !value.organizationId)
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Organization scope is required.' });
-    if (type === 'branch' && !value.branchId)
-      context.addIssue({ code: z.ZodIssueCode.custom, message: 'Branch scope is required.' });
-    if (type !== 'branch' && value.branchId)
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Branch identifier requires branch scope.',
-      });
+  const type =
+    value.scopeType ??
+    (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
+  if (!type)
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'A valid scope is required.' });
+  if (type === 'global' && (value.organizationId || value.branchId))
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Global scope cannot include organization identifiers.',
+    });
+  if (type !== 'global' && !value.organizationId)
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Organization scope is required.' });
+  if (type === 'branch' && !value.branchId)
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Branch scope is required.' });
+  if (type !== 'branch' && value.branchId)
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Branch identifier requires branch scope.',
+    });
 };
 const scopedQuerySchema = z.object(scopedQueryFields).strict().superRefine(validateScopeQuery);
+const roleScopeViewSchema = z.enum(['exact', 'organizationTree']).optional();
+const validateRoleScopeView = (
+  value: {
+    scopeType?: 'global' | 'organization' | 'branch';
+    organizationId?: string;
+    branchId?: string;
+    roleScopeView?: 'exact' | 'organizationTree';
+  },
+  context: z.RefinementCtx,
+) => {
+  const type =
+    value.scopeType ??
+    (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
+  if (value.roleScopeView === 'organizationTree' && type !== 'organization') {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Organization tree role view requires organization scope.',
+      path: ['roleScopeView'],
+    });
+  }
+};
 const rolesQuerySchema = z
   .object({
     ...scopedQueryFields,
+    roleScopeView: roleScopeViewSchema,
     search: z.string().trim().min(1).max(80).optional(),
     lifecycle: z.enum(['active', 'disabled', 'deleted']).optional(),
     kind: z.enum(['custom', 'system']).optional(),
   })
   .strict()
-  .superRefine(validateScopeQuery);
+  .superRefine((value, context) => {
+    validateScopeQuery(value, context);
+    validateRoleScopeView(value, context);
+  });
+const roleDetailQuerySchema = z
+  .object({ ...scopedQueryFields, roleScopeView: roleScopeViewSchema })
+  .strict()
+  .superRefine((value, context) => {
+    validateScopeQuery(value, context);
+    validateRoleScopeView(value, context);
+  });
 const staffQuerySchema = z
   .object({ ...scopedQueryFields, roleId: uuid.optional() })
   .strict()
@@ -364,6 +400,7 @@ export class IdentityAccessController {
         search: query.search,
         lifecycle: query.lifecycle,
         kind: query.kind,
+        roleScopeView: query.roleScopeView,
       },
       this.correlation(rawCorrelationId),
     );
@@ -386,13 +423,15 @@ export class IdentityAccessController {
   getRole(
     @Param('roleId', new ZodValidationPipe(uuid)) roleId: string,
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Query(new ZodValidationPipe(scopedQuerySchema)) query: ScopedQueryDto,
+    @Query(new ZodValidationPipe(roleDetailQuerySchema))
+    query: z.infer<typeof roleDetailQuerySchema>,
   ) {
     return this.accessPolicy.getRoleInScope(
       this.actor(this.header(headers, 'x-funtino-actor-user-id')),
       this.pathUuid(roleId),
       this.queryScope(query),
       this.correlation(this.header(headers, 'x-correlation-id')),
+      query.roleScopeView,
     );
   }
 

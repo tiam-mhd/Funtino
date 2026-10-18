@@ -10,6 +10,7 @@ import {
   normalizePhone,
   scopeKey,
   type OperationsScope,
+  type OperationsScopeOption,
 } from '../../lib/auth/operations-access';
 import {
   confirmOperationsMfaEnrollment,
@@ -33,14 +34,21 @@ import {
   type OperationsMfaStatus,
   type OperationsPage,
   type OperationsPermission,
+  type OperationsRoleFilters,
   type OperationsStaffInvitation,
   type OperationsStaffMember,
 } from '../../lib/api/operations-staff';
 import { StaffMemberCard } from './StaffMemberCard';
+import {
+  groupOperationsRoles,
+  operationsRolePermissionLabel,
+  operationsRoleScopeLabel,
+} from './role-display';
 import styles from './StaffAccessManager.module.css';
 
 type StaffAccessManagerProps = {
   scope: OperationsScope;
+  scopeOptions: OperationsScopeOption[];
   onSessionExpired: () => void;
   view?: 'roster' | 'invitations' | 'roles';
 };
@@ -52,7 +60,12 @@ type RoleLifecycleFilter = 'all' | 'active' | 'disabled' | 'deleted';
 type RoleKindFilter = 'all' | 'custom' | 'system';
 type RoleDialogMode = 'create' | 'edit' | 'delete' | 'restore' | null;
 
-export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAccessManagerProps) {
+export function StaffAccessManager({
+  scope,
+  scopeOptions,
+  onSessionExpired,
+  view,
+}: StaffAccessManagerProps) {
   const [staff, setStaff] = useState<OperationsStaffMember[]>([]);
   const [staffCursor, setStaffCursor] = useState<string | null>(null);
   const [roles, setRoles] = useState<OperationsAccessRole[]>([]);
@@ -105,13 +118,19 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
   const roleDialogRef = useRef<HTMLDialogElement>(null);
 
   const currentScopeKey = scopeKey(scope);
-  const roleApiFilters = useMemo(
+  const roleApiFilters = useMemo<OperationsRoleFilters>(
     () => ({
       search: roleSearch || undefined,
       lifecycle: roleFilters.lifecycle === 'all' ? undefined : roleFilters.lifecycle,
       kind: roleFilters.kind === 'all' ? undefined : roleFilters.kind,
+      roleScopeView:
+        view === 'roles'
+          ? scope.type === 'organization'
+            ? 'organizationTree'
+            : 'exact'
+          : undefined,
     }),
-    [roleFilters.kind, roleFilters.lifecycle, roleSearch],
+    [roleFilters.kind, roleFilters.lifecycle, roleSearch, scope.type, view],
   );
   const loadContextKey = JSON.stringify([currentScopeKey, view ?? 'roster', roleApiFilters]);
   const loadContextRef = useRef(loadContextKey);
@@ -358,7 +377,8 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
   const roleTargetScope = roleTarget?.scope ?? scope;
   const roleAuthorizationChanged = Boolean(
     roleTarget &&
-      (roleStatus !== roleTarget.status || !sameRoleKeys(rolePermissionKeys, roleTarget.permissionKeys)),
+      (roleStatus !== roleTarget.status ||
+        !sameRoleKeys(rolePermissionKeys, roleTarget.permissionKeys)),
   );
   const roleReasonRequired = roleDialog === 'create' || roleAuthorizationChanged;
   const rolePermissionOptions = permissions.filter((permission) =>
@@ -412,28 +432,19 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
     try {
       if (kind === 'staff') {
         const page = await listOperationsStaff(scope, cursor);
-        if (
-          loadContextRef.current !== requestContext ||
-          loadSequence.current !== requestSequence
-        )
+        if (loadContextRef.current !== requestContext || loadSequence.current !== requestSequence)
           return;
         setStaff((current) => mergeById(current, page.data, (item) => item.membershipId));
         setStaffCursor(page.nextCursor);
       } else if (kind === 'roles') {
         const page = await listOperationsRoles(scope, cursor, roleApiFilters);
-        if (
-          loadContextRef.current !== requestContext ||
-          loadSequence.current !== requestSequence
-        )
+        if (loadContextRef.current !== requestContext || loadSequence.current !== requestSequence)
           return;
         setRoles((current) => mergeById(current, page.data, (item) => item.id));
         setRolesCursor(page.nextCursor);
       } else {
         const page = await listScopedStaffInvitations(scope, cursor);
-        if (
-          loadContextRef.current !== requestContext ||
-          loadSequence.current !== requestSequence
-        )
+        if (loadContextRef.current !== requestContext || loadSequence.current !== requestSequence)
           return;
         setInvitations((current) => mergeById(current, page.data, (item) => item.id));
         setInvitationsCursor(page.nextCursor);
@@ -447,10 +458,7 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
         setLoadError(messageFor(failure));
       }
     } finally {
-      if (
-        loadContextRef.current === requestContext &&
-        loadSequence.current === requestSequence
-      ) {
+      if (loadContextRef.current === requestContext && loadSequence.current === requestSequence) {
         setLoadMoreBusy('');
       }
     }
@@ -640,7 +648,8 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
         return;
       }
       if (reason) updates.reason = reason;
-      const authorizationChanged = updates.permissionKeys !== undefined || updates.status !== undefined;
+      const authorizationChanged =
+        updates.permissionKeys !== undefined || updates.status !== undefined;
       if (authorizationChanged && reason.length < 8) {
         setActionError('برای تغییر دسترسی یا وضعیت نقش، دلیل ۸ نویسه‌ای لازم است.');
         return;
@@ -682,7 +691,9 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
     const idempotencyKey = freshIdempotencyKey();
     setRoleDialog(null);
     void requestSensitiveAction(
-      mode === 'delete' ? 'نقش حذف نرم شد و در فهرست حذف‌شده‌ها باقی ماند.' : 'نقش بازیابی شد و غیرفعال باقی ماند.',
+      mode === 'delete'
+        ? 'نقش حذف نرم شد و در فهرست حذف‌شده‌ها باقی ماند.'
+        : 'نقش بازیابی شد و غیرفعال باقی ماند.',
       async () => {
         if (mode === 'delete') await deleteOperationsRole(role, reason, idempotencyKey);
         else await restoreOperationsRole(role, reason, idempotencyKey);
@@ -692,19 +703,21 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
   }
 
   return (
-    <section className={styles.manager} aria-labelledby="staff-access-title">
+    <section
+      className={styles.manager}
+      aria-labelledby={view === 'roles' ? 'operations-list-title' : 'staff-access-title'}
+    >
       <header className={styles.managerHeader}>
-        <div>
-          <p className={styles.eyebrow}>مدیریت محدوده‌ی فعال</p>
-          <h2 id="staff-access-title">
-            {view === 'roles' ? 'نقش‌ها' : view === 'invitations' ? 'دعوت‌های صادرشده' : 'اعضا'}
-          </h2>
-          <p className={styles.explainer}>
-            {view === 'roles'
-              ? 'نقش‌های این محدوده و مجوزهای آن‌ها از IAM خوانده می‌شوند؛ تغییر دسترسی در سرور مجدداً بررسی و ممیزی می‌شود.'
-              : 'عضویت‌ها، دعوت‌ها و استثناها از IAM خوانده می‌شوند. هر درخواست دوباره در سرور و در همین محدوده مجوزسنجی می‌شود.'}
-          </p>
-        </div>
+        {view !== 'roles' && (
+          <div>
+            <p className={styles.eyebrow}>مدیریت محدوده‌ی فعال</p>
+            <h2 id="staff-access-title">{view === 'invitations' ? 'دعوت‌های صادرشده' : 'اعضا'}</h2>
+            <p className={styles.explainer}>
+              عضویت‌ها، دعوت‌ها و استثناها از IAM خوانده می‌شوند. هر درخواست دوباره در سرور و در
+              همین محدوده مجوزسنجی می‌شود.
+            </p>
+          </div>
+        )}
         <div className={styles.managerActions}>
           {mfaStatus ? (
             <Badge tone={mfaStatus.enabled ? 'success' : 'warning'}>
@@ -914,13 +927,17 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
           {pageLoading ? (
             <Surface className={styles.loadingState} role="status" aria-live="polite">
               <span className={styles.spinner} aria-hidden="true" />
-              {view === 'roles' ? 'در حال دریافت نقش‌های همین محدوده…' : 'در حال دریافت اعضا، نقش‌ها و دعوت‌های همین محدوده…'}
+              {view === 'roles'
+                ? 'در حال دریافت نقش‌های همین محدوده…'
+                : 'در حال دریافت اعضا، نقش‌ها و دعوت‌های همین محدوده…'}
             </Surface>
           ) : view === 'roles' ? (
             <StaffRoleList
               actionsDisabled={actionsDisabled}
               filterDraft={roleFilterDraft}
-              filterCount={(roleFilters.lifecycle === 'all' ? 0 : 1) + (roleFilters.kind === 'all' ? 0 : 1)}
+              filterCount={
+                (roleFilters.lifecycle === 'all' ? 0 : 1) + (roleFilters.kind === 'all' ? 0 : 1)
+              }
               loadMoreBusy={loadMoreBusy === 'roles'}
               onApplyFilters={() => setRoleFilters(roleFilterDraft)}
               onClearFilters={() => {
@@ -937,6 +954,8 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
               onSearchChange={setRoleSearchInput}
               roles={roles}
               rolesCursor={rolesCursor}
+              scope={scope}
+              scopeOptions={scopeOptions}
               search={roleSearchInput}
             />
           ) : tab === 'roster' ? (
@@ -1195,7 +1214,9 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
                     value={roleName}
                   />
                 </label>
-                <p className={styles.roleScopeText}>محدوده: {roleScopeLabel(roleTargetScope)}</p>
+                <p className={styles.roleScopeText}>
+                  محدوده: {operationsRoleScopeLabel(roleTargetScope, scopeOptions)}
+                </p>
                 {roleDialog === 'edit' && (
                   <label className={styles.field}>
                     وضعیت
@@ -1219,7 +1240,7 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
                     </p>
                   ) : (
                     <div className={styles.rolePermissionList}>
-                      {rolePermissionOptions.map((permission) => (
+                      {rolePermissionOptions.map((permission, index) => (
                         <label className={styles.rolePermission} key={permission.key}>
                           <input
                             checked={rolePermissionKeys.includes(permission.key)}
@@ -1234,7 +1255,7 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
                             }}
                             type="checkbox"
                           />
-                          <span dir="ltr">{permission.key}</span>
+                          <span>{operationsRolePermissionLabel(permission.key, index)}</span>
                           <small>
                             {permission.stepUp ? 'تغییر حساس' : 'عادی'}
                             {permission.delegable ? ' · قابل واگذاری' : ' · غیرقابل واگذاری'}
@@ -1256,12 +1277,24 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
                     value={roleReason}
                   />
                 </label>
-                {actionError && <p className={styles.error} role="alert">{actionError}</p>}
+                {actionError && (
+                  <p className={styles.error} role="alert">
+                    {actionError}
+                  </p>
+                )}
                 <footer className={styles.roleDialogActions}>
-                  <Button disabled={actionsDisabled} onClick={closeRoleDialog} type="button" tone="ghost">
+                  <Button
+                    disabled={actionsDisabled}
+                    onClick={closeRoleDialog}
+                    type="button"
+                    tone="ghost"
+                  >
                     انصراف
                   </Button>
-                  <Button disabled={actionsDisabled || rolePermissionOptions.length === 0} type="submit">
+                  <Button
+                    disabled={actionsDisabled || rolePermissionOptions.length === 0}
+                    type="submit"
+                  >
                     {roleDialog === 'create' ? 'افزودن نقش' : 'ذخیره‌ی تغییرات'}
                   </Button>
                 </footer>
@@ -1288,9 +1321,18 @@ export function StaffAccessManager({ scope, onSessionExpired, view }: StaffAcces
                     value={roleReason}
                   />
                 </label>
-                {actionError && <p className={styles.error} role="alert">{actionError}</p>}
+                {actionError && (
+                  <p className={styles.error} role="alert">
+                    {actionError}
+                  </p>
+                )}
                 <footer className={styles.roleDialogActions}>
-                  <Button disabled={actionsDisabled} onClick={closeRoleDialog} type="button" tone="ghost">
+                  <Button
+                    disabled={actionsDisabled}
+                    onClick={closeRoleDialog}
+                    type="button"
+                    tone="ghost"
+                  >
                     انصراف
                   </Button>
                   <Button
@@ -1327,9 +1369,13 @@ function StaffRoleList({
   onDelete,
   onRestore,
   onLoadMore,
+  scope,
+  scopeOptions,
 }: {
   roles: OperationsAccessRole[];
   rolesCursor: string | null;
+  scope: OperationsScope;
+  scopeOptions: OperationsScopeOption[];
   search: string;
   filterDraft: { lifecycle: RoleLifecycleFilter; kind: RoleKindFilter };
   filterCount: number;
@@ -1345,10 +1391,11 @@ function StaffRoleList({
   onRestore: (role: OperationsAccessRole) => void;
   onLoadMore: () => void;
 }) {
+  const roleGroups = groupOperationsRoles(roles, scope, scopeOptions);
   return (
     <OperationsManagementList
       appliedFilterCount={filterCount}
-      description="نقش‌ها و مجوزهای قابل استفاده در مجموعه یا شعبه‌ی فعال را مدیریت کنید."
+      description=""
       filterFields={
         <>
           <label className={styles.field}>
@@ -1397,7 +1444,8 @@ function StaffRoleList({
       searchLabel="جست‌وجوی نام نقش"
       searchPlaceholder="نام نقش را جست‌وجو کنید"
       searchValue={search}
-      title="نقش‌های مجموعه و شعبه"
+      showHeading={false}
+      title="نقش‌ها"
       toolbarActions={
         <Button disabled={actionsDisabled} onClick={onCreate} type="button">
           <RoleIcon kind="add" />
@@ -1412,72 +1460,92 @@ function StaffRoleList({
             : 'در این محدوده هنوز نقشی ثبت نشده است.'}
         </Surface>
       ) : (
-        <div className={styles.roleList}>
-          {roles.map((role) => (
-            <Surface className={styles.roleCard} key={role.id}>
-              <div className={styles.roleCardMain}>
-                <div className={styles.roleTitleLine}>
-                  <h3>{role.name}</h3>
-                  <Badge
-                    tone={
-                      role.deletedAt ? 'danger' : role.status === 'active' ? 'success' : 'neutral'
-                    }
-                  >
-                    {role.deletedAt ? 'حذف‌شده' : role.status === 'active' ? 'فعال' : 'غیرفعال'}
-                  </Badge>
-                </div>
-                <p className={styles.roleMeta}>
-                  {role.systemManaged ? 'نقش سیستمی' : 'نقش سفارشی'} · {roleScopeLabel(role.scope)} ·{' '}
-                  {role.permissionKeys.length.toLocaleString('fa-IR')} مجوز
-                </p>
+        <div className={styles.roleGroups}>
+          {roleGroups.map((group) => (
+            <section
+              aria-label={group.heading ?? undefined}
+              className={styles.roleGroup}
+              key={group.key}
+            >
+              {group.heading && <h3 className={styles.roleGroupTitle}>{group.heading}</h3>}
+              <div className={styles.roleList}>
+                {group.roles.map((role) => (
+                  <Surface className={styles.roleCard} key={role.id}>
+                    <div className={styles.roleCardMain}>
+                      <div className={styles.roleTitleLine}>
+                        <h3>{role.name}</h3>
+                        <Badge
+                          tone={
+                            role.deletedAt
+                              ? 'danger'
+                              : role.status === 'active'
+                                ? 'success'
+                                : 'neutral'
+                          }
+                        >
+                          {role.deletedAt
+                            ? 'حذف‌شده'
+                            : role.status === 'active'
+                              ? 'فعال'
+                              : 'غیرفعال'}
+                        </Badge>
+                      </div>
+                      <p className={styles.roleMeta}>
+                        {role.systemManaged ? 'نقش سیستمی' : 'نقش سفارشی'} ·{' '}
+                        {operationsRoleScopeLabel(role.scope, scopeOptions)} ·{' '}
+                        {role.permissionKeys.length.toLocaleString('fa-IR')} مجوز
+                      </p>
+                    </div>
+                    <div className={styles.roleActions} aria-label={`عملیات نقش ${role.name}`}>
+                      <Link
+                        aria-label={`جزئیات نقش ${role.name}`}
+                        className={styles.roleIconButton}
+                        href={`/staff/roles/${encodeURIComponent(role.id)}`}
+                        title="جزئیات"
+                      >
+                        <RoleIcon kind="details" />
+                      </Link>
+                      {!role.systemManaged && !role.deletedAt && (
+                        <>
+                          <button
+                            aria-label={`ویرایش نقش ${role.name}`}
+                            className={styles.roleIconButton}
+                            disabled={actionsDisabled}
+                            onClick={() => onEdit(role)}
+                            title="ویرایش"
+                            type="button"
+                          >
+                            <RoleIcon kind="edit" />
+                          </button>
+                          <button
+                            aria-label={`حذف نقش ${role.name}`}
+                            className={`${styles.roleIconButton} ${styles.roleDangerAction}`}
+                            disabled={actionsDisabled}
+                            onClick={() => onDelete(role)}
+                            title="حذف"
+                            type="button"
+                          >
+                            <RoleIcon kind="delete" />
+                          </button>
+                        </>
+                      )}
+                      {!role.systemManaged && role.deletedAt && (
+                        <button
+                          aria-label={`بازیابی نقش ${role.name}`}
+                          className={styles.roleIconButton}
+                          disabled={actionsDisabled}
+                          onClick={() => onRestore(role)}
+                          title="بازیابی"
+                          type="button"
+                        >
+                          <RoleIcon kind="restore" />
+                        </button>
+                      )}
+                    </div>
+                  </Surface>
+                ))}
               </div>
-              <div className={styles.roleActions} aria-label={`عملیات نقش ${role.name}`}>
-                <Link
-                  aria-label={`جزئیات نقش ${role.name}`}
-                  className={styles.roleIconButton}
-                  href={`/staff/roles/${encodeURIComponent(role.id)}`}
-                  title="جزئیات"
-                >
-                  <RoleIcon kind="details" />
-                </Link>
-                {!role.systemManaged && !role.deletedAt && (
-                  <>
-                    <button
-                      aria-label={`ویرایش نقش ${role.name}`}
-                      className={styles.roleIconButton}
-                      disabled={actionsDisabled}
-                      onClick={() => onEdit(role)}
-                      title="ویرایش"
-                      type="button"
-                    >
-                      <RoleIcon kind="edit" />
-                    </button>
-                    <button
-                      aria-label={`حذف نقش ${role.name}`}
-                      className={`${styles.roleIconButton} ${styles.roleDangerAction}`}
-                      disabled={actionsDisabled}
-                      onClick={() => onDelete(role)}
-                      title="حذف"
-                      type="button"
-                    >
-                      <RoleIcon kind="delete" />
-                    </button>
-                  </>
-                )}
-                {!role.systemManaged && role.deletedAt && (
-                  <button
-                    aria-label={`بازیابی نقش ${role.name}`}
-                    className={styles.roleIconButton}
-                    disabled={actionsDisabled}
-                    onClick={() => onRestore(role)}
-                    title="بازیابی"
-                    type="button"
-                  >
-                    <RoleIcon kind="restore" />
-                  </button>
-                )}
-              </div>
-            </Surface>
+            </section>
           ))}
         </div>
       )}
@@ -1487,32 +1555,48 @@ function StaffRoleList({
 
 function RoleIcon({ kind }: { kind: 'add' | 'details' | 'edit' | 'delete' | 'restore' }) {
   if (kind === 'add') {
-    return <svg aria-hidden="true" className={styles.roleIcon} viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>;
+    return (
+      <svg aria-hidden="true" className={styles.roleIcon} viewBox="0 0 24 24">
+        <path d="M12 5v14M5 12h14" />
+      </svg>
+    );
   }
   if (kind === 'details') {
-    return <svg aria-hidden="true" className={styles.roleIcon} viewBox="0 0 24 24"><path d="M2.8 12s3.3-6 9.2-6 9.2 6 9.2 6-3.3 6-9.2 6-9.2-6-9.2-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>;
+    return (
+      <svg aria-hidden="true" className={styles.roleIcon} viewBox="0 0 24 24">
+        <path d="M2.8 12s3.3-6 9.2-6 9.2 6 9.2 6-3.3 6-9.2 6-9.2-6-9.2-6Z" />
+        <circle cx="12" cy="12" r="2.5" />
+      </svg>
+    );
   }
   if (kind === 'edit') {
-    return <svg aria-hidden="true" className={styles.roleIcon} viewBox="0 0 24 24"><path d="m4 16.8-.8 4 4-.8L19 8.2 15.8 5 4 16.8Z" /><path d="m13.8 7 3.2 3.2" /></svg>;
+    return (
+      <svg aria-hidden="true" className={styles.roleIcon} viewBox="0 0 24 24">
+        <path d="m4 16.8-.8 4 4-.8L19 8.2 15.8 5 4 16.8Z" />
+        <path d="m13.8 7 3.2 3.2" />
+      </svg>
+    );
   }
   if (kind === 'delete') {
-    return <svg aria-hidden="true" className={styles.roleIcon} viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 4v5m4-5v5" /></svg>;
+    return (
+      <svg aria-hidden="true" className={styles.roleIcon} viewBox="0 0 24 24">
+        <path d="M4 7h16M9 7V4h6v3m3 0-.8 13H6.8L6 7m4 4v5m4-5v5" />
+      </svg>
+    );
   }
-  return <svg aria-hidden="true" className={styles.roleIcon} viewBox="0 0 24 24"><path d="M4 11a8 8 0 1 1 2.3 5.7M4 5v6h6" /><path d="M12 8v4l2.5 1.5" /></svg>;
-}
-
-function roleScopeLabel(scope: OperationsAccessRole['scope']): string {
-  return scope.type === 'organization'
-    ? `مجموعه ${scope.organizationId}`
-    : `شعبه ${scope.branchId}`;
+  return (
+    <svg aria-hidden="true" className={styles.roleIcon} viewBox="0 0 24 24">
+      <path d="M4 11a8 8 0 1 1 2.3 5.7M4 5v6h6" />
+      <path d="M12 8v4l2.5 1.5" />
+    </svg>
+  );
 }
 
 function sameRoleKeys(left: string[], right: string[]): boolean {
   const leftKeys = [...new Set(left)].sort();
   const rightKeys = [...new Set(right)].sort();
   return (
-    leftKeys.length === rightKeys.length &&
-    leftKeys.every((key, index) => key === rightKeys[index])
+    leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index])
   );
 }
 

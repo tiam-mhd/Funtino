@@ -570,6 +570,24 @@
   gap: 10px;
 }
 
+.roleGroups {
+  display: grid;
+  gap: 18px;
+}
+
+.roleGroup {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+}
+
+.roleGroupTitle {
+  margin: 0;
+  color: var(--ft-ink);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
 .roleCard {
   display: flex;
   min-width: 0;

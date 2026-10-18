@@ -243,9 +243,13 @@ paths:
         - name: kind
           in: query
           schema: { type: string, enum: [custom, system] }
+        - name: roleScopeView
+          in: query
+          description: exact returns roles owned by the requested scope; organizationTree returns organization and child-branch roles and is valid only for organization scope. Omission preserves the applicable-role view used by existing callers.
+          schema: { type: string, enum: [exact, organizationTree] }
       responses:
         '200':
-          description: Roles visible to the authenticated actor in the requested scope.
+          description: Roles visible to the authenticated actor using the requested role scope view.
           content:
             application/json:
               schema:
@@ -318,6 +322,10 @@ paths:
         - $ref: '#/components/parameters/ScopeType'
         - $ref: '#/components/parameters/OrganizationId'
         - $ref: '#/components/parameters/BranchId'
+        - name: roleScopeView
+          in: query
+          description: exact returns only a role owned by the requested scope; organizationTree allows an organization manager to read roles owned by its child branches. The latter is valid only for organization scope.
+          schema: { type: string, enum: [exact, organizationTree] }
       responses:
         '200':
           description: Role summary visible in the authorized scope.
@@ -391,7 +399,11 @@ paths:
         '403': { description: Actor lacks access.role.manage or fresh step-up authentication. }
         '404': { description: Role not found. }
         '409': { description: Stale version, system role, or active assignments prevent deletion. }
-        '503': { description: Scope ownership is not configured for production writes, or the policy store is unavailable. }
+        '503':
+          {
+            description: Scope ownership is not configured for production writes,
+            or the policy store is unavailable.,
+          }
   /internal/v1/roles/{roleId}/restore:
     post:
       x-funtino-availability: implemented
@@ -421,8 +433,18 @@ paths:
                 $ref: '#/components/schemas/RoleResponse'
         '403': { description: Actor lacks access.role.manage or fresh step-up authentication. }
         '404': { description: Role not found. }
-        '409': { description: Role is not deleted, stale version, system role, or duplicate scoped name. }
-        '503': { description: Scope ownership is not configured for production writes, or the policy store is unavailable. }
+        '409':
+          {
+            description: Role is not deleted,
+            stale version,
+            system role,
+            or duplicate scoped name.,
+          }
+        '503':
+          {
+            description: Scope ownership is not configured for production writes,
+            or the policy store is unavailable.,
+          }
   /internal/v1/staff/invitations:
     get:
       x-funtino-availability: implemented

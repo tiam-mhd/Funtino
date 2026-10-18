@@ -57,14 +57,33 @@ export function OperationsWorkspacePage({ section }: { section: WorkspaceSection
     );
   }
   if (section === 'staff') {
-    return <StaffAccessManager onSessionExpired={onSessionExpired} scope={scope} view="roster" />;
+    return (
+      <StaffAccessManager
+        onSessionExpired={onSessionExpired}
+        scope={scope}
+        scopeOptions={scopeOptions}
+        view="roster"
+      />
+    );
   }
   if (section === 'staffRoles') {
-    return <StaffAccessManager onSessionExpired={onSessionExpired} scope={scope} view="roles" />;
+    return (
+      <StaffAccessManager
+        onSessionExpired={onSessionExpired}
+        scope={scope}
+        scopeOptions={scopeOptions}
+        view="roles"
+      />
+    );
   }
   if (section === 'invitationsIssued') {
     return (
-      <StaffAccessManager onSessionExpired={onSessionExpired} scope={scope} view="invitations" />
+      <StaffAccessManager
+        onSessionExpired={onSessionExpired}
+        scope={scope}
+        scopeOptions={scopeOptions}
+        view="invitations"
+      />
     );
   }
   if (section === 'invitationsReceived') {

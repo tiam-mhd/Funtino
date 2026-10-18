@@ -1350,9 +1350,14 @@ paths:
           in: query
           required: false
           schema: { type: string, enum: [custom, system] }
+        - name: roleScopeView
+          in: query
+          required: false
+          description: exact returns roles owned by the requested scope; organizationTree returns organization and child-branch roles and is valid only for organization scope. Omission preserves the applicable-role view used by existing callers.
+          schema: { type: string, enum: [exact, organizationTree] }
       responses:
         '200':
-          description: Roles visible in the requested membership scope.
+          description: Roles visible in the authorized scope using the requested role scope view.
           content:
             application/json:
               schema:
@@ -1423,6 +1428,11 @@ paths:
         - $ref: '#/components/parameters/ScopeType'
         - $ref: '#/components/parameters/OrganizationId'
         - $ref: '#/components/parameters/BranchId'
+        - name: roleScopeView
+          in: query
+          required: false
+          description: exact returns only a role owned by the requested scope; organizationTree allows an organization manager to read roles owned by its child branches. The latter is valid only for organization scope.
+          schema: { type: string, enum: [exact, organizationTree] }
       responses:
         '200':
           description: Role details visible in the requested scope, including permission keys and deletion lifecycle.
@@ -1487,8 +1497,12 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { description: Role not found. }
-        '409': { description: Version conflict, system role, or the role still has active assignments. }
-        '503': { description: Tenant writes are disabled until the Organization/Branch owner validator is integrated. }
+        '409':
+          { description: Version conflict, system role, or the role still has active assignments. }
+        '503':
+          {
+            description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.,
+          }
   /api/v1/operations/roles/{roleId}/restore:
     security:
       - managementSessionCookie: []
@@ -1516,7 +1530,10 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { description: Role not found. }
         '409': { description: Version conflict, system role, or duplicate scoped role name. }
-        '503': { description: Tenant writes are disabled until the Organization/Branch owner validator is integrated. }
+        '503':
+          {
+            description: Tenant writes are disabled until the Organization/Branch owner validator is integrated.,
+          }
   /api/v1/operations/devices:
     security:
       - managementSessionCookie: []

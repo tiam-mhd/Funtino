@@ -16,6 +16,7 @@ export function OperationsManagementList({
   onClearFilters,
   appliedFilterCount = 0,
   filtersBusy = false,
+  showHeading = true,
   toolbarActions,
   pagination,
   children,
@@ -31,6 +32,7 @@ export function OperationsManagementList({
   onClearFilters: () => void;
   appliedFilterCount?: number;
   filtersBusy?: boolean;
+  showHeading?: boolean;
   toolbarActions: ReactNode;
   pagination?: { hasMore: boolean; busy: boolean; onLoadMore: () => void };
   children: ReactNode;
@@ -49,11 +51,17 @@ export function OperationsManagementList({
   return (
     <section className={styles.page} aria-labelledby="operations-list-title">
       <header className={styles.heading}>
-        <div>
-          <p className={styles.eyebrow}>محدوده‌ی فعال</p>
-          <h2 id="operations-list-title">{title}</h2>
-          <p className={styles.description}>{description}</p>
-        </div>
+        {showHeading ? (
+          <div>
+            <p className={styles.eyebrow}>محدوده‌ی فعال</p>
+            <h2 id="operations-list-title">{title}</h2>
+            <p className={styles.description}>{description}</p>
+          </div>
+        ) : (
+          <h2 className={styles.visuallyHidden} id="operations-list-title">
+            {title}
+          </h2>
+        )}
         <div className={styles.headerActions}>{toolbarActions}</div>
       </header>
 
@@ -88,7 +96,9 @@ export function OperationsManagementList({
             <path d="M4 6h16M7 12h10m-7 6h4" />
           </svg>
           <span>فیلتر</span>
-          {appliedFilterCount > 0 && <span className={styles.filterCount}>{appliedFilterCount}</span>}
+          {appliedFilterCount > 0 && (
+            <span className={styles.filterCount}>{appliedFilterCount}</span>
+          )}
         </Button>
       </div>
 
