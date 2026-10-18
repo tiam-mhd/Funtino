@@ -43,3 +43,4 @@
 - [ADR-0025: هویت واحد، نشست مدیریتی مستقل و سیاست ریسک احراز هویت](0025-management-audience-optional-password-and-risk-policy.md)
 - [ADR-0026: تفکیک صفحه‌های فهرستی پنل‌های Operations و System](0026-separate-management-list-pages.md)
 - [ADR-0027: قالب یکپارچه‌ی فهرست پنل‌های مدیریت و مرز چرخه‌ی حذف](0027-management-list-page-and-deletion-lifecycle.md)
+- [ADR-0028: مدیریت نقش‌های scoped در پنل Operations](0028-operations-scoped-role-management.md)

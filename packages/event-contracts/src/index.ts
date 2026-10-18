@@ -234,6 +234,8 @@ export const identityPolicyChangedPayloadSchema = z
       'role.created',
       'role.updated',
       'role.disabled',
+      'role.deleted',
+      'role.restored',
       'membership.invited',
       'membership.activated',
       'membership.role_changed',

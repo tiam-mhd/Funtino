@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   HttpException,
   Injectable,
+  NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
@@ -47,6 +48,7 @@ export type RoleSummary = {
   systemManaged: boolean;
   status: 'active' | 'disabled';
   version: number;
+  deletedAt: string | null;
 };
 
 class AccessPolicyDeniedError extends Error {
@@ -80,6 +82,7 @@ function summarizeRole(role: RoleRecord): RoleSummary {
     systemManaged: role.systemManaged,
     status: role.status,
     version: role.version,
+    deletedAt: role.deletedAt?.toISOString() ?? null,
   };
 }
 
@@ -277,7 +280,13 @@ export class AccessPolicyService {
   async listRolesInScope(
     userId: string,
     targetScope: AccessScope,
-    pagination: { cursor?: string; pageSize: number } = { pageSize: 25 },
+    pagination: {
+      cursor?: string;
+      pageSize: number;
+      search?: string;
+      lifecycle?: 'active' | 'disabled' | 'deleted';
+      kind?: 'custom' | 'system';
+    } = { pageSize: 25 },
     correlationId: string = randomUUID(),
   ): Promise<{ status: 'success'; data: RoleSummary[]; nextCursor: string | null }> {
     if (
@@ -310,6 +319,16 @@ export class AccessPolicyService {
       const candidates = await tx.accessRole.findMany({
         where: {
           ...(pagination.cursor ? { id: { gt: pagination.cursor } } : {}),
+          ...(pagination.search
+            ? { name: { contains: pagination.search, mode: 'insensitive' } }
+            : {}),
+          ...(pagination.lifecycle === 'deleted'
+            ? { deletedAt: { not: null } }
+            : {
+                deletedAt: null,
+                ...(pagination.lifecycle ? { status: pagination.lifecycle } : {}),
+              }),
+          ...(pagination.kind ? { systemManaged: pagination.kind === 'system' } : {}),
           ...(targetScope.type === 'global'
             ? { scopeType: 'global', organizationId: null, branchId: null }
             : targetScope.type === 'branch'
@@ -347,6 +366,52 @@ export class AccessPolicyService {
         data: page.map(summarizeRole).filter((role) => isScopeApplicable(role, targetScope)),
         nextCursor: hasMore ? (page.at(-1)?.id ?? null) : null,
       };
+    });
+  }
+
+  async getRoleInScope(
+    userId: string,
+    roleId: string,
+    targetScope: AccessScope,
+    correlationId: string,
+  ): Promise<{ data: RoleSummary; policyVersion: number }> {
+    return this.inSnapshot(async (tx) => {
+      const { contexts, policyVersion } = await this.loadContexts(tx, userId);
+      const decision = evaluateAuthorizationAcrossMemberships(
+        contexts,
+        { permission: 'access.role.read', scope: targetScope },
+        policyVersion,
+      );
+      if (!decision.allowed) {
+        throw new AccessPolicyDeniedError({
+          actorUserId: userId,
+          action: 'access.role.read',
+          targetType: 'role',
+          targetId: roleId,
+          scope: targetScope,
+          reason: 'Actor lacked access.role.read permission in the requested scope.',
+          correlationId,
+        });
+      }
+      const role = await tx.accessRole.findUnique({
+        where: { id: roleId },
+        include: { permissions: true },
+      });
+      const summary = role ? summarizeRole(role) : null;
+      if (!summary || !isScopeApplicable(summary, targetScope)) {
+        throw new NotFoundException('Role not found in the requested scope.');
+      }
+      await this.journal.recordSensitiveAccess(tx, {
+        actorUserId: userId,
+        action: 'access.role.read',
+        targetType: 'role',
+        targetId: roleId,
+        scope: targetScope,
+        reason: 'Manager viewed a role and its permission definition.',
+        correlationId,
+        policyVersion,
+      });
+      return { data: summary, policyVersion };
     });
   }
 

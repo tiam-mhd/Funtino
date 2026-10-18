@@ -1,0 +1,217 @@
+.page {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.heading,
+.dialogHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.heading h2,
+.dialogHeader h3 {
+  margin: 4px 0 6px;
+  color: var(--ft-ink);
+  font-size: clamp(17px, 2.4vw, 22px);
+  line-height: 1.5;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--ft-teal-dark);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.description,
+.dialogHeader p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--ft-line);
+  border-radius: 16px;
+  background: var(--ft-surface);
+}
+
+.searchField {
+  position: relative;
+  display: flex;
+  flex: 1 1 280px;
+  align-items: center;
+  min-width: 0;
+}
+
+.searchIcon {
+  position: absolute;
+  inset-inline-start: 12px;
+  display: flex;
+  width: 18px;
+  height: 18px;
+  color: var(--ft-muted);
+  pointer-events: none;
+}
+
+.searchIcon svg,
+.filterButton svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.searchField input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--ft-line);
+  border-radius: 12px;
+  padding: 9px 40px 9px 12px;
+  outline: none;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  font: inherit;
+  font-size: 13px;
+}
+
+.searchField input:focus-visible {
+  border-color: var(--ft-teal-dark);
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.filterButton {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.filterCount {
+  display: inline-grid;
+  min-width: 20px;
+  min-height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0 5px;
+  color: var(--ft-teal-dark);
+  background: var(--ops-surface-subtle);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.content {
+  min-width: 0;
+}
+
+.loadMore {
+  justify-self: center;
+}
+
+.dialog {
+  width: min(460px, calc(100vw - 24px));
+  max-height: min(80vh, 720px);
+  border: 1px solid var(--ft-line);
+  border-radius: 20px;
+  padding: 0;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  box-shadow: 0 22px 70px rgb(0 0 0 / 25%);
+}
+
+.dialog::backdrop {
+  background: rgb(8 15 25 / 58%);
+}
+
+.dialogBody {
+  display: grid;
+  gap: 18px;
+  padding: clamp(16px, 4vw, 24px);
+}
+
+.dialogHeader {
+  align-items: flex-start;
+}
+
+.closeButton {
+  display: grid;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--ft-line);
+  border-radius: 12px;
+  color: var(--ft-ink);
+  background: transparent;
+  font-size: 23px;
+  cursor: pointer;
+}
+
+.closeButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.filterFields {
+  display: grid;
+  gap: 12px;
+}
+
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+  border-top: 1px solid var(--ft-line);
+  padding-top: 14px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 600px) {
+  .heading {
+    flex-direction: column;
+  }
+
+  .headerActions {
+    justify-content: flex-start;
+  }
+
+  .toolbar {
+    align-items: stretch;
+  }
+
+  .searchField {
+    flex-basis: auto;
+  }
+}

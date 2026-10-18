@@ -54,16 +54,17 @@ const mfaCodeSchema = z
   .object({ method: z.enum(['totp', 'recovery']), code: z.string().min(6).max(35) })
   .strict();
 const totpCodeSchema = z.object({ code: z.string().regex(/^\d{6}$/) }).strict();
-const rolesQuerySchema = z
-  .object({
-    scopeType: z.enum(['global', 'organization', 'branch']).optional(),
-    organizationId: uuid.optional(),
-    branchId: uuid.optional(),
-    cursor: uuid.optional(),
-    pageSize: z.coerce.number().int().min(1).max(100).default(25),
-  })
-  .strict()
-  .superRefine((value, context) => {
+const scopedQueryFields = {
+  scopeType: z.enum(['global', 'organization', 'branch']).optional(),
+  organizationId: uuid.optional(),
+  branchId: uuid.optional(),
+  cursor: uuid.optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+};
+const validateScopeQuery = (
+  value: { scopeType?: 'global' | 'organization' | 'branch'; organizationId?: string; branchId?: string },
+  context: z.RefinementCtx,
+) => {
     const type =
       value.scopeType ??
       (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
@@ -83,7 +84,21 @@ const rolesQuerySchema = z
         code: z.ZodIssueCode.custom,
         message: 'Branch identifier requires branch scope.',
       });
-  });
+};
+const scopedQuerySchema = z.object(scopedQueryFields).strict().superRefine(validateScopeQuery);
+const rolesQuerySchema = z
+  .object({
+    ...scopedQueryFields,
+    search: z.string().trim().min(1).max(80).optional(),
+    lifecycle: z.enum(['active', 'disabled', 'deleted']).optional(),
+    kind: z.enum(['custom', 'system']).optional(),
+  })
+  .strict()
+  .superRefine(validateScopeQuery);
+const staffQuerySchema = z
+  .object({ ...scopedQueryFields, roleId: uuid.optional() })
+  .strict()
+  .superRefine(validateScopeQuery);
 const auditQuerySchema = z
   .object({
     scopeType: z.enum(['global', 'organization', 'branch']).optional(),
@@ -184,6 +199,8 @@ const overrideCreateSchema = z
   .strict();
 type AuthorizationRequestDto = z.infer<typeof authorizationRequestSchema>;
 type RolesQueryDto = z.infer<typeof rolesQuerySchema>;
+type StaffQueryDto = z.infer<typeof staffQuerySchema>;
+type ScopedQueryDto = z.infer<typeof scopedQuerySchema>;
 type AuditQueryDto = z.infer<typeof auditQuerySchema>;
 type MfaCodeDto = z.infer<typeof mfaCodeSchema>;
 type AccessScopeDto = z.infer<typeof accessScopeSchema>;
@@ -344,6 +361,9 @@ export class IdentityAccessController {
       {
         cursor: query.cursor,
         pageSize: query.pageSize,
+        search: query.search,
+        lifecycle: query.lifecycle,
+        kind: query.kind,
       },
       this.correlation(rawCorrelationId),
     );
@@ -353,12 +373,26 @@ export class IdentityAccessController {
   roleTemplates(
     @Headers('x-funtino-actor-user-id') rawActorUserId: string | undefined,
     @Headers('x-correlation-id') rawCorrelationId: string | undefined,
-    @Query(new ZodValidationPipe(rolesQuerySchema)) query: RolesQueryDto,
+    @Query(new ZodValidationPipe(scopedQuerySchema)) query: ScopedQueryDto,
   ) {
     return this.accessPolicy.roleTemplates(
       this.actor(rawActorUserId),
       this.queryScope(query),
       this.correlation(rawCorrelationId),
+    );
+  }
+
+  @Get('roles/:roleId')
+  getRole(
+    @Param('roleId', new ZodValidationPipe(uuid)) roleId: string,
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Query(new ZodValidationPipe(scopedQuerySchema)) query: ScopedQueryDto,
+  ) {
+    return this.accessPolicy.getRoleInScope(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(roleId),
+      this.queryScope(query),
+      this.correlation(this.header(headers, 'x-correlation-id')),
     );
   }
 
@@ -377,7 +411,7 @@ export class IdentityAccessController {
 
   @Patch('roles/:roleId')
   updateRole(
-    @Param('roleId') roleId: string,
+    @Param('roleId', new ZodValidationPipe(uuid)) roleId: string,
     @Headers() headers: Record<string, string | string[] | undefined>,
     @Body(new ZodValidationPipe(roleUpdateSchema)) body: z.infer<typeof roleUpdateSchema>,
   ) {
@@ -389,15 +423,43 @@ export class IdentityAccessController {
     );
   }
 
+  @Post('roles/:roleId/restore')
+  restoreRole(
+    @Param('roleId', new ZodValidationPipe(uuid)) roleId: string,
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+  ) {
+    return this.accessManagement.restoreRole(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(roleId),
+      body.reason,
+      this.commandMetaFromHeaders(headers),
+    );
+  }
+
+  @Delete('roles/:roleId')
+  deleteRole(
+    @Param('roleId', new ZodValidationPipe(uuid)) roleId: string,
+    @Headers() headers: Record<string, string | string[] | undefined>,
+    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+  ) {
+    return this.accessManagement.deleteRole(
+      this.actor(this.header(headers, 'x-funtino-actor-user-id')),
+      this.pathUuid(roleId),
+      body.reason,
+      this.commandMetaFromHeaders(headers),
+    );
+  }
+
   @Get('staff')
   staff(
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Query(new ZodValidationPipe(rolesQuerySchema)) query: RolesQueryDto,
+    @Query(new ZodValidationPipe(staffQuerySchema)) query: StaffQueryDto,
   ) {
     return this.accessManagement.listStaff(
       this.actor(this.header(headers, 'x-funtino-actor-user-id')),
       this.queryScope(query),
-      { cursor: query.cursor, pageSize: query.pageSize },
+      { cursor: query.cursor, pageSize: query.pageSize, roleId: query.roleId },
       { correlationId: this.correlation(this.header(headers, 'x-correlation-id')) },
     );
   }
@@ -419,7 +481,7 @@ export class IdentityAccessController {
   @Get('staff/invitations')
   scopedInvitations(
     @Headers() headers: Record<string, string | string[] | undefined>,
-    @Query(new ZodValidationPipe(rolesQuerySchema)) query: RolesQueryDto,
+    @Query(new ZodValidationPipe(scopedQuerySchema)) query: ScopedQueryDto,
   ) {
     return this.accessManagement.listScopedInvitations(
       this.actor(this.header(headers, 'x-funtino-actor-user-id')),

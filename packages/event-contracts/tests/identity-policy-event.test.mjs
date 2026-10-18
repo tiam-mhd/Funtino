@@ -34,12 +34,12 @@ test('access-policy-changed accepts the versioned minimal invalidation payload',
   assert.equal(identityPolicyChangedEventSchema.safeParse(event).success, true);
 });
 
-test('access-policy-changed rejects unknown change types and extra payload fields', () => {
+test('access-policy-changed rejects unsupported change types and extra payload fields', () => {
   assert.equal(
     identityPolicyChangedPayloadSchema.safeParse({
       auditId,
       policyVersion: 2,
-      changeType: 'role.deleted',
+      changeType: 'role.purged',
       targetType: 'role',
       targetId,
     }).success,

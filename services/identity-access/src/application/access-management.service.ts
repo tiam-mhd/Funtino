@@ -81,6 +81,7 @@ type AccessAuditSnapshot =
       systemManaged: boolean;
       version: number;
       permissionKeys: string[];
+      deletedAt?: string | null;
     }
   | {
       kind: 'membership';
@@ -155,6 +156,7 @@ function roleSummary(role: RoleWithPermissions) {
     systemManaged: role.systemManaged,
     status: role.status,
     version: role.version,
+    deletedAt: role.deletedAt?.toISOString() ?? null,
   };
 }
 
@@ -447,6 +449,7 @@ export class AccessManagementService {
           include: { permissions: true },
         });
         if (!current) throw new NotFoundException('Role not found.');
+        if (current.deletedAt) throw new NotFoundException('Role not found.');
         const scope = scopeFromColumns(current);
         const audit: DeniedAuditTarget = {
           action: 'access.role.update',
@@ -465,17 +468,23 @@ export class AccessManagementService {
         );
         if (current.systemManaged)
           throw new ConflictException('System-managed roles are immutable.');
-        const nextPermissionKeys =
-          input.permissionKeys ?? current.permissions.map(({ permissionKey }) => permissionKey);
-        this.requireDelegation(contexts, actorUserId, version, nextPermissionKeys, scope, audit);
+        const currentPermissionKeys = current.permissions
+          .map(({ permissionKey }) => permissionKey)
+          .sort();
+        const nextPermissionKeys = input.permissionKeys ? [...input.permissionKeys].sort() : [];
+        const permissionKeysChanged =
+          input.permissionKeys !== undefined &&
+          JSON.stringify(nextPermissionKeys) !== JSON.stringify(currentPermissionKeys);
+        const statusChanged = input.status !== undefined && input.status !== current.status;
+        if (permissionKeysChanged) {
+          this.requireDelegation(contexts, actorUserId, version, nextPermissionKeys, scope, audit);
+        }
         await this.assertTenantScopeWritable(scope, { actorUserId, ...audit });
         if (replay) return replay;
         if (meta.expectedVersion === undefined || current.version !== meta.expectedVersion) {
           throw new ConflictException('Role version is stale.');
         }
-        const changesAuthorization =
-          input.permissionKeys !== undefined ||
-          (input.status !== undefined && input.status !== current.status);
+        const changesAuthorization = permissionKeysChanged || statusChanged;
         if (changesAuthorization && !hasValidReason(input.reason)) {
           throw new BadRequestException('Changing effective role access requires a reason.');
         }
@@ -492,11 +501,11 @@ export class AccessManagementService {
             ...(input.name !== undefined ? { name: input.name.trim() } : {}),
             ...(input.status !== undefined ? { status: input.status } : {}),
             version: { increment: 1 },
-            ...(input.permissionKeys !== undefined
+            ...(permissionKeysChanged
               ? {
                   permissions: {
                     deleteMany: {},
-                    create: input.permissionKeys.map((permissionKey) => ({ permissionKey })),
+                    create: nextPermissionKeys.map((permissionKey) => ({ permissionKey })),
                   },
                 }
               : {}),
@@ -519,6 +528,182 @@ export class AccessManagementService {
           afterState: roleSnapshot(role),
         });
         return { data: roleSummary(role), policyVersion: result.policyVersion };
+      },
+    );
+  }
+
+  async deleteRole(
+    actorUserId: string,
+    roleId: string,
+    reason: string,
+    meta: AccessCommandMeta,
+  ) {
+    return this.runMutation(
+      actorUserId,
+      'role.delete',
+      meta,
+      { roleId, reason },
+      async (tx, contexts, version, replay) => {
+        const current = await tx.accessRole.findUnique({
+          where: { id: roleId },
+          include: { permissions: true },
+        });
+        if (!current) throw new NotFoundException('Role not found.');
+        const scope = scopeFromColumns(current);
+        const audit: DeniedAuditTarget = {
+          action: 'access.role.delete',
+          targetType: 'role',
+          targetId: roleId,
+          scope,
+          correlationId: meta.correlationId,
+        };
+        this.requirePermissions(
+          contexts,
+          actorUserId,
+          version,
+          scope,
+          ['access.role.manage'],
+          audit,
+          { forceStepUp: true },
+        );
+        if (current.systemManaged) {
+          throw new ConflictException('System-managed roles cannot be deleted.');
+        }
+        await this.assertTenantScopeWritable(scope, { actorUserId, ...audit });
+        if (!hasValidReason(reason)) {
+          throw new BadRequestException('Deleting a role requires a reason.');
+        }
+        if (replay) return replay;
+        if (current.deletedAt) throw new NotFoundException('Role not found.');
+        this.requireExpectedVersion(current.version, meta.expectedVersion, 'Role');
+
+        const now = new Date();
+        const [activeMemberships, pendingInvitations] = await Promise.all([
+          tx.staffMembership.count({
+            where: { roleId: current.id, status: { not: 'revoked' } },
+          }),
+          tx.staffInvitation.count({
+            where: {
+              roleId: current.id,
+              status: 'pending',
+              expiresAt: { gt: now },
+            },
+          }),
+        ]);
+        if (activeMemberships > 0 || pendingInvitations > 0) {
+          throw new ConflictException(
+            'Reassign or revoke all current memberships and pending invitations before deleting this role.',
+          );
+        }
+
+        const deleted = await tx.accessRole.update({
+          where: { id: current.id },
+          data: {
+            status: 'disabled',
+            deletedAt: now,
+            version: { increment: 1 },
+          },
+          include: { permissions: true },
+        });
+        const result = await this.journal.recordCommittedChange(tx, {
+          actorUserId,
+          correlationId: meta.correlationId,
+          changeType: 'role.deleted',
+          targetType: 'role',
+          targetId: deleted.id,
+          scope,
+          reason,
+          beforeState: roleSnapshot(current),
+          afterState: roleSnapshot(deleted),
+        });
+        return { data: roleSummary(deleted), policyVersion: result.policyVersion };
+      },
+    );
+  }
+
+  async restoreRole(
+    actorUserId: string,
+    roleId: string,
+    reason: string,
+    meta: AccessCommandMeta,
+  ) {
+    return this.runMutation(
+      actorUserId,
+      'role.restore',
+      meta,
+      { roleId, reason },
+      async (tx, contexts, version, replay) => {
+        const current = await tx.accessRole.findUnique({
+          where: { id: roleId },
+          include: { permissions: true },
+        });
+        if (!current) throw new NotFoundException('Role not found.');
+        const scope = scopeFromColumns(current);
+        const audit: DeniedAuditTarget = {
+          action: 'access.role.restore',
+          targetType: 'role',
+          targetId: roleId,
+          scope,
+          correlationId: meta.correlationId,
+        };
+        this.requirePermissions(
+          contexts,
+          actorUserId,
+          version,
+          scope,
+          ['access.role.manage'],
+          audit,
+          { forceStepUp: true },
+        );
+        if (current.systemManaged) {
+          throw new ConflictException('System-managed roles cannot be restored.');
+        }
+        await this.assertTenantScopeWritable(scope, { actorUserId, ...audit });
+        if (!hasValidReason(reason)) {
+          throw new BadRequestException('Restoring a role requires a reason.');
+        }
+        if (replay) return replay;
+        if (!current.deletedAt) throw new ConflictException('Role is not deleted.');
+        this.requireExpectedVersion(current.version, meta.expectedVersion, 'Role');
+
+        const duplicate = await tx.accessRole.findFirst({
+          where: {
+            id: { not: current.id },
+            deletedAt: null,
+            name: { equals: current.name, mode: 'insensitive' },
+            scopeType: current.scopeType,
+            organizationId: current.organizationId,
+            branchId: current.branchId,
+          },
+          select: { id: true },
+        });
+        if (duplicate) {
+          throw new ConflictException(
+            'A role with this name already exists in the scope; rename it before restoring.',
+          );
+        }
+
+        const restored = await tx.accessRole.update({
+          where: { id: current.id },
+          data: {
+            status: 'disabled',
+            deletedAt: null,
+            version: { increment: 1 },
+          },
+          include: { permissions: true },
+        });
+        const result = await this.journal.recordCommittedChange(tx, {
+          actorUserId,
+          correlationId: meta.correlationId,
+          changeType: 'role.restored',
+          targetType: 'role',
+          targetId: restored.id,
+          scope,
+          reason,
+          beforeState: roleSnapshot(current),
+          afterState: roleSnapshot(restored),
+        });
+        return { data: roleSummary(restored), policyVersion: result.policyVersion };
       },
     );
   }
@@ -936,7 +1121,7 @@ export class AccessManagementService {
   async listStaff(
     actorUserId: string,
     scope: AccessScope,
-    pagination: { cursor?: string; pageSize: number },
+    pagination: { cursor?: string; pageSize: number; roleId?: string },
     meta: Pick<AccessCommandMeta, 'correlationId'>,
   ) {
     this.validatePagination(pagination.pageSize);
@@ -963,7 +1148,10 @@ export class AccessManagementService {
               };
       const cursor = pagination.cursor
         ? await tx.staffMembership.findFirst({
-            where: { id: pagination.cursor, AND: [scopeFilter] },
+            where: {
+              id: pagination.cursor,
+              AND: [scopeFilter, ...(pagination.roleId ? [{ roleId: pagination.roleId }] : [])],
+            },
             select: { createdAt: true, id: true },
           })
         : null;
@@ -972,6 +1160,7 @@ export class AccessManagementService {
       const where: Prisma.StaffMembershipWhereInput = {
         AND: [
           scopeFilter,
+          ...(pagination.roleId ? [{ roleId: pagination.roleId }] : []),
           ...(cursor
             ? [
                 {

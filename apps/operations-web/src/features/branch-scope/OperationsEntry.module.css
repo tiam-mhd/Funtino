@@ -955,6 +955,7 @@
 .storyHighlights strong {
   font-size: 14px;
   font-weight: 850;
+  padding-right: 1em;
 }
 
 .storyHighlights span {

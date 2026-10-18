@@ -59,6 +59,9 @@ export function OperationsWorkspacePage({ section }: { section: WorkspaceSection
   if (section === 'staff') {
     return <StaffAccessManager onSessionExpired={onSessionExpired} scope={scope} view="roster" />;
   }
+  if (section === 'staffRoles') {
+    return <StaffAccessManager onSessionExpired={onSessionExpired} scope={scope} view="roles" />;
+  }
   if (section === 'invitationsIssued') {
     return (
       <StaffAccessManager onSessionExpired={onSessionExpired} scope={scope} view="invitations" />

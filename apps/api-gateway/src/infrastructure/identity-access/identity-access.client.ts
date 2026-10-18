@@ -22,6 +22,7 @@ const roleSummarySchema = z.object({
   systemManaged: z.boolean(),
   status: z.enum(['active', 'disabled']),
   version: z.number().int().positive(),
+  deletedAt: z.string().datetime({ offset: true }).nullable(),
 });
 const membershipSchema = z.object({
   id: uuidSchema,
@@ -328,16 +329,41 @@ export class IdentityAccessClient {
     userId: string,
     scope: AccessScopeDto,
     correlationId: string,
-    pagination: { cursor?: string; pageSize?: number } = {},
+    pagination: {
+      cursor?: string;
+      pageSize?: number;
+      search?: string;
+      lifecycle?: 'active' | 'disabled' | 'deleted';
+      kind?: 'custom' | 'system';
+    } = {},
   ) {
     const query = this.scopeQuery(scope);
     if (pagination.cursor) query.set('cursor', pagination.cursor);
     if (pagination.pageSize !== undefined) query.set('pageSize', String(pagination.pageSize));
+    if (pagination.search) query.set('search', pagination.search);
+    if (pagination.lifecycle) query.set('lifecycle', pagination.lifecycle);
+    if (pagination.kind) query.set('kind', pagination.kind);
     const result = this.parse(
       roleListSchema,
       await this.request(`/internal/v1/roles?${query.toString()}`, userId, correlationId),
     );
     return { data: result.data, nextCursor: result.nextCursor };
+  }
+
+  async getRoleInScope(
+    userId: string,
+    scope: AccessScopeDto,
+    roleId: string,
+    correlationId: string,
+  ) {
+    return this.parse(
+      mutationResultSchema(roleSummarySchema),
+      await this.request(
+        `/internal/v1/roles/${encodeURIComponent(roleId)}?${this.scopeQuery(scope).toString()}`,
+        userId,
+        correlationId,
+      ),
+    );
   }
 
   async roleTemplates(userId: string, scope: AccessScopeDto, correlationId: string) {
@@ -406,15 +432,68 @@ export class IdentityAccessClient {
     );
   }
 
+  async deleteRole(
+    userId: string,
+    session: Session,
+    roleId: string,
+    expectedVersion: number,
+    correlationId: string,
+    idempotencyKey: string,
+    body: unknown,
+  ) {
+    return this.parse(
+      roleMutationSchema,
+      await this.request(
+        `/internal/v1/roles/${encodeURIComponent(roleId)}`,
+        userId,
+        correlationId,
+        {
+          method: 'DELETE',
+          body,
+          idempotencyKey,
+          expectedVersion,
+          session,
+        },
+      ),
+    );
+  }
+
+  async restoreRole(
+    userId: string,
+    session: Session,
+    roleId: string,
+    expectedVersion: number,
+    correlationId: string,
+    idempotencyKey: string,
+    body: unknown,
+  ) {
+    return this.parse(
+      roleMutationSchema,
+      await this.request(
+        `/internal/v1/roles/${encodeURIComponent(roleId)}/restore`,
+        userId,
+        correlationId,
+        {
+          method: 'POST',
+          body,
+          idempotencyKey,
+          expectedVersion,
+          session,
+        },
+      ),
+    );
+  }
+
   async listStaff(
     userId: string,
     scope: AccessScopeDto,
     correlationId: string,
-    pagination: { cursor?: string; pageSize?: number } = {},
+    pagination: { cursor?: string; pageSize?: number; roleId?: string } = {},
   ) {
     const query = this.scopeQuery(scope);
     if (pagination.cursor) query.set('cursor', pagination.cursor);
     if (pagination.pageSize !== undefined) query.set('pageSize', String(pagination.pageSize));
+    if (pagination.roleId) query.set('roleId', pagination.roleId);
     return this.parse(
       staffListSchema,
       await this.request(`/internal/v1/staff?${query.toString()}`, userId, correlationId),

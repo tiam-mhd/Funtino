@@ -233,6 +233,16 @@ paths:
             minimum: 1
             maximum: 100
             default: 25
+        - name: search
+          in: query
+          description: Server-side case-insensitive partial match on role name.
+          schema: { type: string, minLength: 1, maxLength: 80 }
+        - name: lifecycle
+          in: query
+          schema: { type: string, enum: [active, disabled, deleted] }
+        - name: kind
+          in: query
+          schema: { type: string, enum: [custom, system] }
       responses:
         '200':
           description: Roles visible to the authenticated actor in the requested scope.
@@ -298,6 +308,26 @@ paths:
         '503':
           description: Policy database is unavailable; caller must fail closed.
   /internal/v1/roles/{roleId}:
+    get:
+      x-funtino-availability: implemented
+      operationId: getScopedRole
+      parameters:
+        - $ref: '#/components/parameters/RoleId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/ScopeType'
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+      responses:
+        '200':
+          description: Role summary visible in the authorized scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '403': { description: Actor cannot read roles in this scope. }
+        '404': { description: Role not found in the requested scope. }
+        '503': { description: Policy database is unavailable; caller must fail closed. }
     patch:
       x-funtino-availability: implemented
       operationId: updateScopedRole
@@ -332,6 +362,67 @@ paths:
           description: Concurrent update or immutable system role.
         '503':
           description: Scope ownership is not configured for production writes, or the policy store is unavailable.
+    delete:
+      x-funtino-availability: implemented
+      operationId: deleteScopedRole
+      parameters:
+        - $ref: '#/components/parameters/RoleId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleLifecycleCommand'
+      responses:
+        '200':
+          description: Role soft-deleted and disabled after confirming no current memberships or valid pending invitations.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '403': { description: Actor lacks access.role.manage or fresh step-up authentication. }
+        '404': { description: Role not found. }
+        '409': { description: Stale version, system role, or active assignments prevent deletion. }
+        '503': { description: Scope ownership is not configured for production writes, or the policy store is unavailable. }
+  /internal/v1/roles/{roleId}/restore:
+    post:
+      x-funtino-availability: implemented
+      operationId: restoreScopedRole
+      parameters:
+        - $ref: '#/components/parameters/RoleId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchVersion'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/MfaVerifiedAt'
+        - $ref: '#/components/parameters/MfaFactorVersion'
+        - $ref: '#/components/parameters/MfaMethod'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleLifecycleCommand'
+      responses:
+        '200':
+          description: Role restored disabled; duplicate scoped names prevent restore.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleResponse'
+        '403': { description: Actor lacks access.role.manage or fresh step-up authentication. }
+        '404': { description: Role not found. }
+        '409': { description: Role is not deleted, stale version, system role, or duplicate scoped name. }
+        '503': { description: Scope ownership is not configured for production writes, or the policy store is unavailable. }
   /internal/v1/staff/invitations:
     get:
       x-funtino-availability: implemented
@@ -586,6 +677,11 @@ paths:
             minimum: 1
             maximum: 100
             default: 25
+        - name: roleId
+          in: query
+          required: false
+          description: Restrict roster results to memberships assigned to this role.
+          schema: { type: string, format: uuid }
       responses:
         '200':
           description: Minimal staff records and masked phone numbers in authorized scope.
@@ -1236,7 +1332,7 @@ components:
           minimum: 1
     RoleSummary:
       type: object
-      required: [id, name, scope, permissionKeys, systemManaged, status, version]
+      required: [id, name, scope, permissionKeys, systemManaged, status, version, deletedAt]
       properties:
         id:
           type: string
@@ -1260,6 +1356,10 @@ components:
         version:
           type: integer
           minimum: 1
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
     RoleTemplate:
       type: object
       required: [key, name, scopeType, permissionKeys]
@@ -1545,6 +1645,15 @@ components:
         policyVersion:
           type: integer
           minimum: 1
+    RoleLifecycleCommand:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 500
     StaffMembershipUpdate:
       type: object
       additionalProperties: false

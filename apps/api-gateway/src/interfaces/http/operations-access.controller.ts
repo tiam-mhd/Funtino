@@ -29,16 +29,17 @@ import { SessionGuard } from './session.guard.js';
 import { TrustedOriginGuard } from './trusted-origin.guard.js';
 import { ZodValidationPipe } from './zod-validation.pipe.js';
 
-const rolesQuerySchema = z
-  .object({
-    scopeType: z.enum(['global', 'organization', 'branch']).optional(),
-    organizationId: z.string().uuid().optional(),
-    branchId: z.string().uuid().optional(),
-    cursor: z.string().uuid().optional(),
-    pageSize: z.coerce.number().int().min(1).max(100).default(25),
-  })
-  .strict()
-  .superRefine((value, context) => {
+const scopedQueryFields = {
+  scopeType: z.enum(['global', 'organization', 'branch']).optional(),
+  organizationId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional(),
+  cursor: z.string().uuid().optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+};
+const validateScopeQuery = (
+  value: { scopeType?: 'global' | 'organization' | 'branch'; organizationId?: string; branchId?: string },
+  context: z.RefinementCtx,
+) => {
     const type =
       value.scopeType ??
       (value.branchId ? 'branch' : value.organizationId ? 'organization' : undefined);
@@ -58,7 +59,21 @@ const rolesQuerySchema = z
         code: z.ZodIssueCode.custom,
         message: 'Branch identifier requires branch scope.',
       });
-  });
+};
+const scopedQuerySchema = z.object(scopedQueryFields).strict().superRefine(validateScopeQuery);
+const rolesQuerySchema = z
+  .object({
+    ...scopedQueryFields,
+    search: z.string().trim().min(1).max(80).optional(),
+    lifecycle: z.enum(['active', 'disabled', 'deleted']).optional(),
+    kind: z.enum(['custom', 'system']).optional(),
+  })
+  .strict()
+  .superRefine(validateScopeQuery);
+const staffQuerySchema = z
+  .object({ ...scopedQueryFields, roleId: z.string().uuid().optional() })
+  .strict()
+  .superRefine(validateScopeQuery);
 const auditQuerySchema = z
   .object({
     scopeType: z.enum(['global', 'organization', 'branch']).optional(),
@@ -185,6 +200,8 @@ const overrideCreateSchema = z
   })
   .strict();
 type RolesQuery = z.infer<typeof rolesQuerySchema>;
+type StaffQuery = z.infer<typeof staffQuerySchema>;
+type ScopedQuery = z.infer<typeof scopedQuerySchema>;
 type AuditQuery = z.infer<typeof auditQuerySchema>;
 
 @Controller('api/v1/operations')
@@ -231,7 +248,13 @@ export class OperationsAccessController {
       user.id,
       this.queryScope(query),
       requestCorrelationId(request),
-      { cursor: query.cursor, pageSize: query.pageSize },
+      {
+        cursor: query.cursor,
+        pageSize: query.pageSize,
+        search: query.search,
+        lifecycle: query.lifecycle,
+        kind: query.kind,
+      },
     );
     return {
       status: 'success' as const,
@@ -247,7 +270,7 @@ export class OperationsAccessController {
   @Get('roles/templates')
   async roleTemplates(
     @CurrentUser() user: { id: string },
-    @Query(new ZodValidationPipe(rolesQuerySchema)) query: RolesQuery,
+    @Query(new ZodValidationPipe(scopedQuerySchema)) query: ScopedQuery,
     @Req() request: AuthenticatedRequest,
   ) {
     return success(
@@ -256,6 +279,25 @@ export class OperationsAccessController {
         this.queryScope(query),
         requestCorrelationId(request),
       ),
+      request,
+    );
+  }
+
+  @Get('roles/:roleId')
+  async roleDetail(
+    @CurrentUser() user: { id: string },
+    @Param('roleId', new ZodValidationPipe(uuid)) roleId: string,
+    @Query(new ZodValidationPipe(scopedQuerySchema)) query: ScopedQuery,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const result = await this.identityAccess.getRoleInScope(
+      user.id,
+      this.queryScope(query),
+      roleId,
+      requestCorrelationId(request),
+    );
+    return success(
+      result.data,
       request,
     );
   }
@@ -285,7 +327,7 @@ export class OperationsAccessController {
   @UseGuards(TrustedOriginGuard)
   async updateRole(
     @CurrentUser() user: { id: string },
-    @Param('roleId') roleId: string,
+    @Param('roleId', new ZodValidationPipe(uuid)) roleId: string,
     @Headers('if-match') ifMatch: string | undefined,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body(new ZodValidationPipe(roleUpdateSchema)) body: z.infer<typeof roleUpdateSchema>,
@@ -305,17 +347,65 @@ export class OperationsAccessController {
     );
   }
 
+  @Post('roles/:roleId/restore')
+  @UseGuards(TrustedOriginGuard)
+  async restoreRole(
+    @CurrentUser() user: { id: string },
+    @Param('roleId', new ZodValidationPipe(uuid)) roleId: string,
+    @Headers('if-match') ifMatch: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return success(
+      await this.identityAccess.restoreRole(
+        user.id,
+        this.session(request),
+        roleId,
+        this.expectedVersion(ifMatch),
+        requestCorrelationId(request),
+        this.idempotencyKey(idempotencyKey),
+        body,
+      ),
+      request,
+    );
+  }
+
+  @Delete('roles/:roleId')
+  @UseGuards(TrustedOriginGuard)
+  async deleteRole(
+    @CurrentUser() user: { id: string },
+    @Param('roleId', new ZodValidationPipe(uuid)) roleId: string,
+    @Headers('if-match') ifMatch: string | undefined,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body(new ZodValidationPipe(reasonSchema)) body: z.infer<typeof reasonSchema>,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return success(
+      await this.identityAccess.deleteRole(
+        user.id,
+        this.session(request),
+        roleId,
+        this.expectedVersion(ifMatch),
+        requestCorrelationId(request),
+        this.idempotencyKey(idempotencyKey),
+        body,
+      ),
+      request,
+    );
+  }
+
   @Get('staff')
   async staff(
     @CurrentUser() user: { id: string },
-    @Query(new ZodValidationPipe(rolesQuerySchema)) query: RolesQuery,
+    @Query(new ZodValidationPipe(staffQuerySchema)) query: StaffQuery,
     @Req() request: AuthenticatedRequest,
   ) {
     const page = await this.identityAccess.listStaff(
       user.id,
       this.queryScope(query),
       requestCorrelationId(request),
-      { cursor: query.cursor, pageSize: query.pageSize },
+      { cursor: query.cursor, pageSize: query.pageSize, roleId: query.roleId },
     );
     const identities = await this.auth.getUserIdentitySummaries(
       page.data.map((member) => member.userId),
@@ -344,7 +434,7 @@ export class OperationsAccessController {
   @Get('staff/invitations')
   async scopedInvitations(
     @CurrentUser() user: { id: string },
-    @Query(new ZodValidationPipe(rolesQuerySchema)) query: RolesQuery,
+    @Query(new ZodValidationPipe(scopedQuerySchema)) query: ScopedQuery,
     @Req() request: AuthenticatedRequest,
   ) {
     return success(

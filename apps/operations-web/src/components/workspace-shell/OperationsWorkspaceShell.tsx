@@ -15,6 +15,7 @@ export type WorkspaceSection =
   | 'overview'
   | 'branches'
   | 'staff'
+  | 'staffRoles'
   | 'invitationsReceived'
   | 'invitationsIssued'
   | 'devices'
@@ -74,7 +75,8 @@ type Props = {
 const sectionLabels: Record<WorkspaceSection, string> = {
   overview: 'نمای کلی',
   branches: 'شعبه‌ها',
-  staff: 'همکاران',
+  staff: 'اعضا',
+  staffRoles: 'نقش‌ها',
   invitationsReceived: 'دعوت‌های دریافتی',
   invitationsIssued: 'دعوت‌های ارسالی',
   devices: 'دستگاه‌ها',
@@ -95,7 +97,8 @@ const sectionLabels: Record<WorkspaceSection, string> = {
 const sectionDescriptions: Record<WorkspaceSection, string> = {
   overview: 'وضعیت شعب و دستگاه‌های مجموعه',
   branches: 'فهرست شعب فعال و وضعیت عملیاتی آن‌ها',
-  staff: 'کارکنان و نقش‌های کاری مجموعه',
+  staff: 'اعضای فعال در مجموعه یا شعبه‌ی انتخاب‌شده',
+  staffRoles: 'تعریف نقش‌ها و دسترسی‌های همین محدوده',
   invitationsReceived: 'دعوت‌هایی که برای حساب شما فرستاده شده‌اند',
   invitationsIssued: 'دعوت‌های کاری فرستاده‌شده برای همکاران',
   devices: 'فهرست دستگاه‌ها و وضعیت آن‌ها',
@@ -122,9 +125,9 @@ const navigationGroups: Array<{
   { id: 'overview', label: 'پیشخوان', icon: 'groupOverview', sections: ['overview'] },
   {
     id: 'structure-access',
-    label: 'شعب و همکاران',
+    label: 'شعب و اعضا',
     icon: 'groupOrganization',
-    sections: ['branches', 'staff', 'invitationsReceived', 'invitationsIssued'],
+    sections: ['branches', 'staff', 'staffRoles', 'invitationsReceived', 'invitationsIssued'],
   },
   {
     id: 'cards-devices',
@@ -156,6 +159,7 @@ const sectionIcons: Record<WorkspaceSection, NavigationIcon> = {
   overview: 'overview',
   branches: 'branches',
   staff: 'staff',
+  staffRoles: 'staff',
   invitationsReceived: 'invitationsReceived',
   invitationsIssued: 'invitationsIssued',
   devices: 'devices',
@@ -177,6 +181,7 @@ const sectionHrefs: Record<WorkspaceSection, string> = {
   overview: '/',
   branches: '/branches',
   staff: '/staff',
+  staffRoles: '/staff/roles',
   invitationsReceived: '/invitations/received',
   invitationsIssued: '/invitations/issued',
   devices: '/devices',
@@ -196,6 +201,7 @@ const sectionHrefs: Record<WorkspaceSection, string> = {
 
 export function workspaceSectionFromPath(pathname: string): WorkspaceSection {
   const path = pathname.replace(/\/$/, '') || '/';
+  if (path.startsWith('/staff/roles/')) return 'staffRoles';
   const section = Object.entries(sectionHrefs).find(([, href]) => href === path)?.[0];
   return (section as WorkspaceSection | undefined) ?? 'overview';
 }
@@ -638,31 +644,33 @@ export function OperationsWorkspaceShell({
 
       <div className={styles.mainColumn}>
         <header className={styles.header}>
-          <button
-            aria-controls="operations-sidebar"
-            aria-expanded={isMobile ? mobileOpen : !collapsed}
-            aria-label={isMobile ? 'بازکردن منو' : collapsed ? 'بازکردن منو' : 'جمع‌کردن منو'}
-            className={styles.mobileMenuButton}
-            onClick={() => {
-              if (isMobile) setMobileOpen(true);
-              else setCollapsed((value) => !value);
-            }}
-            title={isMobile ? 'بازکردن منو' : collapsed ? 'بازکردن منو' : 'جمع‌کردن منو'}
-            ref={mobileMenuButtonRef}
-            type="button"
-          >
-            <Icon name="menu" />
-          </button>
-          <div className={styles.headingCopy}>
-            <nav aria-label="مسیر صفحه" className={styles.breadcrumb}>
-              <span>فانتینو</span>
-              <Icon name="chevron" />
-              <span>پنل عملیات</span>
-              <Icon name="chevron" />
-              <span aria-current="page">{sectionLabels[activeSection]}</span>
-            </nav>
-            <h1>{sectionLabels[activeSection]}</h1>
-            <p>{sectionDescriptions[activeSection]}</p>
+          <div className={styles.headerTitleGroup}>
+            <button
+              aria-controls="operations-sidebar"
+              aria-expanded={isMobile ? mobileOpen : !collapsed}
+              aria-label={isMobile ? 'بازکردن منو' : collapsed ? 'بازکردن منو' : 'جمع‌کردن منو'}
+              className={styles.mobileMenuButton}
+              onClick={() => {
+                if (isMobile) setMobileOpen(true);
+                else setCollapsed((value) => !value);
+              }}
+              title={isMobile ? 'بازکردن منو' : collapsed ? 'بازکردن منو' : 'جمع‌کردن منو'}
+              ref={mobileMenuButtonRef}
+              type="button"
+            >
+              <Icon name="menu" />
+            </button>
+            <div className={styles.headingCopy}>
+              <nav aria-label="مسیر صفحه" className={styles.breadcrumb}>
+                <span>فانتینو</span>
+                <Icon name="chevron" />
+                <span>پنل عملیات</span>
+                <Icon name="chevron" />
+                <span aria-current="page">{sectionLabels[activeSection]}</span>
+              </nav>
+              <h1>{sectionLabels[activeSection]}</h1>
+              <p>{sectionDescriptions[activeSection]}</p>
+            </div>
           </div>
 
           <div className={styles.headerContext}>

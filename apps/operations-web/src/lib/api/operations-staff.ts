@@ -9,6 +9,7 @@ export type OperationsAccessRole = {
   systemManaged: boolean;
   status: 'active' | 'disabled';
   version: number;
+  deletedAt: string | null;
 };
 
 export type OperationsStaffMember = {
@@ -109,26 +110,123 @@ export function freshIdempotencyKey(): string {
   return `${crypto.randomUUID()}-${crypto.randomUUID()}`;
 }
 
-function scopedPath(path: string, scope: OperationsScope, cursor?: string): string {
+function scopedPath(
+  path: string,
+  scope: OperationsScope,
+  cursor?: string,
+  extra?: Record<string, string | undefined>,
+): string {
   const query = new URLSearchParams({ scopeType: scope.type, pageSize: '100' });
   query.set('organizationId', scope.organizationId);
   if (scope.type === 'branch') query.set('branchId', scope.branchId);
   if (cursor) query.set('cursor', cursor);
+  for (const [key, value] of Object.entries(extra ?? {})) {
+    if (value) query.set(key, value);
+  }
   return `${path}?${query.toString()}`;
 }
 
 export function listOperationsStaff(
   scope: OperationsScope,
   cursor?: string,
+  roleId?: string,
 ): Promise<OperationsPage<OperationsStaffMember>> {
-  return apiRequest(scopedPath('/api/v1/operations/staff', scope, cursor));
+  return apiRequest(scopedPath('/api/v1/operations/staff', scope, cursor, { roleId }));
 }
+
+export type OperationsRoleFilters = {
+  search?: string;
+  lifecycle?: 'active' | 'disabled' | 'deleted';
+  kind?: 'custom' | 'system';
+};
 
 export function listOperationsRoles(
   scope: OperationsScope,
   cursor?: string,
+  filters: OperationsRoleFilters = {},
 ): Promise<{ data: OperationsAccessRole[]; nextCursor: string | null }> {
-  return apiRequestPage(scopedPath('/api/v1/operations/roles', scope, cursor));
+  return apiRequestPage(
+    scopedPath('/api/v1/operations/roles', scope, cursor, {
+      search: filters.search,
+      lifecycle: filters.lifecycle,
+      kind: filters.kind,
+    }),
+  );
+}
+
+export function getOperationsRole(
+  scope: OperationsScope,
+  roleId: string,
+): Promise<OperationsAccessRole> {
+  return apiRequest(
+    scopedPath(`/api/v1/operations/roles/${encodeURIComponent(roleId)}`, scope),
+  );
+}
+
+export function createOperationsRole(
+  input: {
+    name: string;
+    scope: OperationsScope;
+    permissionKeys: string[];
+    reason: string;
+  },
+  idempotencyKey: string,
+): Promise<unknown> {
+  return apiRequest('/api/v1/operations/roles', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: input,
+  });
+}
+
+export function updateOperationsRole(
+  role: OperationsAccessRole,
+  input: {
+    name?: string;
+    permissionKeys?: string[];
+    status?: 'active' | 'disabled';
+    reason?: string;
+  },
+  idempotencyKey: string,
+): Promise<unknown> {
+  return apiRequest(`/api/v1/operations/roles/${encodeURIComponent(role.id)}`, {
+    method: 'PATCH',
+    headers: {
+      'Idempotency-Key': idempotencyKey,
+      'If-Match': `"${role.version}"`,
+    },
+    body: input,
+  });
+}
+
+export function deleteOperationsRole(
+  role: OperationsAccessRole,
+  reason: string,
+  idempotencyKey: string,
+): Promise<unknown> {
+  return apiRequest(`/api/v1/operations/roles/${encodeURIComponent(role.id)}`, {
+    method: 'DELETE',
+    headers: {
+      'Idempotency-Key': idempotencyKey,
+      'If-Match': `"${role.version}"`,
+    },
+    body: { reason },
+  });
+}
+
+export function restoreOperationsRole(
+  role: OperationsAccessRole,
+  reason: string,
+  idempotencyKey: string,
+): Promise<unknown> {
+  return apiRequest(`/api/v1/operations/roles/${encodeURIComponent(role.id)}/restore`, {
+    method: 'POST',
+    headers: {
+      'Idempotency-Key': idempotencyKey,
+      'If-Match': `"${role.version}"`,
+    },
+    body: { reason },
+  });
 }
 
 export function listScopedStaffInvitations(

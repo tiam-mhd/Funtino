@@ -564,3 +564,245 @@
 .checkField input:focus-visible {
   box-shadow: var(--ft-focus);
 }
+
+.roleList {
+  display: grid;
+  gap: 10px;
+}
+
+.roleCard {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--ft-line);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--ft-surface);
+  box-shadow: var(--ft-shadow-sm);
+}
+
+.roleCardMain {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.roleTitleLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.roleTitleLine h3 {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: var(--ft-ink);
+  font-size: 14px;
+}
+
+.roleMeta,
+.roleScopeText,
+.roleConfirmText {
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 11px;
+  line-height: 1.9;
+}
+
+.roleActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.roleIconButton {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid var(--ft-line);
+  border-radius: 11px;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.roleIconButton:focus-visible {
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.roleIconButton:disabled {
+  color: var(--ft-muted);
+  background: var(--ops-surface-subtle);
+  cursor: not-allowed;
+}
+
+.roleDangerAction {
+  color: var(--ops-danger-ink);
+}
+
+.roleIcon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.roleEmpty {
+  padding: 22px;
+  color: var(--ft-ink-soft);
+  text-align: center;
+  font-size: 12px;
+}
+
+.roleDialog {
+  width: min(600px, calc(100vw - 24px));
+  max-height: min(88vh, 820px);
+  overflow: auto;
+  border: 1px solid var(--ft-line);
+  border-radius: 20px;
+  padding: 0;
+  color: var(--ft-ink);
+  background: var(--ft-surface);
+  box-shadow: 0 22px 70px rgb(0 0 0 / 25%);
+}
+
+.roleDialog::backdrop {
+  background: rgb(8 15 25 / 58%);
+}
+
+.roleDialogBody {
+  display: grid;
+  gap: 16px;
+  padding: clamp(16px, 4vw, 24px);
+}
+
+.roleDialogBody h3 {
+  margin: 3px 0 0;
+  color: var(--ft-ink);
+  font-size: 18px;
+}
+
+.roleDialogClose {
+  display: grid;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--ft-line);
+  border-radius: 11px;
+  color: var(--ft-ink);
+  background: transparent;
+  font-size: 23px;
+  cursor: pointer;
+}
+
+.roleDialogClose:focus-visible {
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.roleForm {
+  display: grid;
+  gap: 13px;
+}
+
+.rolePermissionFieldset {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  margin: 0;
+  border: 1px solid var(--ft-line);
+  border-radius: 13px;
+  padding: 12px;
+}
+
+.rolePermissionFieldset legend {
+  padding: 0 5px;
+  color: var(--ft-ink);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.rolePermissionList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.rolePermission {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 3px 7px;
+  min-width: 0;
+  border: 1px solid var(--ft-line);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.rolePermission input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--ft-teal-dark);
+}
+
+.rolePermission input:focus-visible {
+  outline: none;
+  box-shadow: var(--ft-focus);
+}
+
+.rolePermission span {
+  overflow-wrap: anywhere;
+  color: var(--ft-ink);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  text-align: start;
+}
+
+.rolePermission small {
+  grid-column: 2;
+  color: var(--ft-muted);
+  font-size: 9px;
+}
+
+.roleDialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+  border-top: 1px solid var(--ft-line);
+  padding-top: 13px;
+}
+
+.roleFilters {
+  display: grid;
+  gap: 12px;
+}
+
+@media (max-width: 620px) {
+  .roleCard {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .roleActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .rolePermissionList {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

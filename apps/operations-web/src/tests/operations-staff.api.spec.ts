@@ -100,6 +100,7 @@ test('role change uses the membership version precondition, reason, and idempote
       systemManaged: false,
       status: 'active',
       version: 1,
+      deletedAt: null,
     },
     version: 7,
   };

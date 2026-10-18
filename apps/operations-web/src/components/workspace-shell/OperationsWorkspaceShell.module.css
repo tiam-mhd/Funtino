@@ -316,7 +316,7 @@
   z-index: 10;
   display: grid;
   min-height: 112px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 26px;
   border-bottom: 1px solid var(--ops-line);
@@ -324,10 +324,17 @@
   background: var(--ft-surface);
 }
 
+.headerTitleGroup {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: clamp(16px, 2vw, 28px);
+}
+
 .headingCopy {
   width: min(100%, 460px);
   min-width: 0;
-  justify-self: center;
+  flex: 0 1 460px;
   text-align: right;
 }
 
@@ -900,10 +907,14 @@
   .header {
     display: grid;
     min-height: 76px;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 12px;
     padding: 14px 18px;
+  }
+
+  .headerTitleGroup {
+    gap: 12px;
   }
 
   .headingCopy .breadcrumb {
@@ -943,7 +954,7 @@
 
   .headingCopy {
     width: 100%;
-    justify-self: stretch;
+    flex: 1 1 0;
   }
 
   .headerContext {
@@ -979,6 +990,10 @@
     min-height: 64px;
     gap: 8px;
     padding: 11px 12px;
+  }
+
+  .headerTitleGroup {
+    gap: 8px;
   }
 
   .mobileMenuButton {

@@ -34,6 +34,7 @@ const accessAuditSnapshotSchema = z.discriminatedUnion('kind', [
       systemManaged: z.boolean(),
       version: z.number().int().positive(),
       permissionKeys: z.array(z.string().min(1).max(120)).max(100),
+      deletedAt: z.string().datetime({ offset: true }).nullable().optional(),
     })
     .strict(),
   z
