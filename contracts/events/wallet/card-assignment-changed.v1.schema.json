@@ -13,7 +13,9 @@
             "assignmentId": { "type": "string", "format": "uuid" },
             "cardId": { "type": "string", "format": "uuid" },
             "householdId": { "type": "string", "format": "uuid" },
+            "memberId": { "type": ["string", "null"], "format": "uuid" },
             "previousHouseholdId": { "type": ["string", "null"], "format": "uuid" },
+            "previousMemberId": { "type": ["string", "null"], "format": "uuid" },
             "action": { "enum": ["assigned", "transferred", "cancelled"] }
           },
           "additionalProperties": false,

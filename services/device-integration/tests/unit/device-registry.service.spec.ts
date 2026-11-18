@@ -97,6 +97,24 @@ test('registration validates current branch ownership and normalizes identity be
   assert.equal(result.deviceId, deviceId);
 });
 
+test('Edge non-batch requests share the per-installation rate limit window', async () => {
+  const calls: unknown[] = [];
+  const { service } = setup({
+    consumeEdgeRateLimit: async (...args: unknown[]) => {
+      calls.push(args[0]);
+      return false;
+    },
+  });
+
+  assert.equal(await service.consumeEdgeRequestQuota(deviceId), false);
+  assert.equal(calls.length, 1);
+  const quota = calls[0] as { sourceInstanceId: string; windowStartedAt: Date; limit: number };
+  assert.equal(quota.sourceInstanceId, deviceId);
+  assert.equal(quota.limit, 120);
+  assert.equal(quota.windowStartedAt.getUTCSeconds(), 0);
+  assert.equal(quota.windowStartedAt.getUTCMilliseconds(), 0);
+});
+
 test('a committed idempotent registration replays before a later branch suspension is consulted', async () => {
   const expected = { deviceId, status: 'active' as const, version: 1 };
   const repository = {

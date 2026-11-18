@@ -47,6 +47,7 @@ export type ImportTransactionCommand = {
   organizationId: string;
   branchId: string;
   externalCardId: string;
+  sourceDeviceId?: string;
   transactionKind: 'top_up' | 'spend' | 'refund' | 'adjustment';
   amountMinor: number;
   currency: string;
@@ -88,6 +89,51 @@ export type TransactionImportResult = {
   transactionId: string;
 };
 
+export type EdgeTransactionEvent = {
+  eventId: string;
+  sourceInstanceId: string;
+  localTransactionId: string;
+  sourceDatabase: string;
+  organizationId: string;
+  branchId: string;
+  cardId: string;
+  householdId: string;
+  memberId?: string | null;
+  deviceId: string | null;
+  sourceDeviceId: string | null;
+  transactionKind: 'top_up' | 'spend' | 'refund' | 'adjustment' | 'issuance' | 'card_replacement';
+  amountRial: number;
+  currencyCode: 'IRR';
+  grossAmountRial: number;
+  discountAmountRial: number;
+  netAmountRial: number;
+  promotionId: string | null;
+  ruleId: string | null;
+  pricingVersion: string | null;
+  reversalOfLocalTransactionId?: string | null;
+  occurredAt: string;
+  localSequence: number;
+  balanceAfterRial: number | null;
+  operationResult: 'success' | 'cancelled' | 'failed';
+  snapshotVersion: string;
+};
+
+export type EdgeInstallationRecord = {
+  sourceInstanceId: string;
+  organizationId: string;
+  branchId: string;
+  currentKeyId: string;
+  previousKeyId: string | null;
+  status: 'active' | 'suspended' | 'revoked';
+  version: number;
+  lastHeartbeatAt: Date | null;
+};
+
+export type EdgeImportResult =
+  | { status: 'accepted'; eventId: string; retryable: false }
+  | { status: 'duplicate'; eventId: string; retryable: false }
+  | { status: 'rejected'; eventId: string | null; errorCode: string; retryable: boolean };
+
 export const DEVICE_REGISTRY_REPOSITORY = Symbol('DEVICE_REGISTRY_REPOSITORY');
 
 export interface DeviceRegistryRepository {
@@ -114,5 +160,19 @@ export interface DeviceRegistryRepository {
     command: ImportTransactionCommand,
     correlationId: string,
   ): Promise<TransactionImportResult>;
+  getEdgeInstallation(sourceInstanceId: string): Promise<EdgeInstallationRecord | null>;
+  registerEdgeInstallation(input: {
+    sourceInstanceId: string;
+    organizationId: string;
+    branchId: string;
+    currentKeyId: string;
+  }, meta: DeviceCommandMeta): Promise<EdgeInstallationRecord>;
+  rotateEdgeInstallationKey(input: {
+    sourceInstanceId: string;
+    currentKeyId: string;
+    expectedVersion: number;
+  }, meta: DeviceCommandMeta): Promise<EdgeInstallationRecord>;
+  consumeEdgeRateLimit(input: { sourceInstanceId: string; windowStartedAt: Date; limit: number }): Promise<boolean>;
+  importEdgeTransactionEvent(event: EdgeTransactionEvent, correlationId: string): Promise<'accepted' | 'duplicate'>;
   isReady(): Promise<void>;
 }

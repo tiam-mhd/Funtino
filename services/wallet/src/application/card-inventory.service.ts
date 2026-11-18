@@ -112,6 +112,8 @@ export class CardInventoryService {
     if (replay) return replay;
     await this.branchScope.assertActiveBranch(command.organizationId, command.branchId);
     await this.householdValidator.assertActiveHousehold(command.householdId);
+    if (command.memberId)
+      await this.householdValidator.assertActiveMember(command.householdId, command.memberId);
     return this.repository.assignCard(normalized, meta);
   }
 
@@ -156,6 +158,8 @@ export class CardInventoryService {
       throw new ConflictException('Assignment is outside the requested branch scope.');
     await this.branchScope.assertActiveBranch(current.organizationId, current.branchId);
     await this.householdValidator.assertActiveHousehold(command.householdId);
+    if (command.memberId)
+      await this.householdValidator.assertActiveMember(command.householdId, command.memberId);
     return this.repository.transferAssignment(normalized, meta);
   }
 

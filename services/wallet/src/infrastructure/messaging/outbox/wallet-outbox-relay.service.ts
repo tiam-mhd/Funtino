@@ -27,6 +27,8 @@ type ClaimedEvent = {
 const ownedEventTypes = new Set<string>([
   eventTypes.walletCardRegistered,
   eventTypes.walletCardStatusChanged,
+  eventTypes.walletCardLedgerEntryCreatedV2,
+  eventTypes.walletCardLifecycleChanged,
 ]);
 
 @Injectable()

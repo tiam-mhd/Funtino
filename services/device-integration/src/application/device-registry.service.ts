@@ -16,6 +16,9 @@ import {
   type DeviceRegistryRepository,
   type HealthObservationResult,
   type ImportTransactionCommand,
+  type EdgeInstallationRecord,
+  type EdgeTransactionEvent,
+  type EdgeImportResult,
   type RegisterDeviceCommand,
   type ReportHealthCommand,
   type TransactionImportResult,
@@ -158,13 +161,139 @@ export class DeviceRegistryService {
     correlationId: string,
   ): Promise<TransactionImportResult> {
     const occurredAt = new Date(input.occurredAt);
-    const command: ImportTransactionCommand = { ...input, occurredAt };
+    const command: ImportTransactionCommand = {
+      ...input,
+      ...(input.sourceDeviceId === undefined
+        ? {}
+        : { sourceDeviceId: normalizeExternalDeviceId(input.sourceDeviceId) }),
+      occurredAt,
+    };
     const replay = await this.repository.findTransactionImportReplay(command);
     if (replay) return replay;
     if (Math.abs(Date.now() - occurredAt.getTime()) > 15 * 60 * 1000) {
       throw new DomainError('VALIDATION_ERROR', 'زمان رخداد دستگاه خارج از بازه‌ی مجاز است.');
     }
     return this.repository.importTransactionEvent(command, correlationId);
+  }
+
+  async getEdgeInstallation(sourceInstanceId: string): Promise<EdgeInstallationRecord | null> {
+    return this.repository.getEdgeInstallation(sourceInstanceId);
+  }
+
+  async registerEdgeInstallation(
+    input: { sourceInstanceId: string; organizationId: string; branchId: string; currentKeyId: string },
+    meta: DeviceCommandMeta,
+  ): Promise<EdgeInstallationRecord> {
+    const currentKeyId = normalizeEdgeKeyId(input.currentKeyId);
+    await this.branchScope.assertActiveBranch(input.organizationId, input.branchId);
+    return this.repository.registerEdgeInstallation({ ...input, currentKeyId }, meta);
+  }
+
+  async rotateEdgeInstallationKey(
+    input: { sourceInstanceId: string; currentKeyId: string; expectedVersion: number },
+    meta: DeviceCommandMeta,
+  ): Promise<EdgeInstallationRecord> {
+    const current = await this.repository.getEdgeInstallation(input.sourceInstanceId);
+    if (!current) throw new ConflictException('Edge installation not found.');
+    if (current.status !== 'active' || current.version !== input.expectedVersion)
+      throw new ConflictException('Edge installation changed; reload before retrying.');
+    return this.repository.rotateEdgeInstallationKey(
+      { ...input, currentKeyId: normalizeEdgeKeyId(input.currentKeyId) },
+      meta,
+    );
+  }
+
+  async importEdgeEvents(input: {
+    sourceInstanceId: string;
+    keyId: string;
+    events: Array<EdgeTransactionEvent | { invalidEventId: string | null }>;
+    correlationId: string;
+  }): Promise<EdgeImportResult[]> {
+    const installation = await this.repository.getEdgeInstallation(input.sourceInstanceId);
+    if (
+      !installation ||
+      installation.status !== 'active' ||
+      (installation.currentKeyId !== input.keyId && installation.previousKeyId !== input.keyId)
+    ) {
+      return input.events.map((event) => ({
+        status: 'rejected',
+        eventId: 'eventId' in event ? event.eventId : event.invalidEventId,
+        errorCode: 'INSTALLATION_NOT_AUTHORIZED',
+        retryable: false,
+      }));
+    }
+
+    const now = Date.now();
+    const windowStartedAt = new Date(Math.floor(now / 60_000) * 60_000);
+    const withinLimit = await this.repository.consumeEdgeRateLimit({
+      sourceInstanceId: input.sourceInstanceId,
+      windowStartedAt,
+      limit: 120,
+    });
+    if (!withinLimit) {
+      return input.events.map((event) => ({
+        status: 'rejected',
+        eventId: 'eventId' in event ? event.eventId : event.invalidEventId,
+        errorCode: 'RATE_LIMITED',
+        retryable: true,
+      }));
+    }
+
+    const results: EdgeImportResult[] = [];
+    for (const event of input.events) {
+      if (!('eventId' in event)) {
+        results.push({
+          status: 'rejected',
+          eventId: event.invalidEventId,
+          errorCode: 'INVALID_EVENT',
+          retryable: false,
+        });
+        continue;
+      }
+      if (
+        event.sourceInstanceId !== input.sourceInstanceId ||
+        event.organizationId !== installation.organizationId ||
+        event.branchId !== installation.branchId
+      ) {
+        results.push({
+          status: 'rejected',
+          eventId: event.eventId,
+          errorCode: 'INSTALLATION_SCOPE_MISMATCH',
+          retryable: false,
+        });
+        continue;
+      }
+      try {
+        const status = await this.repository.importEdgeTransactionEvent(event, input.correlationId);
+        results.push({ status, eventId: event.eventId, retryable: false });
+      } catch (error) {
+        if (error instanceof ConflictException || error instanceof DomainError) {
+          results.push({
+            status: 'rejected',
+            eventId: event.eventId,
+            errorCode: 'EVENT_CONFLICT',
+            retryable: false,
+          });
+        } else {
+          results.push({
+            status: 'rejected',
+            eventId: event.eventId,
+            errorCode: 'TEMPORARY_UNAVAILABLE',
+            retryable: true,
+          });
+        }
+      }
+    }
+    return results;
+  }
+
+  async consumeEdgeRequestQuota(sourceInstanceId: string): Promise<boolean> {
+    const now = Date.now();
+    return this.repository.consumeEdgeRateLimit({
+      sourceInstanceId,
+      windowStartedAt: new Date(Math.floor(now / 60_000) * 60_000),
+      limit: 120,
+    });
   }
 
   async isReady(): Promise<void> {
@@ -199,4 +328,11 @@ export class DeviceRegistryService {
       updatedAt: device.updatedAt.toISOString(),
     };
   }
+}
+
+function normalizeEdgeKeyId(value: string): string {
+  const normalized = value.trim();
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,119}$/u.test(normalized))
+    throw new DomainError('VALIDATION_ERROR', 'شناسه‌ی کلید Edge معتبر نیست.');
+  return normalized;
 }

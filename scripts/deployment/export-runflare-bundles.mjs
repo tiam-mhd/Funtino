@@ -52,6 +52,7 @@ const BUNDLES = Object.freeze({
       '@funtino/organization-branch',
       '@funtino/analytics-read-model',
       '@funtino/wallet',
+      '@funtino/pricing-promotions',
       '@funtino/customer-household',
       '@funtino/forms',
     ],

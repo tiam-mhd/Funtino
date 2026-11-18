@@ -89,6 +89,20 @@
       ]
     },
     {
+      "name": "pricing-promotions",
+      "cwd": "services/pricing-promotions",
+      "args": ["dist/main.js"],
+      "port": 4100,
+      "portEnv": "PRICING_PORT",
+      "readinessPath": "/health/ready",
+      "startupTimeoutMs": 60000,
+      "env": [
+        "PRICING_DATABASE_URL",
+        "PRICING_METRICS_TOKEN",
+        "PRICING_DEVICE_INTEGRATION_TOKEN"
+      ]
+    },
+    {
       "name": "analytics-read-model",
       "cwd": ".",
       "args": ["scripts/worker-startup.mjs", "analytics-read-model"],
@@ -133,9 +147,16 @@
         "DEVICE_INTEGRATION_DATABASE_URL",
         "DEVICE_INTEGRATION_GATEWAY_TOKEN",
         "DEVICE_WEBHOOK_SECRET",
+        "DEVICE_EDGE_HMAC_KEYS",
+        "DEVICE_EDGE_SNAPSHOT_SIGNING_SECRET",
+        "DEVICE_EDGE_SNAPSHOT_SIGNING_KEY_ID",
         "ORGANIZATION_BRANCH_INTERNAL_URL",
         "DEVICE_INTEGRATION_ORGANIZATION_BRANCH_TOKEN",
         "RABBITMQ_URL",
+        "WALLET_URL",
+        "WALLET_DEVICE_INTEGRATION_TOKEN",
+        "PRICING_URL",
+        "PRICING_DEVICE_INTEGRATION_TOKEN",
         "DEVICE_HEALTH_STALE_AFTER_SECONDS",
         "DEVICE_HEALTH_OFFLINE_AFTER_SECONDS"
       ]
@@ -197,6 +218,7 @@
         "DEVICE_INTEGRATION_ORGANIZATION_BRANCH_TOKEN",
         "WALLET_URL",
         "WALLET_GATEWAY_TOKEN",
+        "WALLET_DEVICE_INTEGRATION_TOKEN",
         "CUSTOMER_HOUSEHOLD_URL",
         "CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN",
         "CUSTOMER_FAMILY_PHONE_HASH_SECRET",

@@ -47,6 +47,73 @@ enum CardAssignmentAction {
   @@schema("wallet")
 }
 
+enum CardLedgerKind {
+  top_up
+  spend
+  refund
+  adjustment
+  issuance
+  card_replacement
+
+  @@map("card_ledger_kind")
+  @@schema("wallet")
+}
+
+enum BalanceFreshness {
+  fresh
+  pending_sync
+  stale
+  unknown
+
+  @@map("balance_freshness")
+  @@schema("wallet")
+}
+
+enum EdgeOperationResult {
+  success
+  cancelled
+  failed
+
+  @@map("edge_operation_result")
+  @@schema("wallet")
+}
+
+enum WalletEdgeEventStatus {
+  accepted
+  pending_review
+  rejected
+
+  @@map("edge_event_status")
+  @@schema("wallet")
+}
+
+enum LegacyDeviceImportStatus {
+  resolved
+  needs_mapping
+
+  @@map("legacy_device_import_status")
+  @@schema("wallet")
+}
+
+enum CardLifecycleRequestAction {
+  lost
+  replacement
+
+  @@map("card_lifecycle_request_action")
+  @@schema("wallet")
+}
+
+enum CardLifecycleRequestStatus {
+  requested
+  in_review
+  approved
+  rejected
+  completed
+
+  @@map("card_lifecycle_request_status")
+  @@schema("wallet")
+}
+
 model CardInventory {
   id                 String                 @id @default(uuid()) @db.Uuid
   organizationId     String                 @map("organization_id") @db.Uuid
@@ -60,6 +127,12 @@ model CardInventory {
   history            CardInventoryHistory[]
   assignments        CardAssignment[]
   assignmentHistory  CardAssignmentHistory[]
+  ledgerEntries      CardLedgerEntry[]
+  balanceProjection  CardBalanceProjection?
+  balanceReconciliations CardBalanceReconciliation[]
+  legacyImports      LegacyDeviceImport[]
+  lifecycleRequests  CardLifecycleRequest[]
+  replacementForRequests CardLifecycleRequest[] @relation("CardReplacement")
 
   @@index([organizationId, branchId, id], map: "wallet_card_inventory_scope_id_idx")
   @@index([organizationId, branchId, status, id], map: "wallet_card_inventory_scope_status_id_idx")
@@ -73,10 +146,10 @@ model CardAssignment {
   organizationId String        @map("organization_id") @db.Uuid
   branchId       String        @map("branch_id") @db.Uuid
   householdId    String        @map("household_id") @db.Uuid
+  memberId       String?       @map("member_id") @db.Uuid
   assignedAt     DateTime      @default(now()) @map("assigned_at") @db.Timestamptz(6)
   card           CardInventory @relation(fields: [cardId], references: [id], onDelete: Restrict)
 
-  @@unique([householdId, branchId], map: "wallet_active_assignment_household_branch_key")
   @@index([organizationId, branchId, id], map: "wallet_active_assignment_scope_id_idx")
   @@index([householdId, branchId], map: "wallet_active_assignment_household_idx")
   @@map("active_card_assignments")
@@ -90,7 +163,9 @@ model CardAssignmentHistory {
   organizationId     String               @map("organization_id") @db.Uuid
   branchId           String               @map("branch_id") @db.Uuid
   householdId        String               @map("household_id") @db.Uuid
+  memberId           String?              @map("member_id") @db.Uuid
   previousHouseholdId String?              @map("previous_household_id") @db.Uuid
+  previousMemberId   String?              @map("previous_member_id") @db.Uuid
   action             CardAssignmentAction
   actorUserId        String               @map("actor_user_id") @db.Uuid
   callerService      String               @map("caller_service") @db.VarChar(80)
@@ -156,5 +231,184 @@ model OutboxEvent {
 
   @@index([publishedAt, deadLetteredAt, availableAt, createdAt], map: "wallet_outbox_delivery_idx")
   @@map("outbox_events")
+  @@schema("wallet")
+}
+
+model CardLedgerEntry {
+  id                    String             @id @db.Uuid
+  eventId               String             @unique(map: "wallet_ledger_event_id_key") @map("event_id") @db.Uuid
+  sourceInstanceId      String             @map("source_instance_id") @db.VarChar(160)
+  localTransactionId    String             @map("local_transaction_id") @db.VarChar(160)
+  sourceDatabase        String             @map("source_database") @db.VarChar(160)
+  organizationId        String             @map("organization_id") @db.Uuid
+  branchId              String             @map("branch_id") @db.Uuid
+  cardId                String             @map("card_id") @db.Uuid
+  householdId           String             @map("household_id") @db.Uuid
+  memberId              String?            @map("member_id") @db.Uuid
+  deviceId              String?            @map("device_id") @db.Uuid
+  sourceDeviceId        String?            @map("source_device_id") @db.VarChar(160)
+  transactionKind       CardLedgerKind     @map("transaction_kind")
+  amountRial            BigInt             @map("amount_rial")
+  currencyCode          String             @map("currency_code") @db.Char(3)
+  grossAmountRial       BigInt             @map("gross_amount_rial")
+  discountAmountRial    BigInt             @map("discount_amount_rial")
+  netAmountRial         BigInt             @map("net_amount_rial")
+  promotionId           String?            @map("promotion_id") @db.VarChar(160)
+  ruleId                String?            @map("rule_id") @db.VarChar(160)
+  pricingVersion        String?            @map("pricing_version") @db.VarChar(80)
+  reversalOfEntryId     String?            @map("reversal_of_entry_id") @db.Uuid
+  snapshotVersion       String             @map("snapshot_version") @db.VarChar(120)
+  occurredAt            DateTime           @map("occurred_at") @db.Timestamptz(6)
+  localSequence         BigInt             @map("local_sequence")
+  balanceAfterRial      BigInt?            @map("balance_after_rial")
+  operationResult       EdgeOperationResult @map("operation_result")
+  createdAt             DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  card                  CardInventory      @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  reversalOf            CardLedgerEntry?   @relation("CardLedgerReversal", fields: [reversalOfEntryId], references: [id], onDelete: Restrict)
+  reversals             CardLedgerEntry[]  @relation("CardLedgerReversal")
+
+  @@unique([sourceInstanceId, localTransactionId], map: "wallet_ledger_source_transaction_key")
+  @@index([cardId, occurredAt, id], map: "wallet_ledger_card_occurred_idx")
+  @@index([householdId, occurredAt, id], map: "wallet_ledger_household_occurred_idx")
+  @@index([organizationId, branchId, occurredAt, id], map: "wallet_ledger_scope_occurred_idx")
+  @@index([reversalOfEntryId], map: "wallet_ledger_reversal_target_idx")
+  @@map("card_ledger_entries")
+  @@schema("wallet")
+}
+
+model CardBalanceProjection {
+  cardId                       String          @id @map("card_id") @db.Uuid
+  balanceRial                  BigInt?         @map("balance_rial")
+  lastConfirmedSnapshotAt      DateTime?       @map("last_confirmed_snapshot_at") @db.Timestamptz(6)
+  lastAppliedEventId           String?         @map("last_applied_event_id") @db.Uuid
+  lastSourceInstanceId         String?         @map("last_source_instance_id") @db.VarChar(160)
+  lastAppliedLocalSequence     BigInt?         @map("last_applied_local_sequence")
+  lastSnapshotSourceInstanceId String?         @map("last_snapshot_source_instance_id") @db.Uuid
+  lastSnapshotLocalSequence    BigInt?         @map("last_snapshot_local_sequence")
+  freshness                    BalanceFreshness @default(unknown)
+  pendingTransactionCount      Int             @default(0) @map("pending_transaction_count")
+  reconciliationDifferenceRial BigInt?         @map("reconciliation_difference_rial")
+  updatedAt                    DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+  card                         CardInventory   @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@index([freshness, updatedAt], map: "wallet_balance_freshness_updated_idx")
+  @@map("card_balance_projections")
+  @@schema("wallet")
+}
+
+model CardBalanceReconciliation {
+  id                   String          @id @db.Uuid
+  snapshotId           String          @unique(map: "wallet_balance_reconciliation_snapshot_key") @map("snapshot_id") @db.Uuid
+  requestHash          String          @map("request_hash") @db.Char(64)
+  sourceInstanceId     String          @map("source_instance_id") @db.Uuid
+  organizationId       String          @map("organization_id") @db.Uuid
+  branchId             String          @map("branch_id") @db.Uuid
+  cardId               String          @map("card_id") @db.Uuid
+  householdId          String          @map("household_id") @db.Uuid
+  memberId             String?         @map("member_id") @db.Uuid
+  snapshotVersion      String          @map("snapshot_version") @db.VarChar(120)
+  localSequence        BigInt          @map("local_sequence")
+  balanceRial          BigInt          @map("balance_rial")
+  previousBalanceRial  BigInt?         @map("previous_balance_rial")
+  differenceRial       BigInt?         @map("difference_rial")
+  currencyCode         String          @map("currency_code") @db.Char(3)
+  freshness            BalanceFreshness
+  observedAt           DateTime        @map("observed_at") @db.Timestamptz(6)
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  card                 CardInventory   @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, branchId, observedAt], map: "wallet_balance_reconciliation_scope_observed_idx")
+  @@index([cardId, observedAt], map: "wallet_balance_reconciliation_card_observed_idx")
+  @@map("card_balance_reconciliations")
+  @@schema("wallet")
+}
+
+model EdgeEventInbox {
+  eventId            String             @id @map("event_id") @db.Uuid
+  sourceInstanceId   String             @map("source_instance_id") @db.VarChar(160)
+  localTransactionId String             @map("local_transaction_id") @db.VarChar(160)
+  cardId             String             @map("card_id") @db.Uuid
+  requestHash        String             @map("request_hash") @db.Char(64)
+  eventPayload       Json               @map("event_payload")
+  status             WalletEdgeEventStatus
+  errorCode          String?            @map("error_code") @db.VarChar(80)
+  retryable          Boolean            @default(false)
+  receivedAt         DateTime           @default(now()) @map("received_at") @db.Timestamptz(6)
+  appliedAt          DateTime?          @map("applied_at") @db.Timestamptz(6)
+
+  @@unique([sourceInstanceId, localTransactionId], map: "wallet_edge_inbox_source_transaction_key")
+  @@index([status, cardId, receivedAt], map: "wallet_edge_inbox_pending_idx")
+  @@map("edge_event_inbox")
+  @@schema("wallet")
+}
+
+model LegacyDeviceImport {
+  externalEventId    String                 @id @map("external_event_id") @db.VarChar(160)
+  requestHash        String                 @map("request_hash") @db.Char(64)
+  transactionId      String                 @map("transaction_id") @db.Uuid
+  organizationId     String                 @map("organization_id") @db.Uuid
+  branchId           String                 @map("branch_id") @db.Uuid
+  cardId             String?                @map("card_id") @db.Uuid
+  deviceId           String?                @map("device_id") @db.Uuid
+  sourceDeviceId     String?                @map("source_device_id") @db.VarChar(160)
+  transactionKind    String                 @map("transaction_kind") @db.VarChar(40)
+  amountMinor        BigInt                 @map("amount_minor")
+  currency           String                 @db.Char(3)
+  occurredAt         DateTime               @map("occurred_at") @db.Timestamptz(6)
+  status             LegacyDeviceImportStatus
+  createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  card               CardInventory?         @relation(fields: [cardId], references: [id], onDelete: Restrict)
+
+  @@index([cardId, occurredAt, externalEventId], map: "wallet_legacy_import_card_occurred_idx")
+  @@index([organizationId, branchId, createdAt], map: "wallet_legacy_import_scope_created_idx")
+  @@map("legacy_device_imports")
+  @@schema("wallet")
+}
+
+model CardLifecycleRequest {
+  id             String                       @id @db.Uuid
+  cardId         String                       @map("card_id") @db.Uuid
+  replacementCardId String?                   @unique(map: "wallet_card_lifecycle_replacement_card_key") @map("replacement_card_id") @db.Uuid
+  organizationId String                       @map("organization_id") @db.Uuid
+  branchId       String                       @map("branch_id") @db.Uuid
+  householdId    String                       @map("household_id") @db.Uuid
+  memberId       String?                      @map("member_id") @db.Uuid
+  action         CardLifecycleRequestAction
+  status         CardLifecycleRequestStatus   @default(requested)
+  reason         String                       @db.VarChar(500)
+  requestHash    String                       @map("request_hash") @db.Char(64)
+  idempotencyKey String                       @unique(map: "wallet_card_lifecycle_idempotency_key") @map("idempotency_key") @db.Uuid
+  requesterId    String                       @map("requester_id") @db.Uuid
+  correlationId  String                       @map("correlation_id") @db.Uuid
+  createdAt      DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  history        CardLifecycleRequestHistory[]
+  card           CardInventory                @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  replacementCard CardInventory?              @relation("CardReplacement", fields: [replacementCardId], references: [id], onDelete: Restrict)
+
+  @@index([householdId, createdAt, id], map: "wallet_card_lifecycle_household_created_idx")
+  @@index([organizationId, branchId, status, createdAt], map: "wallet_card_lifecycle_scope_status_idx")
+  @@map("card_lifecycle_requests")
+  @@schema("wallet")
+}
+
+model CardLifecycleRequestHistory {
+  id             String                     @id @db.Uuid
+  requestId      String                     @map("request_id") @db.Uuid
+  actorUserId    String                     @map("actor_user_id") @db.Uuid
+  actorType      String                     @map("actor_type") @db.VarChar(40)
+  action         String                     @db.VarChar(80)
+  status         CardLifecycleRequestStatus
+  reason         String                     @db.VarChar(500)
+  correlationId  String                     @map("correlation_id") @db.Uuid
+  idempotencyKey String                     @unique(map: "wallet_card_lifecycle_history_idempotency_key") @map("idempotency_key") @db.Uuid
+  commandHash    String                     @map("command_hash") @db.Char(64)
+  before         Json?
+  after          Json
+  createdAt      DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+  request        CardLifecycleRequest       @relation(fields: [requestId], references: [id], onDelete: Restrict)
+
+  @@index([requestId, createdAt, id], map: "wallet_card_lifecycle_history_request_created_idx")
+  @@map("card_lifecycle_request_history")
   @@schema("wallet")
 }

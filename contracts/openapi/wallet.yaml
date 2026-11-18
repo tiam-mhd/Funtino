@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Funtino Wallet Owner API
   version: 0.1.0
-  description: Private API for branch-scoped physical-card inventory and audited household assignment. Financial balances, charging, spend and ledger operations are not exposed by this contract.
+  description: Private Wallet owner API for physical-card assignment, append-only card ledger, offline Edge ingestion results, and customer-authorized balance projections.
 servers:
   - url: http://wallet:4070
     description: Private service network only
@@ -281,6 +281,273 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/legacy-device-events:
+    post:
+      operationId: stageLegacyDeviceTransaction
+      summary: Idempotently stage a legacy v1 device event for history reconciliation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organizationId, branchId, payload]
+              properties:
+                organizationId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                payload: { type: object }
+              additionalProperties: false
+      responses:
+        '201': { description: Accepted or duplicate legacy event staged for mapping. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/households/{householdId}/cards/{cardId}/summary:
+    get:
+      operationId: getHouseholdCardLedgerSummary
+      parameters:
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/CardId'
+      responses:
+        '200':
+          description: Card balance with freshness; unknown or stale balances are not confirmed current values.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardLedgerSummary' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /internal/v1/households/{householdId}/cards/{cardId}/transactions:
+    get:
+      operationId: listHouseholdCardLedgerTransactions
+      parameters:
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/CardId'
+        - name: cursor
+          in: query
+          schema: { type: string, maxLength: 512 }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: kind
+          in: query
+          schema: { type: string, enum: [top_up, spend, refund, adjustment, issuance, card_replacement] }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Cursor-paged append-only card transactions scoped to the supplied household assignment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardLedgerTransactionPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /internal/v1/households/{householdId}/cards/{cardId}/lifecycle-requests:
+    parameters:
+      - name: householdId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '#/components/parameters/CardId'
+    get:
+      operationId: listHouseholdCardLifecycleRequests
+      description: Internal Gateway call after session and household authorization; only requests for the supplied card are returned.
+      responses:
+        '200':
+          description: Up to 100 lifecycle requests for the authorized household card.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CardLifecycleRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: createHouseholdCardLifecycleRequest
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [action, reason]
+              properties:
+                action: { type: string, enum: [lost, replacement] }
+                reason: { type: string, minLength: 8, maxLength: 500 }
+      responses:
+        '201':
+          description: Request, append-only history and outbox event are committed together.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardLifecycleRequestCommandResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/card-lifecycle-requests:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/BranchId'
+    get:
+      operationId: listBranchCardLifecycleRequests
+      description: Branch-scoped to an active organization and branch. Card identifiers are masked.
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/CardLifecycleRequestStatus' }
+        - name: cursor
+          in: query
+          schema: { type: string, format: uuid }
+        - name: pageSize
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Branch lifecycle request page.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BranchCardLifecycleRequestPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/card-lifecycle-requests/{requestId}:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+      - $ref: '#/components/parameters/BranchId'
+      - name: requestId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      operationId: transitionBranchCardLifecycleRequest
+      description: Requires branch management authorization at Gateway, Wallet revalidates the active branch, and approval blocks the reported physical card.
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status, reason]
+              properties:
+                status: { type: string, enum: [in_review, approved, rejected, completed] }
+                reason: { type: string, minLength: 8, maxLength: 500 }
+      responses:
+        '200':
+          description: Status, immutable audit history and outbox event committed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CardLifecycleRequestCommandResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v2/edge/balances/reconcile:
+    post:
+      operationId: reconcileEdgePhysicalBalance
+      summary: Validate and persist a balance snapshot from a physically read card
+      description: Device Integration credential only. The reconciliation record is append-only and the projection does not derive a balance from partial ledger history.
+      security:
+        - WalletDeviceIntegrationToken: []
+          DeviceIntegrationIdentity: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [snapshotId, sourceInstanceId, organizationId, branchId, cardId, householdId, memberId, snapshotVersion, localSequence, balanceRial, currencyCode, observedAt]
+              properties:
+                snapshotId: { type: string, format: uuid }
+                sourceInstanceId: { type: string, format: uuid }
+                organizationId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                cardId: { type: string, format: uuid }
+                householdId: { type: string, format: uuid }
+                memberId: { type: [string, 'null'], format: uuid }
+                snapshotVersion: { type: string, minLength: 1, maxLength: 120 }
+                localSequence: { type: integer, minimum: 0, maximum: 9007199254740991 }
+                balanceRial: { type: integer, minimum: 0, maximum: 9007199254740991 }
+                currencyCode: { type: string, const: IRR }
+                observedAt: { type: string, format: date-time }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Balance projection updated after scope, verification, and historical ownership checks.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [snapshotId, cardId, balanceRial, differenceRial, freshness, observedAt, duplicate]
+                properties:
+                  snapshotId: { type: string, format: uuid }
+                  cardId: { type: string, format: uuid }
+                  balanceRial: { type: [integer, 'null'], minimum: 0, maximum: 9007199254740991 }
+                  differenceRial: { type: [integer, 'null'], minimum: -9007199254740991, maximum: 9007199254740991 }
+                  freshness: { type: string, enum: [fresh, pending_sync, stale, unknown] }
+                  observedAt: { type: string, format: date-time }
+                  duplicate: { type: boolean }
+                additionalProperties: false
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/edge/operations/organizations/{organizationId}/branches/{branchId}/review-summary:
+    get:
+      operationId: getBranchEdgeReviewSummary
+      summary: Count Edge ledger events that require data correction or investigation
+      security:
+        - WalletDeviceIntegrationToken: []
+          DeviceIntegrationIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+      responses:
+        '200': { description: Counts by safe error code. No card identifiers or transaction payloads are returned. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/organizations/{organizationId}/branches/{branchId}/edge-card-mappings:
+    get:
+      operationId: listVerifiedBranchEdgeCardMappings
+      summary: Return minimal verified card-owner mappings for a registered Edge snapshot
+      description: Internal Device Integration credential only. Physical card identifiers are returned solely to build the signed offline mapping and must never be logged or exposed to customer routes.
+      security:
+        - WalletDeviceIntegrationToken: []
+          DeviceIntegrationIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/OrganizationId'
+        - $ref: '#/components/parameters/BranchId'
+      responses:
+        '200':
+          description: Verified assigned cards only, scoped to the requested organization and branch.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [cardId, externalCardId, householdId, memberId]
+                  properties:
+                    cardId: { type: string, format: uuid }
+                    externalCardId: { type: string, maxLength: 160 }
+                    householdId: { type: string, format: uuid }
+                    memberId: { type: [string, 'null'], format: uuid }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
 components:
   securitySchemes:
     WalletServiceToken:
@@ -288,6 +555,14 @@ components:
       in: header
       name: x-funtino-service-token
     ServiceIdentity:
+      type: apiKey
+      in: header
+      name: x-funtino-service-id
+    WalletDeviceIntegrationToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+    DeviceIntegrationIdentity:
       type: apiKey
       in: header
       name: x-funtino-service-id
@@ -432,6 +707,10 @@ components:
             format: uuid,
             description: Opaque ID validated by Customer & Household owner.,
           }
+        memberId:
+          type: [string, 'null']
+          format: uuid
+          description: Null or omitted means a shared household card; an ID is validated by Customer & Household.
         reason: { type: string, minLength: 8, maxLength: 500 }
     TransferCardRequest:
       type: object
@@ -444,6 +723,10 @@ components:
             format: uuid,
             description: New household in the assignment's existing branch.,
           }
+        memberId:
+          type: [string, 'null']
+          format: uuid
+          description: Null or omitted means a shared household card; an ID is validated by Customer & Household.
         reason: { type: string, minLength: 8, maxLength: 500 }
     CancelCardRequest:
       type: object
@@ -461,6 +744,7 @@ components:
           organizationId,
           branchId,
           householdId,
+          memberId,
           maskedIdentifier,
           status,
           verificationStatus,
@@ -472,6 +756,7 @@ components:
         organizationId: { type: string, format: uuid }
         branchId: { type: string, format: uuid }
         householdId: { type: string, format: uuid }
+        memberId: { type: [string, 'null'], format: uuid }
         maskedIdentifier: { type: string, maxLength: 32 }
         status: { $ref: '#/components/schemas/CardInventoryStatus' }
         verificationStatus: { $ref: '#/components/schemas/CardVerificationStatus' }
@@ -520,6 +805,91 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/CustomerCardAssignment' } }
+    CardLedgerSummary:
+      type: object
+      additionalProperties: false
+      required: [householdId, cardId, memberId, balanceRial, lastConfirmedSnapshotAt, lastAppliedEventId, freshness, pendingTransactionCount, reconciliationDifferenceRial]
+      properties:
+        householdId: { type: string, format: uuid }
+        cardId: { type: string, format: uuid }
+        memberId: { type: [string, 'null'], format: uuid }
+        balanceRial: { type: [integer, 'null'] }
+        lastConfirmedSnapshotAt: { type: [string, 'null'], format: date-time }
+        lastAppliedEventId: { type: [string, 'null'], format: uuid }
+        freshness: { type: string, enum: [fresh, pending_sync, stale, unknown] }
+        pendingTransactionCount: { type: integer, minimum: 0 }
+        reconciliationDifferenceRial: { type: [integer, 'null'] }
+    CardLedgerTransactionPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        nextCursor: { type: [string, 'null'], maxLength: 512 }
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, eventId, cardId, householdId, memberId, deviceId, transactionKind, amountRial, grossAmountRial, discountAmountRial, netAmountRial, currencyCode, promotionId, ruleId, pricingVersion, reversalOfEntryId, occurredAt, status]
+            properties:
+              id: { type: string, format: uuid }
+              eventId: { type: string, format: uuid }
+              cardId: { type: string, format: uuid }
+              householdId: { type: string, format: uuid }
+              memberId: { type: [string, 'null'], format: uuid }
+              deviceId: { type: [string, 'null'], format: uuid }
+              transactionKind: { type: string, enum: [top_up, spend, refund, adjustment, issuance, card_replacement] }
+              amountRial: { type: [integer, 'null'] }
+              grossAmountRial: { type: [integer, 'null'] }
+              discountAmountRial: { type: [integer, 'null'] }
+              netAmountRial: { type: [integer, 'null'] }
+              currencyCode: { type: string, const: IRR }
+              promotionId: { type: [string, 'null'] }
+              ruleId: { type: [string, 'null'] }
+              pricingVersion: { type: [string, 'null'] }
+              reversalOfEntryId: { type: [string, 'null'], format: uuid }
+              occurredAt: { type: string, format: date-time }
+              status: { type: string, const: confirmed }
+    CardLifecycleRequestStatus:
+      type: string
+      enum: [requested, in_review, approved, rejected, completed]
+    CardLifecycleRequest:
+      type: object
+      additionalProperties: false
+      required: [id, cardId, replacementCardId, householdId, memberId, action, status, reason, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        cardId: { type: string, format: uuid }
+        replacementCardId: { type: [string, 'null'], format: uuid }
+        householdId: { type: string, format: uuid }
+        memberId: { type: [string, 'null'], format: uuid }
+        action: { type: string, enum: [lost, replacement] }
+        status: { $ref: '#/components/schemas/CardLifecycleRequestStatus' }
+        reason: { type: string, maxLength: 500 }
+        createdAt: { type: string, format: date-time }
+    CardLifecycleRequestCommandResult:
+      allOf:
+        - $ref: '#/components/schemas/CardLifecycleRequest'
+        - type: object
+          required: [duplicate]
+          properties:
+            duplicate: { type: boolean }
+    BranchCardLifecycleRequest:
+      allOf:
+        - $ref: '#/components/schemas/CardLifecycleRequest'
+        - type: object
+          required: [organizationId, branchId, maskedIdentifier]
+          properties:
+            organizationId: { type: string, format: uuid }
+            branchId: { type: string, format: uuid }
+            maskedIdentifier: { type: string, maxLength: 32 }
+    BranchCardLifecycleRequestPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/BranchCardLifecycleRequest' } }
+        nextCursor: { type: [string, 'null'], format: uuid }
   responses:
     BadRequest:
       description: Request validation failed.

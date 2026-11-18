@@ -167,6 +167,308 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/Conflict' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v1/edge/installations:
+    post:
+      operationId: registerEdgeInstallation
+      summary: Register a Windows Edge installation credential identity
+      security:
+        - internalGatewayToken: []
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceInstanceId, organizationId, branchId, currentKeyId]
+              properties:
+                sourceInstanceId: { type: string, format: uuid }
+                organizationId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                currentKeyId: { type: string, minLength: 1, maxLength: 120 }
+              additionalProperties: false
+      responses:
+        '201': { description: Edge installation registered and audited. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/edge/installations/{sourceInstanceId}/rotate-key:
+    post:
+      operationId: rotateEdgeInstallationKey
+      security:
+        - internalGatewayToken: []
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: sourceInstanceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentKeyId]
+              properties:
+                currentKeyId: { type: string, minLength: 1, maxLength: 120 }
+              additionalProperties: false
+      responses:
+        '200': { description: Edge credential rotated with one previous key retained for overlap. }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v2/edge/events:
+    post:
+      operationId: ingestEdgeTransactionBatch
+      summary: Idempotently receive authenticated offline Windows events with per-event results
+      description: HMAC-SHA256 covers the exact raw JSON body; installation identity, organization and branch are checked before events are durably accepted. Only successful operations are published to Wallet.
+      security:
+        - edgeHmacSignature: []
+      parameters:
+        - name: x-edge-installation-id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+        - name: x-edge-key-id
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 120 }
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceInstanceId, events]
+              properties:
+                sourceInstanceId: { type: string, format: uuid }
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { $ref: '../events/device/edge-transaction-payload.v2.schema.json' }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Each event is accepted, recognized as duplicate, or rejected with a safe error code and retryability.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [status, eventId, errorCode, retryable]
+                      properties:
+                        status: { type: string, enum: [accepted, duplicate, rejected] }
+                        eventId: { type: [string, 'null'], format: uuid }
+                        errorCode: { type: [string, 'null'], maxLength: 80 }
+                        retryable: { type: boolean }
+                      additionalProperties: false
+                additionalProperties: false
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { description: Installation rate limit exceeded; retry after reconnect. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/balances/reconcile:
+    post:
+      operationId: reconcilePhysicalCardBalance
+      summary: Confirm the balance read directly from a verified physical card
+      description: HMAC is calculated over the exact raw body. The installation and branch are resolved from the registered Edge identity; no raw card UID is accepted. Wallet validates card ownership at observedAt and appends an immutable reconciliation record.
+      security:
+        - edgeHmacSignature: []
+      parameters:
+        - name: x-edge-installation-id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+        - name: x-edge-key-id
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 120 }
+        - name: x-edge-signature
+          in: header
+          required: true
+          schema: { type: string, pattern: '^sha256=[a-f0-9]{64}$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceInstanceId, branchId, snapshotId, snapshotVersion, cardId, householdId, memberId, localSequence, balanceRial, currencyCode, observedAt]
+              properties:
+                sourceInstanceId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                snapshotId: { type: string, format: uuid }
+                snapshotVersion: { type: string, minLength: 1, maxLength: 120 }
+                cardId: { type: string, format: uuid }
+                householdId: { type: string, format: uuid }
+                memberId: { type: [string, 'null'], format: uuid }
+                localSequence: { type: integer, minimum: 0, maximum: 9007199254740991 }
+                balanceRial: { type: integer, minimum: 0, maximum: 9007199254740991 }
+                currencyCode: { type: string, const: IRR }
+                observedAt: { type: string, format: date-time }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Physical card balance reconciliation result.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [snapshotId, cardId, balanceRial, differenceRial, freshness, observedAt, duplicate]
+                properties:
+                  snapshotId: { type: string, format: uuid }
+                  cardId: { type: string, format: uuid }
+                  balanceRial: { type: [integer, 'null'], minimum: 0, maximum: 9007199254740991 }
+                  differenceRial: { type: [integer, 'null'], minimum: -9007199254740991, maximum: 9007199254740991 }
+                  freshness: { type: string, enum: [fresh, pending_sync, stale, unknown] }
+                  observedAt: { type: string, format: date-time }
+                  duplicate: { type: boolean }
+                additionalProperties: false
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { description: Installation rate limit exceeded; retry after reconnect. }
+        '409': { description: Snapshot is older than an applied transaction or physical card ownership cannot be verified at read time. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v1/operations/edge-sync/organizations/{organizationId}/branches/{branchId}:
+    get:
+      operationId: getBranchEdgeSyncStatus
+      summary: Read branch installation, snapshot, import, and outbox delivery status
+      security:
+        - internalGatewayToken: []
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - name: organizationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: branchId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Branch-scoped installations, latest snapshots and event-delivery counters. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v1/operations/edge-sync/organizations/{organizationId}/branches/{branchId}/dead-letters/{eventId}/replay:
+    post:
+      operationId: replayBranchEdgeDeadLetter
+      summary: Requeue the original immutable Edge event with its existing event identity
+      description: Requires a review reason, actor, correlation, and idempotency key. The original outbox envelope and event ID are preserved; only delivery state is reset. Replay attempts are audited append-only.
+      security:
+        - internalGatewayToken: []
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: organizationId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: branchId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 10, maxLength: 500 }
+              additionalProperties: false
+      responses:
+        '200': { description: Original event requeued with its existing eventId. }
+        '400': { description: Reason or command metadata is invalid. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Dead-letter event was not found in this branch. }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v2/edge/snapshot:
+    get:
+      operationId: getSignedBranchEdgeSnapshotPage
+      summary: Fetch a resumable, signed immutable offline snapshot for the installation branch
+      description: Sign the UTF-8 bytes `GET\n` plus the exact request target path and query using the registered installation HMAC key. Keep the previously completed snapshot until every page of the new snapshot has been verified.
+      security:
+        - edgeHmacSignature: []
+      parameters:
+        - name: x-edge-installation-id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+        - name: x-edge-key-id
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 120 }
+        - name: branchId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, maxLength: 1024 }
+      responses:
+        '200':
+          description: Signed snapshot page; PII is omitted, and pricing execution remains disabled until Windows golden vectors are approved.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [snapshotId, snapshotVersion, branchId, generatedAt, validFrom, validUntil, documentHash, pricing, attractions, settings, items, nextCursor, signature, signingKeyId]
+                properties:
+                  snapshotId: { type: string, format: uuid }
+                  snapshotVersion: { type: string, maxLength: 120 }
+                  branchId: { type: string, format: uuid }
+                  generatedAt: { type: string, format: date-time }
+                  validFrom: { type: string, format: date-time }
+                  validUntil: { type: string, format: date-time }
+                  documentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+                  pricing:
+                    type: object
+                    required: [status, version, reasonCode, rules]
+                    properties:
+                      status: { type: string, const: disabled }
+                      version: { type: 'null' }
+                      reasonCode: { type: string, const: PENDING_WINDOWS_GOLDEN_VECTORS }
+                      rules: { type: array, maxItems: 0 }
+                    additionalProperties: false
+                  attractions: { type: array, maxItems: 0 }
+                  settings: { type: array, maxItems: 0 }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [kind, value]
+                      properties:
+                        kind: { type: string, enum: [device, card_mapping, attraction, setting] }
+                        value: { type: object }
+                      additionalProperties: false
+                  nextCursor: { type: [string, 'null'], maxLength: 1024 }
+                  signature: { type: string, pattern: '^sha256=[a-f0-9]{64}$' }
+                  signingKeyId: { type: string, minLength: 1, maxLength: 120 }
+                additionalProperties: false
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '410': { description: Snapshot cursor is expired; request a new complete snapshot and retain the previous one until it succeeds. }
+        '503': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     internalGatewayToken:
@@ -179,6 +481,11 @@ components:
       in: header
       name: x-device-signature
       description: sha256=<hex HMAC-SHA256 of the exact raw JSON body>.
+    edgeHmacSignature:
+      type: apiKey
+      in: header
+      name: x-edge-signature
+      description: sha256=<hex HMAC-SHA256 of the exact raw JSON body; pair with installation ID and key ID headers.
   parameters:
     ServiceId:
       name: x-funtino-service-id

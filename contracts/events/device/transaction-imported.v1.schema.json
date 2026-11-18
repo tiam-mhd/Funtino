@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/device/transaction-imported.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "device.transaction-imported.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["transactionId", "externalEventId", "externalCardId", "transactionKind", "amountMinor", "currency", "occurredAt"],
+          "properties": {
+            "transactionId": { "type": "string", "format": "uuid" },
+            "externalEventId": { "type": "string", "minLength": 1, "maxLength": 160 },
+            "externalCardId": { "type": "string", "minLength": 1, "maxLength": 160 },
+            "deviceId": { "type": "string", "format": "uuid" },
+            "sourceDeviceId": { "type": "string", "minLength": 1, "maxLength": 160 },
+            "transactionKind": { "enum": ["top_up", "spend", "refund", "adjustment"] },
+            "amountMinor": { "type": "integer" },
+            "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+            "occurredAt": { "type": "string", "format": "date-time" }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

@@ -28,6 +28,8 @@ channels:
         $ref: '#/components/messages/CardLinked'
       deviceTransactionImported:
         $ref: '#/components/messages/DeviceTransactionImported'
+      deviceEdgeTransactionImported:
+        $ref: '#/components/messages/DeviceEdgeTransactionImported'
       deviceRegistered:
         $ref: '#/components/messages/DeviceRegistered'
       deviceUpdated:
@@ -44,6 +46,10 @@ channels:
         $ref: '#/components/messages/WalletCardStatusChanged'
       walletCardAssignmentChanged:
         $ref: '#/components/messages/WalletCardAssignmentChanged'
+      walletCardLedgerEntryCreatedV2:
+        $ref: '#/components/messages/WalletCardLedgerEntryCreatedV2'
+      walletCardLifecycleChanged:
+        $ref: '#/components/messages/WalletCardLifecycleChanged'
       missionCompleted:
         $ref: '#/components/messages/MissionCompleted'
       notificationRequested:
@@ -112,7 +118,11 @@ components:
     DeviceTransactionImported:
       name: DeviceTransactionImported
       payload:
-        $ref: '../events/common/envelope.schema.json'
+        $ref: '../events/device/transaction-imported.v1.schema.json'
+    DeviceEdgeTransactionImported:
+      name: DeviceEdgeTransactionImported
+      payload:
+        $ref: '../events/device/edge-transaction-imported.v2.schema.json'
     DeviceRegistered:
       name: DeviceRegistered
       payload:
@@ -145,6 +155,14 @@ components:
       name: WalletCardAssignmentChanged
       payload:
         $ref: '../events/wallet/card-assignment-changed.v1.schema.json'
+    WalletCardLedgerEntryCreatedV2:
+      name: WalletCardLedgerEntryCreatedV2
+      payload:
+        $ref: '../events/wallet/card-ledger-entry-created.v2.schema.json'
+    WalletCardLifecycleChanged:
+      name: WalletCardLifecycleChanged
+      payload:
+        $ref: '../events/wallet/card-lifecycle-request-changed.v1.schema.json'
     MissionCompleted:
       name: MissionCompleted
       payload:

@@ -225,6 +225,7 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
           organizationId: card.organizationId,
           branchId: card.branchId,
           householdId: command.householdId,
+          memberId: command.memberId,
           assignedAt,
         },
       });
@@ -261,7 +262,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
         organizationId: card.organizationId,
         branchId: card.branchId,
         householdId: command.householdId,
+        memberId: command.memberId,
         previousHouseholdId: null,
+        previousMemberId: null,
         action: 'assigned',
         meta,
         reason: command.reason,
@@ -273,7 +276,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
         organizationId: card.organizationId,
         branchId: card.branchId,
         householdId: command.householdId,
+        memberId: command.memberId,
         previousHouseholdId: null,
+        previousMemberId: null,
         action: 'assigned',
         correlationId: meta.correlationId,
       });
@@ -340,7 +345,7 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
         include: { card: true },
       });
       if (!current) throw new NotFoundException('Active card assignment not found.');
-      if (current.householdId === command.householdId) {
+      if (current.householdId === command.householdId && current.memberId === command.memberId) {
         throw new ConflictException('Card is already assigned to this household at this branch.');
       }
       if (current.card.status !== 'assigned' || current.card.verificationStatus !== 'verified') {
@@ -363,6 +368,7 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
           organizationId: current.organizationId,
           branchId: current.branchId,
           householdId: command.householdId,
+          memberId: command.memberId,
           assignedAt: new Date(),
         },
         include: { card: true },
@@ -373,7 +379,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
         organizationId: current.organizationId,
         branchId: current.branchId,
         householdId: command.householdId,
+        memberId: command.memberId,
         previousHouseholdId: current.householdId,
+        previousMemberId: current.memberId,
         action: 'transferred',
         meta,
         reason: command.reason,
@@ -384,7 +392,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
         organizationId: current.organizationId,
         branchId: current.branchId,
         householdId: command.householdId,
+        memberId: command.memberId,
         previousHouseholdId: current.householdId,
+        previousMemberId: current.memberId,
         action: 'transferred',
         correlationId: meta.correlationId,
       });
@@ -433,7 +443,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
         organizationId: current.organizationId,
         branchId: current.branchId,
         householdId: current.householdId,
+        memberId: current.memberId,
         previousHouseholdId: null,
+        previousMemberId: null,
         action: 'cancelled',
         meta,
         reason: command.reason,
@@ -444,7 +456,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
         organizationId: current.organizationId,
         branchId: current.branchId,
         householdId: current.householdId,
+        memberId: current.memberId,
         previousHouseholdId: null,
+        previousMemberId: null,
         action: 'cancelled',
         correlationId: meta.correlationId,
       });
@@ -545,7 +559,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
       organizationId: string;
       branchId: string;
       householdId: string;
+      memberId: string | null;
       previousHouseholdId: string | null;
+      previousMemberId: string | null;
       action: 'assigned' | 'transferred' | 'cancelled';
       meta: CardCommandMeta;
       reason: string;
@@ -559,7 +575,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
         organizationId: input.organizationId,
         branchId: input.branchId,
         householdId: input.householdId,
+        memberId: input.memberId,
         previousHouseholdId: input.previousHouseholdId,
+        previousMemberId: input.previousMemberId,
         action: input.action,
         actorUserId: input.meta.actorUserId,
         callerService: input.meta.callerService,
@@ -577,7 +595,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
       organizationId: string;
       branchId: string;
       householdId: string;
+      memberId: string | null;
       previousHouseholdId: string | null;
+      previousMemberId: string | null;
       action: 'assigned' | 'transferred' | 'cancelled';
       correlationId: string;
     },
@@ -595,7 +615,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
           assignmentId: input.assignmentId,
           cardId: input.cardId,
           householdId: input.householdId,
+          memberId: input.memberId,
           previousHouseholdId: input.previousHouseholdId,
+          previousMemberId: input.previousMemberId,
           action: input.action,
         },
       }),
@@ -651,6 +673,7 @@ function mapAssignment(
     organizationId: row.organizationId,
     branchId: row.branchId,
     householdId: row.householdId,
+    memberId: row.memberId,
     maskedIdentifier: maskExternalCardId(row.card.externalCardId),
     status: row.card.status,
     verificationStatus: row.card.verificationStatus,

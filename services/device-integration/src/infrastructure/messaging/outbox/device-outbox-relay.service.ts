@@ -26,6 +26,7 @@ type ClaimedEvent = {
 
 const ownedEventTypes = new Set<string>([
   eventTypes.deviceTransactionImported,
+  eventTypes.deviceEdgeTransactionImported,
   eventTypes.deviceRegistered,
   eventTypes.deviceUpdated,
   eventTypes.deviceHealthObserved,

@@ -1,0 +1,107 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "../generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("PRICING_DATABASE_URL")
+  directUrl = env("PRICING_MIGRATION_DATABASE_URL")
+  schemas   = ["pricing_promotions"]
+}
+
+enum PricingVersionStatus {
+  draft
+  active
+  retired
+
+  @@map("pricing_version_status")
+  @@schema("pricing_promotions")
+}
+
+model PricingVersion {
+  id             String               @id @db.Uuid
+  organizationId String?              @map("organization_id") @db.Uuid
+  branchId       String?              @map("branch_id") @db.Uuid
+  version        Int
+  status         PricingVersionStatus @default(draft)
+  validFrom      DateTime?            @map("valid_from") @db.Timestamptz(6)
+  validUntil     DateTime?            @map("valid_until") @db.Timestamptz(6)
+  createdBy      String               @map("created_by") @db.Uuid
+  createdAt      DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  rules          PricingRule[]
+  audit          PricingAudit[]
+
+  @@unique([organizationId, branchId, version], map: "pricing_versions_scope_version_key")
+  @@index([organizationId, branchId, status], map: "pricing_versions_scope_status_idx")
+  @@map("pricing_versions")
+  @@schema("pricing_promotions")
+}
+
+model PricingRule {
+  id            String         @id @db.Uuid
+  pricingVersionId String      @map("pricing_version_id") @db.Uuid
+  ruleId        String         @map("rule_id") @db.VarChar(160)
+  name          String         @db.VarChar(160)
+  priority      Int
+  definition    Json
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  version       PricingVersion @relation(fields: [pricingVersionId], references: [id], onDelete: Restrict)
+
+  @@unique([pricingVersionId, ruleId], map: "pricing_rules_version_rule_key")
+  @@index([pricingVersionId, priority, id], map: "pricing_rules_version_priority_idx")
+  @@map("pricing_rules")
+  @@schema("pricing_promotions")
+}
+
+model PricingAudit {
+  id               String         @id @db.Uuid
+  pricingVersionId String?        @map("pricing_version_id") @db.Uuid
+  actorUserId      String         @map("actor_user_id") @db.Uuid
+  action           String         @db.VarChar(80)
+  reason           String         @db.VarChar(500)
+  correlationId    String         @map("correlation_id") @db.Uuid
+  idempotencyKey   String         @unique(map: "pricing_audit_idempotency_key") @map("idempotency_key") @db.Uuid
+  before           Json?
+  after            Json
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  version          PricingVersion? @relation(fields: [pricingVersionId], references: [id], onDelete: Restrict)
+
+  @@index([pricingVersionId, createdAt], map: "pricing_audit_version_created_idx")
+  @@index([actorUserId, createdAt], map: "pricing_audit_actor_created_idx")
+  @@map("pricing_audit")
+  @@schema("pricing_promotions")
+}
+
+model OutboxEvent {
+  id             String    @id @db.Uuid
+  eventType      String    @map("event_type") @db.VarChar(160)
+  aggregateId    String    @map("aggregate_id") @db.Uuid
+  envelope       Json
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  availableAt    DateTime  @default(now()) @map("available_at") @db.Timestamptz(6)
+  attempts       Int       @default(0)
+  leaseToken     String?   @map("lease_token") @db.Uuid
+  leaseExpiresAt DateTime? @map("lease_expires_at") @db.Timestamptz(6)
+  publishedAt    DateTime? @map("published_at") @db.Timestamptz(6)
+  deadLetteredAt DateTime? @map("dead_lettered_at") @db.Timestamptz(6)
+  lastErrorCode  String?   @map("last_error_code") @db.VarChar(80)
+
+  @@index([publishedAt, deadLetteredAt, availableAt, createdAt], map: "pricing_outbox_delivery_idx")
+  @@map("outbox_events")
+  @@schema("pricing_promotions")
+}
+
+model InboxEvent {
+  eventId      String   @map("event_id") @db.Uuid
+  consumerName String   @map("consumer_name") @db.VarChar(120)
+  requestHash  String   @map("request_hash") @db.Char(64)
+  receivedAt   DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+  appliedAt    DateTime? @map("applied_at") @db.Timestamptz(6)
+
+  @@id([eventId, consumerName])
+  @@index([consumerName, receivedAt], map: "pricing_inbox_consumer_received_idx")
+  @@map("inbox_events")
+  @@schema("pricing_promotions")
+}

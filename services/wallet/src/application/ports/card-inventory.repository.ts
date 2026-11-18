@@ -35,6 +35,7 @@ export type AssignCardCommand = {
   branchId: string;
   cardId: string;
   householdId: string;
+  memberId: string | null;
   reason: string;
 };
 
@@ -43,6 +44,7 @@ export type TransferCardAssignmentCommand = {
   branchId: string;
   assignmentId: string;
   householdId: string;
+  memberId: string | null;
   reason: string;
 };
 

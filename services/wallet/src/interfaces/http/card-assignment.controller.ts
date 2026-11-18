@@ -18,8 +18,8 @@ import { WalletServiceTokenGuard } from './service-token.guard.js';
 
 const uuid = z.string().uuid();
 const reason = z.string().trim().min(8).max(500);
-const assignSchema = z.object({ householdId: uuid, reason }).strict();
-const transferSchema = z.object({ householdId: uuid, reason }).strict();
+const assignSchema = z.object({ householdId: uuid, memberId: uuid.nullable().optional(), reason }).strict();
+const transferSchema = z.object({ householdId: uuid, memberId: uuid.nullable().optional(), reason }).strict();
 const cancelSchema = z.object({ reason }).strict();
 const listSchema = z
   .object({
@@ -68,7 +68,7 @@ export class CardAssignmentController {
     const parsed = assignSchema.safeParse(rawBody);
     if (!parsed.success) throw new BadRequestException('Card assignment request is invalid.');
     return this.service.assignCard(
-      { organizationId, branchId, cardId, ...parsed.data },
+      { organizationId, branchId, cardId, ...parsed.data, memberId: parsed.data.memberId ?? null },
       commandMeta(headers),
     );
   }
@@ -85,7 +85,7 @@ export class CardAssignmentController {
     const parsed = transferSchema.safeParse(rawBody);
     if (!parsed.success) throw new BadRequestException('Card assignment transfer is invalid.');
     return this.service.transferAssignment(
-      { organizationId, branchId, assignmentId, ...parsed.data },
+      { organizationId, branchId, assignmentId, ...parsed.data, memberId: parsed.data.memberId ?? null },
       commandMeta(headers),
     );
   }

@@ -190,6 +190,7 @@ export class DeviceWebhookController {
         organizationId: parsed.data.organizationId,
         branchId: parsed.data.branchId,
         externalCardId: parsed.data.externalCardId,
+        sourceDeviceId: parsed.data.sourceDeviceId,
         transactionKind: parsed.data.transactionKind,
         amountMinor: parsed.data.amountMinor,
         currency: parsed.data.currency,

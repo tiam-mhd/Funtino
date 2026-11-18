@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { RabbitEventBus } from '@funtino/backend-core';
 import { CardInventoryService } from './application/card-inventory.service.js';
+import { CardLedgerService } from './application/card-ledger.service.js';
+import { CardLedgerEventConsumer } from './application/card-ledger-event-consumer.service.js';
+import { CardLifecycleRequestService } from './application/card-lifecycle-request.service.js';
 import { HOUSEHOLD_VALIDATOR } from './application/ports/household-validator.port.js';
 import { BRANCH_SCOPE_VALIDATOR } from './application/ports/branch-scope-validator.port.js';
 import { CARD_INVENTORY_REPOSITORY } from './application/ports/card-inventory.repository.js';
@@ -16,16 +19,25 @@ import { PrismaCardInventoryRepository } from './infrastructure/persistence/pris
 import { PrismaService } from './infrastructure/persistence/prisma/prisma.service.js';
 import { CardInventoryController } from './interfaces/http/card-inventory.controller.js';
 import { CardAssignmentController } from './interfaces/http/card-assignment.controller.js';
+import { CardLedgerController } from './interfaces/http/card-ledger.controller.js';
+import { EdgeCardMappingController } from './interfaces/http/edge-card-mapping.controller.js';
+import { WalletDeviceIntegrationTokenGuard } from './interfaces/http/device-integration-token.guard.js';
+import { CardLifecycleRequestController } from './interfaces/http/card-lifecycle-request.controller.js';
+import { EdgeBalanceReconciliationController } from './interfaces/http/edge-balance-reconciliation.controller.js';
 import { HealthController } from './interfaces/http/health.controller.js';
 import { WalletServiceTokenGuard } from './interfaces/http/service-token.guard.js';
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true })],
-  controllers: [CardInventoryController, CardAssignmentController, HealthController],
+  controllers: [CardInventoryController, CardAssignmentController, CardLedgerController, EdgeCardMappingController, CardLifecycleRequestController, EdgeBalanceReconciliationController, HealthController],
   providers: [
     PrismaService,
     CardInventoryService,
+    CardLedgerService,
+    CardLedgerEventConsumer,
+    CardLifecycleRequestService,
     WalletServiceTokenGuard,
+    WalletDeviceIntegrationTokenGuard,
     WalletOutboxRelayService,
     PrismaCardInventoryRepository,
     OrganizationBranchScopeClient,

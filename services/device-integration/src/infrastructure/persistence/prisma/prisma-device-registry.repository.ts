@@ -7,7 +7,7 @@ import {
 import { createEventEnvelope, eventTypes } from '@funtino/event-contracts';
 import { createSafeErrorDiagnostic, writeStructuredLog } from '@funtino/backend-core';
 import { createHash, randomUUID } from 'node:crypto';
-import { Prisma, type Device as PrismaDevice } from '../../../../generated/prisma/index.js';
+import { Prisma, type Device as PrismaDevice, type EdgeInstallation as PrismaEdgeInstallation } from '../../../../generated/prisma/index.js';
 import type {
   DeviceListQuery,
   DeviceListResult,
@@ -15,6 +15,8 @@ import type {
   DeviceRegistryRepository,
   HealthObservationResult,
   ImportTransactionCommand,
+  EdgeInstallationRecord,
+  EdgeTransactionEvent,
   RegisterDeviceCommand,
   ReportHealthCommand,
   TransactionImportResult,
@@ -309,6 +311,22 @@ export class PrismaDeviceRegistryRepository implements DeviceRegistryRepository 
     const transactionId = randomUUID();
     try {
       return await this.prisma.$transaction(async (tx) => {
+        let deviceId: string | null = null;
+        if (command.sourceDeviceId) {
+          const candidates = await tx.device.findMany({
+            where: {
+              organizationId: command.organizationId,
+              branchId: command.branchId,
+              externalDeviceId: command.sourceDeviceId,
+            },
+            select: { id: true, status: true },
+            take: 2,
+          });
+          if (candidates.length !== 1 || candidates[0]?.status !== 'active') {
+            throw new ConflictException('Source device is not uniquely registered and active in this branch.');
+          }
+          deviceId = candidates[0].id;
+        }
         await tx.deviceTransactionImport.create({
           data: {
             externalEventId: command.externalEventId,
@@ -316,6 +334,8 @@ export class PrismaDeviceRegistryRepository implements DeviceRegistryRepository 
             requestHash,
             organizationId: command.organizationId,
             branchId: command.branchId,
+            sourceDeviceId: command.sourceDeviceId ?? null,
+            deviceId,
           },
         });
         const envelope = createEventEnvelope({
@@ -329,6 +349,8 @@ export class PrismaDeviceRegistryRepository implements DeviceRegistryRepository 
             transactionId,
             externalEventId: command.externalEventId,
             externalCardId: command.externalCardId,
+            ...(deviceId ? { deviceId } : {}),
+            ...(command.sourceDeviceId ? { sourceDeviceId: command.sourceDeviceId } : {}),
             transactionKind: command.transactionKind,
             amountMinor: command.amountMinor,
             currency: command.currency,
@@ -350,6 +372,179 @@ export class PrismaDeviceRegistryRepository implements DeviceRegistryRepository 
       });
       if (duplicate) return this.replayTransactionImport(duplicate, requestHash);
       throw new ConflictException('Device transaction event conflicts with existing data.');
+    }
+  }
+
+  async getEdgeInstallation(sourceInstanceId: string): Promise<EdgeInstallationRecord | null> {
+    const row = await this.prisma.edgeInstallation.findUnique({ where: { sourceInstanceId } });
+    return row ? mapEdgeInstallation(row) : null;
+  }
+
+  registerEdgeInstallation(
+    input: { sourceInstanceId: string; organizationId: string; branchId: string; currentKeyId: string },
+    meta: DeviceCommandMeta,
+  ): Promise<EdgeInstallationRecord> {
+    const requestHash = hash({ operation: 'edge.installation.register', input, actor: meta.actorUserId });
+    return this.executeIdempotent(meta, requestHash, async (tx) => {
+      const row = await tx.edgeInstallation.create({
+        data: {
+          sourceInstanceId: input.sourceInstanceId,
+          organizationId: input.organizationId,
+          branchId: input.branchId,
+          currentKeyId: input.currentKeyId,
+        },
+      });
+      await tx.edgeInstallationAudit.create({
+        data: {
+          id: randomUUID(),
+          sourceInstanceId: row.sourceInstanceId,
+          organizationId: row.organizationId,
+          branchId: row.branchId,
+          actorUserId: meta.actorUserId,
+          callerService: meta.callerService,
+          action: 'registered',
+          correlationId: meta.correlationId,
+          after: { status: row.status, version: row.version, currentKeyId: row.currentKeyId },
+        },
+      });
+      return mapEdgeInstallation(row);
+    });
+  }
+
+  rotateEdgeInstallationKey(
+    input: { sourceInstanceId: string; currentKeyId: string; expectedVersion: number },
+    meta: DeviceCommandMeta,
+  ): Promise<EdgeInstallationRecord> {
+    const requestHash = hash({ operation: 'edge.installation.rotate-key', input, actor: meta.actorUserId });
+    return this.executeIdempotent(meta, requestHash, async (tx) => {
+      const current = await tx.edgeInstallation.findUnique({ where: { sourceInstanceId: input.sourceInstanceId } });
+      if (!current) throw new NotFoundException('Edge installation not found.');
+      if (current.status !== 'active' || current.version !== input.expectedVersion)
+        throw new ConflictException('Edge installation changed; reload before retrying.');
+      if (current.currentKeyId === input.currentKeyId)
+        throw new ConflictException('A different key identifier is required for rotation.');
+      const updated = await tx.edgeInstallation.updateMany({
+        where: { sourceInstanceId: input.sourceInstanceId, version: input.expectedVersion, status: 'active' },
+        data: {
+          previousKeyId: current.currentKeyId,
+          currentKeyId: input.currentKeyId,
+          version: { increment: 1 },
+          updatedAt: new Date(),
+        },
+      });
+      if (!updated.count) throw new ConflictException('Edge installation changed; reload before retrying.');
+      const row = await tx.edgeInstallation.findUniqueOrThrow({ where: { sourceInstanceId: input.sourceInstanceId } });
+      await tx.edgeInstallationAudit.create({
+        data: {
+          id: randomUUID(),
+          sourceInstanceId: row.sourceInstanceId,
+          organizationId: row.organizationId,
+          branchId: row.branchId,
+          actorUserId: meta.actorUserId,
+          callerService: meta.callerService,
+          action: 'key_rotated',
+          correlationId: meta.correlationId,
+          before: { version: current.version, currentKeyId: current.currentKeyId },
+          after: { version: row.version, currentKeyId: row.currentKeyId, previousKeyId: row.previousKeyId },
+        },
+      });
+      return mapEdgeInstallation(row);
+    });
+  }
+
+  async consumeEdgeRateLimit(input: {
+    sourceInstanceId: string;
+    windowStartedAt: Date;
+    limit: number;
+  }): Promise<boolean> {
+    const rows = await this.prisma.$queryRaw<Array<{ request_count: number }>>`
+      INSERT INTO "device_integration"."edge_rate_limits"
+        ("source_instance_id", "window_started_at", "request_count", "updated_at")
+      VALUES (${input.sourceInstanceId}::uuid, ${input.windowStartedAt}::timestamptz, 1, CURRENT_TIMESTAMP)
+      ON CONFLICT ("source_instance_id", "window_started_at")
+      DO UPDATE SET "request_count" = "edge_rate_limits"."request_count" + 1,
+                    "updated_at" = CURRENT_TIMESTAMP
+      WHERE "edge_rate_limits"."request_count" < ${input.limit}
+      RETURNING "request_count"
+    `;
+    return rows.length === 1;
+  }
+
+  async importEdgeTransactionEvent(
+    event: EdgeTransactionEvent,
+    correlationId: string,
+  ): Promise<'accepted' | 'duplicate'> {
+    const initialHash = hash(stableStringify(event));
+    const existing = await this.prisma.edgeTransactionImport.findUnique({ where: { eventId: event.eventId } });
+    if (existing) {
+      if (existing.requestHash.trim() !== initialHash)
+        throw new ConflictException('Event identifier conflicts with an existing payload.');
+      return 'duplicate';
+    }
+    const installation = await this.prisma.edgeInstallation.findUnique({ where: { sourceInstanceId: event.sourceInstanceId } });
+    if (!installation || installation.status !== 'active' || installation.organizationId !== event.organizationId || installation.branchId !== event.branchId)
+      throw new ConflictException('Edge installation scope is invalid.');
+
+    let deviceId = event.deviceId;
+    if (deviceId) {
+      const device = await this.prisma.device.findFirst({
+        where: { id: deviceId, organizationId: event.organizationId, branchId: event.branchId, status: 'active' },
+        select: { id: true, externalDeviceId: true },
+      });
+      if (!device || (event.sourceDeviceId && device.externalDeviceId !== event.sourceDeviceId))
+        throw new ConflictException('Device identity is not active in the event branch.');
+    } else if (event.sourceDeviceId) {
+      const candidates = await this.prisma.device.findMany({
+        where: { organizationId: event.organizationId, branchId: event.branchId, externalDeviceId: event.sourceDeviceId, status: 'active' },
+        select: { id: true },
+        take: 2,
+      });
+      if (candidates.length !== 1)
+        throw new ConflictException('Source device does not resolve uniquely in the event branch.');
+      deviceId = candidates[0].id;
+    } else {
+      throw new ConflictException('A registered device identity is required.');
+    }
+
+    const canonicalEvent = { ...event, deviceId };
+    const requestHash = initialHash;
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.edgeTransactionImport.create({
+          data: {
+            eventId: canonicalEvent.eventId,
+            sourceInstanceId: canonicalEvent.sourceInstanceId,
+            localTransactionId: canonicalEvent.localTransactionId,
+            localSequence: BigInt(canonicalEvent.localSequence),
+            requestHash,
+            organizationId: canonicalEvent.organizationId,
+            branchId: canonicalEvent.branchId,
+            eventPayload: canonicalEvent as unknown as Prisma.InputJsonValue,
+          },
+        });
+        if (canonicalEvent.operationResult === 'success') {
+          const envelope = createEventEnvelope({
+            eventType: eventTypes.deviceEdgeTransactionImported,
+            sourceId: 'device-integration',
+            aggregateId: canonicalEvent.cardId,
+            organizationId: canonicalEvent.organizationId,
+            branchId: canonicalEvent.branchId,
+            correlationId,
+            payload: canonicalEvent,
+          });
+          await this.writeOutbox(tx, envelope);
+        }
+        await tx.edgeInstallation.update({
+          where: { sourceInstanceId: canonicalEvent.sourceInstanceId },
+          data: { lastHeartbeatAt: new Date(), updatedAt: new Date() },
+        });
+      });
+      return 'accepted';
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) throw error;
+      const duplicate = await this.prisma.edgeTransactionImport.findUnique({ where: { eventId: canonicalEvent.eventId } });
+      if (duplicate && duplicate.requestHash.trim() === requestHash) return 'duplicate';
+      throw new ConflictException('Event identifier, transaction ID or sequence conflicts with existing data.');
     }
   }
 
@@ -532,6 +727,19 @@ function mapRecord(row: PrismaDevice): DeviceRecord {
   };
 }
 
+function mapEdgeInstallation(row: PrismaEdgeInstallation): EdgeInstallationRecord {
+  return {
+    sourceInstanceId: row.sourceInstanceId,
+    organizationId: row.organizationId,
+    branchId: row.branchId,
+    currentKeyId: row.currentKeyId,
+    previousKeyId: row.previousKeyId,
+    status: row.status,
+    version: row.version,
+    lastHeartbeatAt: row.lastHeartbeatAt,
+  };
+}
+
 function auditSnapshot(device: PrismaDevice) {
   return {
     deviceId: device.id,
@@ -547,6 +755,17 @@ function auditSnapshot(device: PrismaDevice) {
 
 function hash(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
 }
 
 function isUniqueConstraintError(error: unknown): error is Prisma.PrismaClientKnownRequestError {

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/device/edge-transaction-imported.v2.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "device.edge-transaction-imported.v2" },
+        "payload": { "$ref": "edge-transaction-payload.v2.schema.json" }
+      }
+    }
+  ]
+}

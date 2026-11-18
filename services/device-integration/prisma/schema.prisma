@@ -39,6 +39,15 @@ enum ReportedHealthState {
   @@schema("device_integration")
 }
 
+enum EdgeInstallationStatus {
+  active
+  suspended
+  revoked
+
+  @@map("edge_installation_status")
+  @@schema("device_integration")
+}
+
 model Device {
   id                  String              @id @default(uuid()) @db.Uuid
   organizationId      String              @map("organization_id") @db.Uuid
@@ -86,10 +95,97 @@ model DeviceTransactionImport {
   requestHash     String   @map("request_hash") @db.Char(64)
   organizationId  String   @map("organization_id") @db.Uuid
   branchId        String   @map("branch_id") @db.Uuid
+  sourceDeviceId  String?  @map("source_device_id") @db.VarChar(160)
+  deviceId        String?  @map("device_id") @db.Uuid
   receivedAt      DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
 
   @@index([organizationId, branchId, receivedAt], map: "device_transaction_imports_scope_received_idx")
   @@map("device_transaction_imports")
+  @@schema("device_integration")
+}
+
+model EdgeInstallation {
+  sourceInstanceId String                 @id @map("source_instance_id") @db.Uuid
+  organizationId   String                 @map("organization_id") @db.Uuid
+  branchId         String                 @map("branch_id") @db.Uuid
+  currentKeyId     String                 @map("current_key_id") @db.VarChar(120)
+  previousKeyId    String?                @map("previous_key_id") @db.VarChar(120)
+  status           EdgeInstallationStatus @default(active)
+  version          Int                    @default(1)
+  lastHeartbeatAt  DateTime?              @map("last_heartbeat_at") @db.Timestamptz(6)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([organizationId, branchId, sourceInstanceId], map: "edge_installations_scope_instance_key")
+  @@index([organizationId, branchId, status], map: "edge_installations_scope_status_idx")
+  @@map("edge_installations")
+  @@schema("device_integration")
+}
+
+model EdgeTransactionImport {
+  eventId            String   @id @map("event_id") @db.Uuid
+  sourceInstanceId   String   @map("source_instance_id") @db.Uuid
+  localTransactionId String   @map("local_transaction_id") @db.VarChar(160)
+  localSequence      BigInt   @map("local_sequence")
+  requestHash        String   @map("request_hash") @db.Char(64)
+  organizationId     String   @map("organization_id") @db.Uuid
+  branchId           String   @map("branch_id") @db.Uuid
+  eventPayload       Json     @map("event_payload")
+  receivedAt         DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@unique([sourceInstanceId, localTransactionId], map: "edge_transaction_imports_instance_local_key")
+  @@unique([sourceInstanceId, localSequence], map: "edge_transaction_imports_instance_sequence_key")
+  @@index([organizationId, branchId, receivedAt], map: "edge_transaction_imports_scope_received_idx")
+  @@map("edge_transaction_imports")
+  @@schema("device_integration")
+}
+
+model EdgeRateLimit {
+  sourceInstanceId String   @map("source_instance_id") @db.Uuid
+  windowStartedAt  DateTime @map("window_started_at") @db.Timestamptz(0)
+  requestCount     Int      @default(0) @map("request_count")
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([sourceInstanceId, windowStartedAt])
+  @@map("edge_rate_limits")
+  @@schema("device_integration")
+}
+
+model EdgeInstallationAudit {
+  id               String   @id @db.Uuid
+  sourceInstanceId String   @map("source_instance_id") @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  branchId         String   @map("branch_id") @db.Uuid
+  actorUserId      String   @map("actor_user_id") @db.Uuid
+  callerService    String   @map("caller_service") @db.VarChar(80)
+  action           String   @db.VarChar(80)
+  correlationId    String   @map("correlation_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  before           Json?
+  after            Json
+
+  @@index([sourceInstanceId, createdAt], map: "edge_installation_audit_instance_created_idx")
+  @@index([organizationId, branchId, createdAt], map: "edge_installation_audit_scope_created_idx")
+  @@map("edge_installation_audit")
+  @@schema("device_integration")
+}
+
+model EdgeSnapshot {
+  id               String   @id @db.Uuid
+  sourceInstanceId String   @map("source_instance_id") @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  branchId         String   @map("branch_id") @db.Uuid
+  version          String   @db.VarChar(120)
+  document         Json
+  documentHash     String   @map("document_hash") @db.Char(64)
+  validFrom        DateTime @map("valid_from") @db.Timestamptz(6)
+  validUntil       DateTime @map("valid_until") @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([sourceInstanceId, version], map: "edge_snapshots_instance_version_key")
+  @@index([sourceInstanceId, branchId, createdAt], map: "edge_snapshots_instance_created_idx")
+  @@index([validUntil], map: "edge_snapshots_valid_until_idx")
+  @@map("edge_snapshots")
   @@schema("device_integration")
 }
 
@@ -143,5 +239,27 @@ model OutboxEvent {
 
   @@index([publishedAt, deadLetteredAt, availableAt, createdAt], map: "outbox_events_delivery_idx")
   @@map("outbox_events")
+  @@schema("device_integration")
+}
+
+model EdgeOutboxReplayAudit {
+  id               String   @id @db.Uuid
+  outboxEventId    String   @map("outbox_event_id") @db.Uuid
+  eventId          String   @map("event_id") @db.Uuid
+  sourceInstanceId String   @map("source_instance_id") @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  branchId         String   @map("branch_id") @db.Uuid
+  actorUserId      String   @map("actor_user_id") @db.Uuid
+  callerService    String   @map("caller_service") @db.VarChar(80)
+  correlationId    String   @map("correlation_id") @db.Uuid
+  idempotencyKey   String   @unique(map: "edge_outbox_replay_audits_idempotency_key") @map("idempotency_key") @db.Uuid
+  reason           String   @db.VarChar(500)
+  previousErrorCode String? @map("previous_error_code") @db.VarChar(80)
+  previousAttempts Int      @map("previous_attempts")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([organizationId, branchId, createdAt], map: "edge_outbox_replay_audits_scope_created_idx")
+  @@index([eventId, createdAt], map: "edge_outbox_replay_audits_event_created_idx")
+  @@map("edge_outbox_replay_audits")
   @@schema("device_integration")
 }

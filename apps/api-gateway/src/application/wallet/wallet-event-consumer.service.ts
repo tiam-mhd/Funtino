@@ -7,13 +7,17 @@ import {
   type EventEnvelope,
 } from '@funtino/event-contracts';
 import { FUNTINO_STORE, type FuntinoStorePort } from '../../infrastructure/store/funtino-store.js';
+import { WalletClient } from '../../infrastructure/wallet/wallet.client.js';
 
 @Injectable()
 export class WalletEventConsumer implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WalletEventConsumer.name);
   private stopConsumer?: () => Promise<void>;
 
-  constructor(@Inject(FUNTINO_STORE) private readonly store: FuntinoStorePort) {}
+  constructor(
+    @Inject(FUNTINO_STORE) private readonly store: FuntinoStorePort,
+    private readonly wallet: WalletClient,
+  ) {}
 
   async onModuleInit(): Promise<void> {
     this.stopConsumer = await consumeRabbitQueue({
@@ -64,45 +68,14 @@ export class WalletEventConsumer implements OnModuleInit, OnModuleDestroy {
 
   private async handleDeviceTransaction(event: EventEnvelope): Promise<void> {
     const payload = deviceTransactionImportedPayloadSchema.parse(event.payload);
-    const card = await this.store.getCardByExternalId(payload.externalCardId);
-    if (!card) {
-      throw new DomainError('NOT_FOUND', 'The imported card is not linked to a household.');
+    if (!event.organizationId || !event.branchId) {
+      throw new DomainError('VALIDATION_ERROR', 'The legacy device event is missing its organization scope.');
     }
-    const wallet = await this.store.getCardWallet(card.id);
-    if (!wallet) {
-      throw new DomainError('NOT_FOUND', 'The linked card has no wallet.');
-    }
-
-    const amountMinor = signedDeviceAmount(payload.transactionKind, payload.amountMinor);
-    const result = await this.store.applyWalletLedgerEntry({
-      walletId: wallet.id,
-      assetType: 'purchased_credit',
-      kind: payload.transactionKind,
-      amountMinor,
-      currency: payload.currency,
-      idempotencyKey: `device-transaction:${payload.externalEventId}`,
-      source: 'device.transaction-imported',
-      occurredAt: payload.occurredAt,
-      metadata: {
-        transactionId: payload.transactionId,
-        externalCardId: payload.externalCardId,
-      },
-      correlationId: event.correlationId,
+    await this.wallet.importLegacyDeviceEvent({
       organizationId: event.organizationId,
       branchId: event.branchId,
+      payload,
     });
-    await this.store.markCardSynced(payload.externalCardId, payload.occurredAt);
-    if (result.created) {
-      this.logger.log(`device transaction applied for card ${payload.externalCardId}`);
-    }
+    this.logger.log(`legacy device event staged for Wallet: ${event.eventId}`);
   }
-}
-
-function signedDeviceAmount(
-  kind: 'top_up' | 'spend' | 'refund' | 'adjustment',
-  amountMinor: number,
-): number {
-  if (kind === 'spend') return -Math.abs(amountMinor);
-  if (kind === 'top_up' || kind === 'refund') return Math.abs(amountMinor);
-  return amountMinor;
 }

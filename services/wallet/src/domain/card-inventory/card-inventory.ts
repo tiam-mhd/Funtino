@@ -33,6 +33,7 @@ export type CardAssignmentView = {
   organizationId: string;
   branchId: string;
   householdId: string;
+  memberId: string | null;
   maskedIdentifier: string;
   status: CardInventoryStatus;
   verificationStatus: CardVerificationStatus;

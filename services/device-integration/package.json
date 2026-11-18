@@ -9,7 +9,7 @@
     "start": "node dist/main.js",
     "lint": "eslint .",
     "typecheck": "pnpm prisma:generate && tsc --noEmit",
-    "test": "pnpm prisma:generate && pnpm --filter @funtino/event-contracts build && pnpm --filter @funtino/backend-core build && tsx --test tests/unit/device-domain.spec.ts tests/unit/device-registry.service.spec.ts tests/unit/device-service-token.guard.spec.ts tests/unit/organization-branch-scope.client.spec.ts tests/unit/health.controller.spec.ts tests/integration/device-repository.spec.ts tests/integration/device-security-and-outbox.spec.ts",
+    "test": "pnpm prisma:generate && pnpm --filter @funtino/event-contracts build && pnpm --filter @funtino/backend-core build && tsx --test tests/unit/device-domain.spec.ts tests/unit/device-registry.service.spec.ts tests/unit/edge-sync-operations.service.spec.ts tests/unit/device-service-token.guard.spec.ts tests/unit/organization-branch-scope.client.spec.ts tests/unit/wallet-edge-mapping.client.spec.ts tests/unit/health.controller.spec.ts tests/integration/device-repository.spec.ts tests/integration/device-security-and-outbox.spec.ts",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:bootstrap": "prisma db execute --schema prisma/schema.prisma --file prisma/bootstrap.sql",
     "prisma:migrate": "pnpm prisma:bootstrap && prisma migrate deploy --schema prisma/schema.prisma"

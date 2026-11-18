@@ -9,6 +9,7 @@ export const eventTypes = {
   familyInvitationChanged: 'customer.family-invitation-changed.v1',
   cardLinked: 'wallet.card-linked.v1',
   deviceTransactionImported: 'device.transaction-imported.v1',
+  deviceEdgeTransactionImported: 'device.edge-transaction-imported.v2',
   deviceRegistered: 'device.device-registered.v1',
   deviceUpdated: 'device.device-updated.v1',
   deviceHealthObserved: 'device.health-observed.v1',
@@ -17,6 +18,8 @@ export const eventTypes = {
   walletCardRegistered: 'wallet.card-registered.v1',
   walletCardStatusChanged: 'wallet.card-status-changed.v1',
   walletCardAssignmentChanged: 'wallet.card-assignment-changed.v1',
+  walletCardLedgerEntryCreatedV2: 'wallet.card-ledger-entry-created.v2',
+  walletCardLifecycleChanged: 'wallet.card-lifecycle-request-changed.v1',
   missionCompleted: 'loyalty.mission-completed.v1',
   notificationRequested: 'notifications.notification-requested.v1',
   notificationSent: 'notifications.notification-sent.v1',
@@ -115,11 +118,44 @@ export const deviceTransactionImportedPayloadSchema = z.object({
   transactionId: z.string().uuid(),
   externalEventId: z.string().min(1),
   externalCardId: z.string().min(1),
+  deviceId: z.string().uuid().optional(),
+  sourceDeviceId: z.string().min(1).max(160).optional(),
   transactionKind: z.enum(['top_up', 'spend', 'refund', 'adjustment']),
   amountMinor: z.number().int(),
   currency: z.string().length(3),
   occurredAt: z.string().datetime({ offset: true }),
 });
+
+export const edgeTransactionImportedV2PayloadSchema = z
+  .object({
+    eventId: z.string().uuid(),
+    sourceInstanceId: z.string().uuid(),
+    localTransactionId: z.string().min(1).max(160),
+    sourceDatabase: z.string().min(1).max(160),
+    organizationId: z.string().uuid(),
+    branchId: z.string().uuid(),
+    cardId: z.string().uuid(),
+    householdId: z.string().uuid(),
+    memberId: z.string().uuid().nullable().optional(),
+    deviceId: z.string().uuid().nullable(),
+    sourceDeviceId: z.string().min(1).max(160).nullable(),
+    transactionKind: z.enum(['top_up', 'spend', 'refund', 'adjustment', 'issuance', 'card_replacement']),
+    amountRial: z.number().int().safe(),
+    currencyCode: z.literal('IRR'),
+    grossAmountRial: z.number().int().nonnegative().safe(),
+    discountAmountRial: z.number().int().nonnegative().safe(),
+    netAmountRial: z.number().int().nonnegative().safe(),
+    promotionId: z.string().min(1).max(160).nullable(),
+    ruleId: z.string().min(1).max(160).nullable(),
+    pricingVersion: z.string().min(1).max(80).nullable(),
+    reversalOfLocalTransactionId: z.string().min(1).max(160).nullable().optional(),
+    occurredAt: z.string().datetime({ offset: true }),
+    localSequence: z.number().int().positive().safe(),
+    balanceAfterRial: z.number().int().nonnegative().safe().nullable(),
+    operationResult: z.enum(['success', 'cancelled', 'failed']),
+    snapshotVersion: z.string().min(1).max(120),
+  })
+  .strict();
 
 export const deviceRegisteredPayloadSchema = z
   .object({
@@ -198,7 +234,9 @@ export const walletCardAssignmentChangedPayloadSchema = z
     assignmentId: z.string().uuid(),
     cardId: z.string().uuid(),
     householdId: z.string().uuid(),
+    memberId: z.string().uuid().nullable().optional(),
     previousHouseholdId: z.string().uuid().nullable(),
+    previousMemberId: z.string().uuid().nullable().optional(),
     action: z.enum(['assigned', 'transferred', 'cancelled']),
   })
   .strict()
@@ -248,6 +286,27 @@ export const identityPolicyChangedPayloadSchema = z
     ]),
     targetType: z.enum(['role', 'membership', 'permission_override', 'system_setting']),
     targetId: z.string().min(1).max(160),
+  })
+  .strict();
+
+export const walletCardLedgerEntryCreatedV2PayloadSchema = z
+  .object({
+    entryId: z.string().uuid(),
+    cardId: z.string().uuid(),
+    householdId: z.string().uuid(),
+    freshness: z.enum(['fresh', 'pending_sync', 'stale', 'unknown']),
+  })
+  .strict();
+
+export const walletCardLifecycleChangedPayloadSchema = z
+  .object({
+    requestId: z.string().uuid(),
+    cardId: z.string().uuid(),
+    householdId: z.string().uuid(),
+    branchId: z.string().uuid(),
+    memberId: z.string().uuid().nullable(),
+    action: z.enum(['lost', 'replacement']),
+    status: z.enum(['requested', 'in_review', 'approved', 'rejected', 'completed']),
   })
   .strict();
 
@@ -377,6 +436,7 @@ export const eventPayloadSchemas = {
   [eventTypes.familyInvitationChanged]: familyInvitationChangedPayloadSchema,
   [eventTypes.cardLinked]: cardLinkedPayloadSchema,
   [eventTypes.deviceTransactionImported]: deviceTransactionImportedPayloadSchema,
+  [eventTypes.deviceEdgeTransactionImported]: edgeTransactionImportedV2PayloadSchema,
   [eventTypes.deviceRegistered]: deviceRegisteredPayloadSchema,
   [eventTypes.deviceUpdated]: deviceUpdatedPayloadSchema,
   [eventTypes.deviceHealthObserved]: deviceHealthObservedPayloadSchema,
@@ -385,6 +445,8 @@ export const eventPayloadSchemas = {
   [eventTypes.walletCardRegistered]: walletCardRegisteredPayloadSchema,
   [eventTypes.walletCardStatusChanged]: walletCardStatusChangedPayloadSchema,
   [eventTypes.walletCardAssignmentChanged]: walletCardAssignmentChangedPayloadSchema,
+  [eventTypes.walletCardLedgerEntryCreatedV2]: walletCardLedgerEntryCreatedV2PayloadSchema,
+  [eventTypes.walletCardLifecycleChanged]: walletCardLifecycleChangedPayloadSchema,
   [eventTypes.missionCompleted]: missionCompletedPayloadSchema,
   [eventTypes.notificationRequested]: notificationRequestedPayloadSchema,
   [eventTypes.notificationSent]: notificationSentPayloadSchema,

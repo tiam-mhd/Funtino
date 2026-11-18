@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/wallet/card-ledger-entry-created-payload.v2.json",
+  "title": "Wallet card ledger entry created v2 invalidation payload",
+  "type": "object",
+  "required": ["entryId", "cardId", "householdId", "freshness"],
+  "properties": {
+    "entryId": { "type": "string", "format": "uuid" },
+    "cardId": { "type": "string", "format": "uuid" },
+    "householdId": { "type": "string", "format": "uuid" },
+    "freshness": { "enum": ["fresh", "pending_sync", "stale", "unknown"] }
+  },
+  "additionalProperties": false
+}

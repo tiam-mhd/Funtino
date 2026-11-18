@@ -1,0 +1,50 @@
+openapi: 3.1.0
+info:
+  title: Funtino Pricing & Promotions Owner API
+  version: 0.1.0
+  description: Private owner API. Offline rule execution remains disabled until real Windows pricing and discount golden vectors are approved.
+servers:
+  - url: http://pricing-promotions:4100
+    description: Private service network only
+paths:
+  /internal/v1/branches/{branchId}/offline-snapshot:
+    get:
+      operationId: getOfflinePricingSnapshot
+      summary: Get the branch's currently executable offline rules
+      description: Returns a fail-closed disabled response while Windows parity vectors are unavailable; no guessed rules or prices are returned.
+      security:
+        - pricingServiceToken: []
+          serviceIdentity: []
+      parameters:
+        - name: branchId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Offline pricing is currently locked pending approved Windows golden vectors.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version, reasonCode, validFrom, validUntil, rules]
+                properties:
+                  status: { type: string, const: disabled }
+                  version: { type: 'null' }
+                  reasonCode: { type: string, const: PENDING_WINDOWS_GOLDEN_VECTORS }
+                  validFrom: { type: 'null' }
+                  validUntil: { type: 'null' }
+                  rules: { type: array, maxItems: 0 }
+                additionalProperties: false
+        '401': { description: Internal service identity is missing or invalid. }
+        '503': { description: Pricing service authentication or database is unavailable. }
+components:
+  securitySchemes:
+    pricingServiceToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+    serviceIdentity:
+      type: apiKey
+      in: header
+      name: x-funtino-service-id

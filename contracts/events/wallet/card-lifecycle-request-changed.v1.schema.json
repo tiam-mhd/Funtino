@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/wallet/card-lifecycle-request-changed.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "wallet.card-lifecycle-request-changed.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["requestId", "cardId", "householdId", "branchId", "memberId", "action", "status"],
+          "properties": {
+            "requestId": { "type": "string", "format": "uuid" },
+            "cardId": { "type": "string", "format": "uuid" },
+            "householdId": { "type": "string", "format": "uuid" },
+            "branchId": { "type": "string", "format": "uuid" },
+            "memberId": { "type": ["string", "null"], "format": "uuid" },
+            "action": { "enum": ["lost", "replacement"] },
+            "status": { "enum": ["requested", "in_review", "approved", "rejected", "completed"] }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

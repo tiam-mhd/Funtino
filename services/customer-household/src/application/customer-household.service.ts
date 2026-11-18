@@ -1890,6 +1890,20 @@ export class CustomerHouseholdService {
     };
   }
 
+  async validateMember(householdId: string, memberId: string) {
+    const member = await this.prisma.householdMember.findFirst({
+      where: {
+        id: memberId,
+        householdId,
+        status: 'active',
+        household: { status: 'active' },
+      },
+      select: { id: true, householdId: true, status: true },
+    });
+    if (!member) throw new NotFoundException('Active household member not found.');
+    return { householdId: member.householdId, memberId: member.id, status: member.status };
+  }
+
   async addMember(
     householdId: string,
     input: CreateHouseholdMemberInput,

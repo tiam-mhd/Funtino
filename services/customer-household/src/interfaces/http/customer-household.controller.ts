@@ -156,6 +156,15 @@ export class CustomerHouseholdController {
     return this.service.validateHousehold(householdId);
   }
 
+  @Get('households/:householdId/members/:memberId/validation')
+  @Header('cache-control', 'private, no-store')
+  validateMemberForWallet(
+    @Param('householdId', new ParseUUIDPipe()) householdId: string,
+    @Param('memberId', new ParseUUIDPipe()) memberId: string,
+  ) {
+    return this.service.validateMember(householdId, memberId);
+  }
+
   @Get('households/:householdId/family-audit')
   @Header('cache-control', 'private, no-store')
   @Header('pragma', 'no-cache')
