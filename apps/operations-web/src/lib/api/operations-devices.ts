@@ -43,6 +43,61 @@ export type OperationsDeviceBranchPage = {
   nextCursor: string | null;
 };
 
+export type OperationsEdgeSyncStatus = {
+  organizationId: string;
+  branchId: string;
+  installations: Array<{
+    sourceInstanceId: string;
+    status: 'active' | 'suspended' | 'revoked';
+    installationVersion: number;
+    registeredAt: string;
+    lastHeartbeatAt: string | null;
+    snapshot: { version: string; generatedAt: string; validUntil: string } | null;
+    lastEvent: { eventId: string; receivedAt: string } | null;
+    outbox: { pending: number; deadLetter: number };
+  }>;
+  pendingCount: number;
+  deadLetterCount: number;
+  deadLetters: Array<{
+    outboxEventId: string;
+    eventId: string | null;
+    sourceInstanceId: string | null;
+    localTransactionId: string | null;
+    errorCode: string;
+    attempts: number;
+    deadLetteredAt: string | null;
+    createdAt: string;
+  }>;
+  deadLettersTruncated: boolean;
+  walletReview: {
+    organizationId: string;
+    branchId: string;
+    reviewCount: number;
+    rejectedCount: number;
+    latestReviewAt: string | null;
+    errorsByCode: Array<{ errorCode: string; count: number }>;
+  } | null;
+};
+
+export async function getOperationsEdgeSyncStatus(organizationId: string, branchId: string) {
+  return apiRequest<OperationsEdgeSyncStatus>(
+    `/api/v1/operations/organizations/${encodeURIComponent(organizationId)}/branches/${encodeURIComponent(branchId)}/edge-sync`,
+  );
+}
+
+export async function replayOperationsEdgeDeadLetter(
+  organizationId: string,
+  branchId: string,
+  eventId: string,
+  reason: string,
+  idempotencyKey: string,
+) {
+  return apiRequest<{ eventId: string; status: 'queued_for_replay'; outboxEventId: string }>(
+    `/api/v1/operations/organizations/${encodeURIComponent(organizationId)}/branches/${encodeURIComponent(branchId)}/edge-sync/dead-letters/${encodeURIComponent(eventId)}/replay`,
+    { method: 'POST', body: { reason }, headers: { 'Idempotency-Key': idempotencyKey } },
+  );
+}
+
 function scopedQuery(scope: OperationsScope, cursor?: string, status?: OperationsDevice['status']) {
   const query = new URLSearchParams({
     scopeType: scope.type,

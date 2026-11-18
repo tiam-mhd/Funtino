@@ -41,8 +41,10 @@ export function resolveCustomerCardRelations(
 
 export function customerCardFreshnessLabel(card: CustomerCard): string {
   if (card.freshness === 'unknown') return 'وضعیت دستگاه هنوز گزارش نشده';
+  if (card.freshness === 'pending_sync') return `همگام‌سازی ${card.pendingTransactionCount.toLocaleString('fa-IR')} تراکنش در انتظار است`;
+  if (card.freshness === 'stale' && !card.lastSyncedAt) return 'موجودی هنوز تطبیق نشده است';
   if (!card.lastSyncedAt || !Number.isFinite(Date.parse(card.lastSyncedAt))) {
     return 'زمان آخرین وضعیت معتبر نیست';
   }
-  return card.freshness === 'stale' ? 'آخرین وضعیت قدیمی است' : 'آخرین وضعیت به‌روز است';
+  return card.freshness === 'stale' ? 'آخرین وضعیت قدیمی است' : 'آخرین وضعیت تأییدشده';
 }

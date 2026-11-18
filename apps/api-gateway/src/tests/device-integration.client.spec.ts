@@ -178,3 +178,52 @@ test('private service configuration and malformed owner data fail closed', async
     restore();
   }
 });
+
+test('Edge sync reads installation and queue status and replays the same event with audited command headers', async () => {
+  const restore = configure();
+  try {
+    let calls = 0;
+    const client = new TestClient(async (url, init) => {
+      const headers = new Headers(init.headers);
+      if (calls++ === 0) {
+        assert.equal(init.method, 'GET');
+        assert.equal(url.pathname, `/internal/v1/operations/edge-sync/organizations/${organizationId}/branches/${branchId}`);
+        return Response.json({
+          organizationId,
+          branchId,
+          installations: [{
+            sourceInstanceId: deviceId,
+            status: 'active',
+            installationVersion: 2,
+            registeredAt: '2026-11-18T10:00:00.000Z',
+            lastHeartbeatAt: null,
+            snapshot: null,
+            lastEvent: null,
+            outbox: { pending: 2, deadLetter: 0 },
+          }],
+          pendingCount: 2,
+          deadLetterCount: 0,
+          deadLetters: [],
+          deadLettersTruncated: false,
+        });
+      }
+      assert.equal(init.method, 'POST');
+      assert.equal(url.pathname, `/internal/v1/operations/edge-sync/organizations/${organizationId}/branches/${branchId}/dead-letters/${deviceId}/replay`);
+      assert.equal(headers.get('x-funtino-actor-user-id'), actorId);
+      assert.equal(headers.get('x-correlation-id'), correlationId);
+      assert.equal(headers.get('idempotency-key'), idempotencyKey);
+      assert.deepEqual(JSON.parse(String(init.body)), { reason: 'Reviewed route after repair' });
+      return Response.json({ eventId: deviceId, outboxEventId: branchId, status: 'queued_for_replay' });
+    });
+    const sync = await client.getEdgeSyncStatus(organizationId, branchId);
+    assert.equal(sync.pendingCount, 2);
+    const replay = await client.replayEdgeDeadLetter(
+      { organizationId, branchId, eventId: deviceId, reason: 'Reviewed route after repair' },
+      { actorUserId: actorId, correlationId, idempotencyKey },
+    );
+    assert.equal(replay.eventId, deviceId);
+    assert.equal(calls, 2);
+  } finally {
+    restore();
+  }
+});

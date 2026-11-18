@@ -415,6 +415,7 @@ test('assignment revalidates the exact phone against the household owner and for
           organizationId,
           branchId,
           householdId,
+          memberId: null,
           maskedIdentifier: '•••• 1029',
           status: 'assigned',
           verificationStatus: 'verified',
@@ -460,7 +461,7 @@ test('assignment revalidates the exact phone against the household owner and for
     organizationId,
     branchId,
     cardId,
-    { householdId, reason: 'Customer presented verified phone' },
+    { householdId, memberId: null, reason: 'Customer presented verified phone' },
     { actorUserId: userId, correlationId, idempotencyKey },
   ]);
   assert.equal(auditArguments[0], userId);

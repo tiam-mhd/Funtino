@@ -9,8 +9,9 @@ import type {
 } from '../../domain/models.js';
 import { FUNTINO_STORE, type FuntinoStorePort } from '../../infrastructure/store/funtino-store.js';
 import { CustomerHouseholdClient } from '../../infrastructure/customer-household/customer-household.client.js';
-import { WalletClient } from '../../infrastructure/wallet/wallet.client.js';
+import { WalletClient, type WalletCardLifecycleAction } from '../../infrastructure/wallet/wallet.client.js';
 import { OrganizationBranchClient } from '../../infrastructure/organization-branch/organization-branch.client.js';
+import { DeviceIntegrationClient } from '../../infrastructure/device-integration/device-integration.client.js';
 
 @Injectable()
 export class CustomerService {
@@ -19,6 +20,7 @@ export class CustomerService {
     private readonly householdOwner: CustomerHouseholdClient,
     private readonly wallet: WalletClient,
     private readonly organizationBranch: OrganizationBranchClient,
+    private readonly devices: DeviceIntegrationClient,
   ) {}
 
   async getHome(userId: string, branchId?: string) {
@@ -159,20 +161,103 @@ export class CustomerService {
     const assignments = await Promise.all(
       households.map((household) => this.wallet.listHouseholdAssignments(household.id)),
     );
-    return assignments.flatMap((items) =>
-      items.map((item) => ({
+    return Promise.all(assignments.flatMap((items) =>
+      items.map(async (item) => {
+        const summary = await this.wallet.getCardLedgerSummary(item.householdId, item.cardId);
+        return ({
         id: item.cardId,
         householdId: item.householdId,
-        memberId: null,
+        memberId: item.memberId,
         branchId: item.branchId,
         maskedCardId: `•••• •••• ${item.maskedIdentifier.slice(-4)}`,
         status: item.status === 'assigned' ? ('active' as const) : ('blocked' as const),
-        lastSyncedAt: null,
+        lastSyncedAt: summary.lastConfirmedSnapshotAt,
         walletId: null,
-        isStale: true,
-        freshness: 'unknown' as const,
+        isStale: summary.freshness !== 'fresh',
+        freshness: summary.freshness,
+        balanceRial: summary.balanceRial,
+        pendingTransactionCount: summary.pendingTransactionCount,
+      });
+      }),
+    ));
+  }
+
+  async listCardTransactions(
+    userId: string,
+    householdId: string,
+    cardId: string,
+    query: {
+      cursor?: string;
+      pageSize: number;
+      kind?: 'top_up' | 'spend' | 'refund' | 'adjustment' | 'issuance' | 'card_replacement';
+      from?: string;
+      to?: string;
+    },
+  ) {
+    const households = await this.householdOwner.listHouseholdsForUser(userId);
+    if (!households.some((household) => household.id.toLowerCase() === householdId.toLowerCase())) {
+      throw new DomainError('FORBIDDEN', 'Household access is required.');
+    }
+    const assignments = await this.wallet.listHouseholdAssignments(householdId);
+    const assignment = assignments.find((item) => item.cardId.toLowerCase() === cardId.toLowerCase());
+    if (!assignment) {
+      throw new DomainError('NOT_FOUND', 'Card assignment not found.');
+    }
+    const page = await this.wallet.listCardLedgerTransactions({ householdId, cardId, ...query });
+    const devicePage = await this.devices.listDevices({
+      organizationId: assignment.organizationId,
+      branchId: assignment.branchId,
+      status: 'active',
+      pageSize: 100,
+    });
+    const deviceNames = new Map(devicePage.items.map((device) => [device.id.toLowerCase(), device.displayName]));
+    return {
+      ...page,
+      items: page.items.map((item) => ({
+        ...item,
+        deviceName: item.deviceId ? deviceNames.get(item.deviceId.toLowerCase()) ?? null : null,
       })),
+    };
+  }
+
+  async listCardLifecycleRequests(userId: string, householdId: string, cardId: string) {
+    await this.assertHouseholdCardAccess(userId, householdId, cardId);
+    return this.wallet.listCardLifecycleRequests(householdId, cardId);
+  }
+
+  async createCardLifecycleRequest(input: {
+    userId: string;
+    householdId: string;
+    cardId: string;
+    action: WalletCardLifecycleAction;
+    reason: string;
+    correlationId: string;
+    idempotencyKey: string;
+  }) {
+    await this.assertHouseholdCardAccess(input.userId, input.householdId, input.cardId);
+    return this.wallet.createCardLifecycleRequest(
+      {
+        householdId: input.householdId,
+        cardId: input.cardId,
+        action: input.action,
+        reason: input.reason,
+      },
+      {
+        actorUserId: input.userId,
+        correlationId: input.correlationId,
+        idempotencyKey: input.idempotencyKey,
+      },
     );
+  }
+
+  private async assertHouseholdCardAccess(userId: string, householdId: string, cardId: string) {
+    const households = await this.householdOwner.listHouseholdsForUser(userId);
+    if (!households.some((household) => household.id.toLowerCase() === householdId.toLowerCase()))
+      throw new DomainError('FORBIDDEN', 'Household access is required.');
+    const assignments = await this.wallet.listHouseholdAssignments(householdId);
+    const assignment = assignments.find((item) => item.cardId.toLowerCase() === cardId.toLowerCase());
+    if (!assignment) throw new DomainError('NOT_FOUND', 'Card assignment not found.');
+    return assignment;
   }
 
   async linkCard(

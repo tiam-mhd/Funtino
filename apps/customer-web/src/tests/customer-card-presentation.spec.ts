@@ -21,6 +21,8 @@ const card: CustomerCard = {
   walletId: null,
   isStale: false,
   freshness: 'fresh',
+  balanceRial: 12_000,
+  pendingTransactionCount: 0,
 };
 
 const households: CustomerHouseholdSummary[] = [
@@ -74,7 +76,7 @@ test('unavailable or missing owner lookups never invent a member or branch label
 });
 
 test('freshness comes from the validated device status contract', () => {
-  assert.equal(customerCardFreshnessLabel(card), 'آخرین وضعیت به‌روز است');
+  assert.equal(customerCardFreshnessLabel(card), 'آخرین وضعیت تأییدشده');
   assert.equal(
     customerCardFreshnessLabel({ ...card, freshness: 'stale', isStale: true }),
     'آخرین وضعیت قدیمی است',

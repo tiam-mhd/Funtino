@@ -17,7 +17,7 @@ import {
 import { eventTypes, type EventEnvelope } from '@funtino/event-contracts';
 import { randomUUID } from 'node:crypto';
 
-type AuthenticatedSocket = Socket & { userId?: string };
+type AuthenticatedSocket = Socket & { userId?: string; householdIds?: string[] };
 
 @WebSocketGateway({
   namespace: '/realtime',
@@ -58,12 +58,19 @@ export class RealtimeGateway implements OnGatewayConnection, OnModuleInit, OnMod
 
   @SubscribeMessage('subscribe')
   async subscribe(
-    @MessageBody() body: { channel?: string },
+    @MessageBody() body: { channel?: string; householdId?: string },
     @ConnectedSocket() socket: AuthenticatedSocket,
   ): Promise<{ ok: boolean; channel?: string }> {
-    if (body?.channel !== 'me' || !socket.userId) return { ok: false };
-    await socket.join(`user:${socket.userId}`);
-    return { ok: true, channel: 'me' };
+    if (!socket.userId) return { ok: false };
+    if (body?.channel === 'me') {
+      await socket.join(`user:${socket.userId}`);
+      return { ok: true, channel: 'me' };
+    }
+    const householdId = body?.householdId;
+    if (!isUuid(householdId) || !socket.householdIds?.includes(householdId.toLowerCase()))
+      return { ok: false };
+    await socket.join(`household:${householdId.toLowerCase()}`);
+    return { ok: true, channel: 'household' };
   }
 
   private async authorize(socket: AuthenticatedSocket, sessionToken: string): Promise<boolean> {
@@ -114,6 +121,21 @@ export class RealtimeGateway implements OnGatewayConnection, OnModuleInit, OnMod
         return false;
       }
       socket.userId = body.data.id;
+      failureStage = 'api_gateway_households_fetch';
+      const householdResponse = await fetch(`${apiBaseUrl}/api/v1/customer/households`, {
+        headers: {
+          cookie: `funtino_session=${encodeURIComponent(sessionToken)}`,
+          'x-request-id': requestId,
+          'x-correlation-id': correlationId,
+        },
+      });
+      if (!householdResponse.ok) return false;
+      const householdBody = (await householdResponse.json()) as { data?: unknown };
+      if (!Array.isArray(householdBody.data)) return false;
+      socket.householdIds = householdBody.data.flatMap((item) => {
+        if (!item || typeof item !== 'object' || !('id' in item) || !isUuid(item.id)) return [];
+        return [item.id.toLowerCase()];
+      });
       return true;
     } catch (error) {
       writeStructuredLog({
@@ -134,6 +156,29 @@ export class RealtimeGateway implements OnGatewayConnection, OnModuleInit, OnMod
   private broadcast(event: EventEnvelope): void {
     const userId = typeof event.payload.userId === 'string' ? event.payload.userId : undefined;
     if (userId) this.server.to(`user:${userId}`).emit('domain:event', event);
+    if (
+      event.eventType === eventTypes.walletCardLedgerEntryCreatedV2 ||
+      event.eventType === eventTypes.walletCardLifecycleChanged
+    ) {
+      const householdId = event.payload.householdId;
+      if (isUuid(householdId)) {
+        this.server.to(`household:${householdId.toLowerCase()}`).emit('invalidate', {
+          type: event.eventType === eventTypes.walletCardLifecycleChanged ? 'card-lifecycle' : 'card-ledger',
+          householdId: householdId.toLowerCase(),
+        });
+      }
+    }
+    if (event.eventType === eventTypes.walletCardAssignmentChanged) {
+      for (const key of ['householdId', 'previousHouseholdId']) {
+        const householdId = event.payload[key];
+        if (isUuid(householdId)) {
+          this.server.to(`household:${householdId.toLowerCase()}`).emit('invalidate', {
+            type: 'card-assignment',
+            householdId: householdId.toLowerCase(),
+          });
+        }
+      }
+    }
     writeStructuredLog({
       level: 'debug',
       event: 'realtime.event.projected',
@@ -142,4 +187,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnModuleInit, OnMod
       eventType: event.eventType,
     });
   }
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
 }

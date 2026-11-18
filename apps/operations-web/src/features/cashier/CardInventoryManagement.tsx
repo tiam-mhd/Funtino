@@ -18,6 +18,7 @@ import {
   type OperationsScopeOption,
 } from '../../lib/auth/operations-access';
 import { HouseholdCardAssignments } from './HouseholdCardAssignments';
+import { CardLifecycleRequests } from './CardLifecycleRequests';
 import styles from './CardInventoryManagement.module.css';
 
 type Props = {
@@ -714,6 +715,15 @@ export function CardInventoryManagement({
           branchId={selectedBranchId}
           cards={cards}
           capabilities={capabilities}
+          onSessionExpired={onSessionExpired}
+          onChanged={() => void refresh(true)}
+        />
+      )}
+      {showAssignments && selectedBranchId && !loadError && !loading && (
+        <CardLifecycleRequests
+          organizationId={scope.organizationId}
+          branchId={selectedBranchId}
+          canManage={capabilities.canManage}
           onSessionExpired={onSessionExpired}
           onChanged={() => void refresh(true)}
         />

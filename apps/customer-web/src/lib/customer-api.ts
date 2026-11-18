@@ -39,14 +39,46 @@ export type OtpRequestResult = {
 export type CustomerCard = {
   id: string;
   householdId: string;
-  memberId: null;
+  memberId: string | null;
   branchId: string | null;
   maskedCardId: string;
   status: 'pending_sync' | 'active' | 'blocked' | 'unlinked';
   lastSyncedAt: string | null;
   walletId: string | null;
   isStale: boolean;
-  freshness: 'fresh' | 'stale' | 'unknown';
+  freshness: 'fresh' | 'pending_sync' | 'stale' | 'unknown';
+  balanceRial: number | null;
+  pendingTransactionCount: number;
+};
+
+export type CustomerCardTransaction = {
+  id: string;
+  cardId: string;
+  replacementCardId: string | null;
+  householdId: string;
+  memberId: string | null;
+  deviceId: string | null;
+  deviceName: string | null;
+  reversalOfEntryId: string | null;
+  transactionKind: 'top_up' | 'spend' | 'refund' | 'adjustment' | 'issuance' | 'card_replacement';
+  amountRial: number | null;
+  grossAmountRial: number | null;
+  discountAmountRial: number | null;
+  netAmountRial: number | null;
+  currencyCode: 'IRR';
+  occurredAt: string;
+  status: 'confirmed';
+};
+
+export type CustomerCardLifecycleRequest = {
+  id: string;
+  cardId: string;
+  householdId: string;
+  memberId: string | null;
+  action: 'lost' | 'replacement';
+  status: 'requested' | 'in_review' | 'approved' | 'rejected' | 'completed';
+  reason: string;
+  createdAt: string;
 };
 
 export type CustomerHouseholdSummary = {
@@ -213,6 +245,58 @@ export function getProfile(): Promise<CustomerUser> {
 
 export function getCustomerCards(): Promise<CustomerCard[]> {
   return apiFetch<unknown>('/api/v1/customer/cards').then(parseCustomerCards);
+}
+
+export async function getCustomerCardTransactions(input: {
+  householdId: string; cardId: string; cursor?: string; pageSize?: number;
+}): Promise<{ items: CustomerCardTransaction[]; nextCursor: string | null }> {
+  const query = new URLSearchParams({ pageSize: String(input.pageSize ?? 25) });
+  if (input.cursor) query.set('cursor', input.cursor);
+  const value = await apiFetch<unknown>(
+    `/api/v1/customer/households/${encodeURIComponent(input.householdId)}/cards/${encodeURIComponent(input.cardId)}/transactions?${query}`,
+  );
+  if (!isRecord(value) || !Array.isArray(value.items) ||
+    !(value.nextCursor === null || typeof value.nextCursor === 'string')) throw invalidCustomerResponse();
+  const items = value.items.map(parseCustomerCardTransaction);
+  if (items.some((item) => item.cardId !== input.cardId || item.householdId !== input.householdId))
+    throw invalidCustomerResponse();
+  return { items, nextCursor: value.nextCursor };
+}
+
+export async function getCustomerCardLifecycleRequests(input: {
+  householdId: string;
+  cardId: string;
+}): Promise<CustomerCardLifecycleRequest[]> {
+  const value = await apiFetch<unknown>(
+    `/api/v1/customer/households/${encodeURIComponent(input.householdId)}/cards/${encodeURIComponent(input.cardId)}/lifecycle-requests`,
+  );
+  if (!Array.isArray(value)) throw invalidCustomerResponse();
+  const items = value.map(parseCustomerCardLifecycleRequest);
+  if (items.some((item) => item.cardId !== input.cardId || item.householdId !== input.householdId))
+    throw invalidCustomerResponse();
+  return items;
+}
+
+export async function createCustomerCardLifecycleRequest(input: {
+  householdId: string;
+  cardId: string;
+  action: CustomerCardLifecycleRequest['action'];
+  reason: string;
+  idempotencyKey: string;
+}): Promise<CustomerCardLifecycleRequest & { duplicate: boolean }> {
+  const value = await apiFetch<unknown>(
+    `/api/v1/customer/households/${encodeURIComponent(input.householdId)}/cards/${encodeURIComponent(input.cardId)}/lifecycle-requests`,
+    {
+      method: 'POST',
+      headers: { 'idempotency-key': input.idempotencyKey },
+      body: JSON.stringify({ action: input.action, reason: input.reason }),
+    },
+  );
+  if (!isRecord(value) || typeof value.duplicate !== 'boolean') throw invalidCustomerResponse();
+  const request = parseCustomerCardLifecycleRequest(value);
+  if (request.cardId !== input.cardId || request.householdId !== input.householdId || request.action !== input.action)
+    throw invalidCustomerResponse();
+  return { ...request, duplicate: value.duplicate };
 }
 
 export function getCustomerHouseholds(): Promise<CustomerHouseholdSummary[]> {
@@ -396,21 +480,22 @@ function parseCustomerCards(value: unknown): CustomerCard[] {
     if (
       !isUuid(item.id) ||
       !isUuid(item.householdId) ||
-      item.memberId !== null ||
+      !isNullableUuid(item.memberId) ||
       !isNullableUuid(item.branchId) ||
       !isMaskedCardIdentifier(item.maskedCardId) ||
       !isCardStatus(item.status) ||
       !isNullableDateTime(item.lastSyncedAt) ||
       !isNullableUuid(item.walletId) ||
       typeof item.isStale !== 'boolean' ||
-      (item.freshness !== 'fresh' && item.freshness !== 'stale' && item.freshness !== 'unknown')
+      (item.freshness !== 'fresh' && item.freshness !== 'pending_sync' && item.freshness !== 'stale' && item.freshness !== 'unknown') ||
+      !(item.balanceRial === null || (typeof item.balanceRial === 'number' && Number.isSafeInteger(item.balanceRial))) ||
+      typeof item.pendingTransactionCount !== 'number' || !Number.isSafeInteger(item.pendingTransactionCount) || item.pendingTransactionCount < 0
     ) {
       throw invalidCustomerResponse();
     }
     if (
-      (item.freshness === 'unknown' && item.lastSyncedAt !== null) ||
       (item.freshness === 'fresh' && (item.lastSyncedAt === null || item.isStale)) ||
-      (item.freshness === 'stale' && (item.lastSyncedAt === null || !item.isStale))
+      (item.freshness !== 'fresh' && !item.isStale)
     ) {
       throw invalidCustomerResponse();
     }
@@ -425,8 +510,31 @@ function parseCustomerCards(value: unknown): CustomerCard[] {
       walletId: item.walletId,
       isStale: item.isStale,
       freshness: item.freshness,
+      balanceRial: item.balanceRial,
+      pendingTransactionCount: item.pendingTransactionCount,
     };
   });
+}
+
+function parseCustomerCardTransaction(item: unknown): CustomerCardTransaction {
+  if (!isRecord(item) || !isUuid(item.id) || !isUuid(item.cardId) || !isNullableUuid(item.replacementCardId) || !isUuid(item.householdId) ||
+    !isNullableUuid(item.memberId) || !isNullableUuid(item.deviceId) || !isNullableUuid(item.reversalOfEntryId) || !(item.deviceName === null || isNonEmptyString(item.deviceName)) ||
+    !['top_up', 'spend', 'refund', 'adjustment', 'issuance', 'card_replacement'].includes(String(item.transactionKind)) ||
+    ![item.amountRial, item.grossAmountRial, item.discountAmountRial, item.netAmountRial].every((amount) =>
+      amount === null || (typeof amount === 'number' && Number.isSafeInteger(amount))) ||
+    item.currencyCode !== 'IRR' || !isNullableDateTime(item.occurredAt) || item.occurredAt === null || item.status !== 'confirmed') {
+    throw invalidCustomerResponse();
+  }
+  return item as unknown as CustomerCardTransaction;
+}
+
+function parseCustomerCardLifecycleRequest(item: unknown): CustomerCardLifecycleRequest {
+  if (!isRecord(item) || !isUuid(item.id) || !isUuid(item.cardId) || !isUuid(item.householdId) ||
+    !isNullableUuid(item.memberId) || (item.action !== 'lost' && item.action !== 'replacement') ||
+    !['requested', 'in_review', 'approved', 'rejected', 'completed'].includes(String(item.status)) ||
+    typeof item.reason !== 'string' || item.reason.length > 500 || !isNullableDateTime(item.createdAt) || item.createdAt === null)
+    throw invalidCustomerResponse();
+  return item as unknown as CustomerCardLifecycleRequest;
 }
 
 function parseCustomerHouseholds(value: unknown): CustomerHouseholdSummary[] {

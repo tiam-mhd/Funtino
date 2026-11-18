@@ -43,6 +43,7 @@ export function HouseholdCardAssignments({
   const [phone, setPhone] = useState('');
   const [matches, setMatches] = useState<OperationsHouseholdMatch[]>([]);
   const [householdId, setHouseholdId] = useState('');
+  const [memberId, setMemberId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -85,6 +86,7 @@ export function HouseholdCardAssignments({
     setTarget(null);
     setMatches([]);
     setHouseholdId('');
+    setMemberId(null);
     void refresh();
     return () => {
       requestId.current += 1;
@@ -119,6 +121,7 @@ export function HouseholdCardAssignments({
       const result = await lookupOperationsHouseholds(organizationId, branchId, exactPhone);
       setMatches(result.items);
       setHouseholdId(result.items[0]?.householdId ?? '');
+      setMemberId(null);
       if (result.items.length === 0) setNotice('برای این شماره خانواده‌ی فعالی پیدا نشد.');
     } catch (failure) {
       if (failure instanceof ApiRequestError && failure.status === 401) onSessionExpired();
@@ -150,7 +153,7 @@ export function HouseholdCardAssignments({
     const payload =
       mode === 'cancel'
         ? { reason: reason.trim() }
-        : { phone: normalizePhone(phone), householdId, reason: reason.trim() };
+        : { phone: normalizePhone(phone), householdId, memberId, reason: reason.trim() };
     const fingerprint = JSON.stringify([mode, branchId, target?.id ?? cardId, payload]);
     const key =
       lastCommand.current?.fingerprint === fingerprint
@@ -166,14 +169,14 @@ export function HouseholdCardAssignments({
         if (!card) throw new Error('کارت برای تخصیص در دسترس نیست.');
         await assignOperationsCard(
           card,
-          payload as { phone: string; householdId: string; reason: string },
+          payload as { phone: string; householdId: string; memberId: string | null; reason: string },
           key,
         );
         setNotice('کارت به خانواده‌ی انتخاب‌شده در همین شعبه تخصیص یافت.');
       } else if (mode === 'transfer' && target) {
         await transferOperationsCard(
           target,
-          payload as { phone: string; householdId: string; reason: string },
+          payload as { phone: string; householdId: string; memberId: string | null; reason: string },
           key,
         );
         setNotice('تخصیص کارت به‌صورت اتمیک به خانواده‌ی جدید منتقل شد.');
@@ -201,8 +204,8 @@ export function HouseholdCardAssignments({
           <p className={styles.eyebrow}>تخصیص مستقل در هر شعبه</p>
           <h2 id="household-card-assignments-title">کارت‌های خانواده‌های این شعبه</h2>
           <p className={styles.helper}>
-            هر خانواده در هر شعبه حداکثر یک کارت فعال دارد. کارت مشترک خانواده است، نه کارت یک عضو؛
-            انتقال بین اعضا یا شعبه‌ها در این جریان انجام نمی‌شود.
+            هر خانواده در هر شعبه می‌تواند چند کارت فعال داشته باشد. کارت مشترک خانواده را انتخاب کنید
+            یا آن را به یک عضو مشخص پیوند دهید.
           </p>
         </div>
         <Button type="button" tone="ghost" disabled={loading} onClick={() => void refresh()}>
@@ -275,6 +278,7 @@ export function HouseholdCardAssignments({
                         setPhone(event.currentTarget.value);
                         setMatches([]);
                         setHouseholdId('');
+                        setMemberId(null);
                       }}
                       required
                     />
@@ -294,7 +298,10 @@ export function HouseholdCardAssignments({
                     <select
                       id="assignment-household-select"
                       value={householdId}
-                      onChange={(event) => setHouseholdId(event.currentTarget.value)}
+                      onChange={(event) => {
+                        setHouseholdId(event.currentTarget.value);
+                        setMemberId(null);
+                      }}
                       required
                     >
                       {matches.map((match) => (
@@ -302,6 +309,21 @@ export function HouseholdCardAssignments({
                           {match.householdName} · {match.activeMemberCount} عضو فعال ·{' '}
                           {match.maskedPhone}
                         </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {matches.length > 0 && householdId && (
+                  <label className={styles.field} htmlFor="assignment-member-select">
+                    دارنده‌ی کارت
+                    <select
+                      id="assignment-member-select"
+                      value={memberId ?? ''}
+                      onChange={(event) => setMemberId(event.currentTarget.value || null)}
+                    >
+                      <option value="">کارت مشترک خانواده</option>
+                      {(matches.find((match) => match.householdId === householdId)?.members ?? []).map((member) => (
+                        <option key={member.memberId} value={member.memberId}>{member.displayName}</option>
                       ))}
                     </select>
                   </label>
@@ -379,7 +401,9 @@ export function HouseholdCardAssignments({
               <div className={styles.itemHeader}>
                 <div>
                   <strong dir="ltr">{item.maskedIdentifier}</strong>
-                  <small>شناسه‌ی خانواده: {item.householdId.slice(0, 8)}…</small>
+                  <small>
+                    {item.memberId ? 'کارت عضو مشخص' : 'کارت مشترک خانواده'} · شناسه‌ی خانواده: {item.householdId.slice(0, 8)}…
+                  </small>
                 </div>
                 <Badge tone={item.status === 'assigned' ? 'success' : 'warning'}>
                   {item.status === 'assigned' ? 'فعال' : 'نیازمند بررسی وضعیت کارت'}

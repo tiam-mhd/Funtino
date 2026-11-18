@@ -61,6 +61,12 @@ const groups: NavigationGroup[] = [
     ],
   },
   {
+    id: 'pricing',
+    label: 'قیمت‌گذاری',
+    icon: 'activity',
+    items: [{ href: '/fa/pricing', label: 'وضعیت قیمت آفلاین', icon: 'activity' }],
+  },
+  {
     id: 'monitoring',
     label: 'پایش سامانه',
     icon: 'activity',
@@ -94,6 +100,7 @@ const groups: NavigationGroup[] = [
 
 const pageLabels: Record<string, { title: string; section: string }> = {
   '/fa/system-health': { title: 'وضعیت سرویس‌ها', section: 'پایش سامانه' },
+  '/fa/pricing': { title: 'قیمت‌گذاری آفلاین', section: 'قیمت‌گذاری' },
   '/fa/system-health/alerts': { title: 'هشدارهای فعال', section: 'پایش سامانه' },
   '/fa/organizations': { title: 'مجموعه‌ها', section: 'ساختار سازمانی' },
   '/fa/organizations/branches': { title: 'شعب', section: 'ساختار سازمانی' },

@@ -85,6 +85,32 @@ test('lists only validated masked inventory using the internal Gateway identity'
   });
 });
 
+test('branch Edge review summary is read through the private Wallet owner contract', async () => {
+  await withWalletEnvironment(async () => {
+    const client = new TestClient(async (url, init) => {
+      assert.equal(
+        url.pathname,
+        `/internal/v1/edge/operations/organizations/${organizationId}/branches/${branchId}/review-summary`,
+      );
+      assert.equal(init.method, 'GET');
+      const headers = new Headers(init.headers);
+      assert.equal(headers.get('x-funtino-service-id'), 'api-gateway');
+      assert.equal(headers.get('x-funtino-service-token'), token);
+      return Response.json({
+        organizationId,
+        branchId,
+        reviewCount: 2,
+        rejectedCount: 1,
+        latestReviewAt: '2026-11-18T10:00:00.000Z',
+        errorsByCode: [{ errorCode: 'CARD_NOT_REGISTERED', count: 2 }],
+      });
+    });
+    const result = await client.getBranchEdgeReviewSummary(organizationId, branchId);
+    assert.equal(result.reviewCount, 2);
+    assert.equal(result.errorsByCode[0]?.errorCode, 'CARD_NOT_REGISTERED');
+  });
+});
+
 test('register and status commands forward actor/correlation/idempotency and version without exposing raw ids', async () => {
   await withWalletEnvironment(async () => {
     let calls = 0;

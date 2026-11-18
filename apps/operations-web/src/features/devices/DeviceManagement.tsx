@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import Link from 'next/link';
 import { Badge, Button, Surface } from '@funtino/design-system';
 import { OperationsManagementList } from '../../components/workspace-shell/OperationsManagementList';
+import { EdgeSyncDashboard } from './EdgeSyncDashboard';
 import { ApiRequestError } from '../../lib/api/client';
 import {
   scopeKey,
@@ -105,6 +106,9 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
   const [typeFilter, setTypeFilter] = useState<DeviceTypeFilter>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [branchFilter, setBranchFilter] = useState('all');
+  const edgeSyncBranchId = scope.type === 'branch'
+    ? scope.branchId
+    : branchFilter === 'all' ? null : branchFilter;
   const [showFollowUp, setShowFollowUp] = useState(false);
   const [filterDraft, setFilterDraft] = useState<DeviceFilters>({
     health: 'all',
@@ -524,6 +528,14 @@ export function DeviceManagement({ scope, scopeOption, onSessionExpired }: Props
 
   return (
     <div className={styles.manager}>
+      {edgeSyncBranchId && (
+        <EdgeSyncDashboard
+          organizationId={scope.organizationId}
+          branchId={edgeSyncBranchId}
+          canReplay={capabilities.canManage}
+          onSessionExpired={onSessionExpired}
+        />
+      )}
       <OperationsManagementList
         title="دستگاه‌ها"
         description="فهرست دستگاه‌ها و وضعیت سلامت دریافتی از سامانه‌ی مالک را مدیریت کنید."

@@ -67,7 +67,9 @@ const statusSchema = z
   .strict();
 const phoneSchema = z.string().trim().min(8).max(20);
 const householdLookupSchema = z.object({ phone: phoneSchema }).strict();
-const assignmentSchema = z.object({ phone: phoneSchema, householdId: uuid, reason }).strict();
+const assignmentSchema = z
+  .object({ phone: phoneSchema, householdId: uuid, memberId: uuid.nullable().optional(), reason })
+  .strict();
 const cancellationSchema = z.object({ reason }).strict();
 const assignmentPageSchema = z
   .object({
@@ -75,6 +77,15 @@ const assignmentPageSchema = z
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
   })
   .strict();
+const lifecycleRequestPageSchema = z.object({
+  status: z.enum(['requested', 'in_review', 'approved', 'rejected', 'completed']).optional(),
+  cursor: uuid.optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).default(50),
+}).strict();
+const lifecycleRequestTransitionSchema = z.object({
+  status: z.enum(['in_review', 'approved', 'rejected', 'completed']),
+  reason,
+}).strict();
 const customerLookupWindowMs = 15 * 60 * 1000;
 const customerLookupMaxRequests = 30;
 
@@ -250,6 +261,53 @@ export class OperationsCardsController {
     return { ...success({ items: page.items }, request), nextCursor: page.nextCursor };
   }
 
+  @Get('organizations/:organizationId/branches/:branchId/card-lifecycle-requests')
+  @Header('cache-control', 'no-store, private')
+  async listCardLifecycleRequests(
+    @CurrentUser() user: { id: string },
+    @Param('organizationId') rawOrganizationId: string,
+    @Param('branchId') rawBranchId: string,
+    @Query(new ZodValidationPipe(lifecycleRequestPageSchema)) query: z.infer<typeof lifecycleRequestPageSchema>,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const organizationId = this.parseUuid(rawOrganizationId, 'Invalid organization id.');
+    const branchId = this.parseUuid(rawBranchId, 'Invalid branch id.');
+    const correlationId = requestCorrelationId(request);
+    const scope: AccessScopeDto = { type: 'branch', organizationId, branchId };
+    await this.authorize(user.id, request, 'card.inventory.read', scope, { type: 'branch', id: branchId }, correlationId);
+    await this.assertActiveScope(organizationId, branchId);
+    const page = await this.wallet.listBranchCardLifecycleRequests({ organizationId, branchId, ...query });
+    return { ...success({ items: page.items }, request), nextCursor: page.nextCursor };
+  }
+
+  @Patch('organizations/:organizationId/branches/:branchId/card-lifecycle-requests/:requestId')
+  @UseGuards(TrustedOriginGuard)
+  @Header('cache-control', 'no-store, private')
+  async transitionCardLifecycleRequest(
+    @CurrentUser() user: { id: string },
+    @Param('organizationId') rawOrganizationId: string,
+    @Param('branchId') rawBranchId: string,
+    @Param('requestId') rawRequestId: string,
+    @Body(new ZodValidationPipe(lifecycleRequestTransitionSchema)) body: z.infer<typeof lifecycleRequestTransitionSchema>,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const organizationId = this.parseUuid(rawOrganizationId, 'Invalid organization id.');
+    const branchId = this.parseUuid(rawBranchId, 'Invalid branch id.');
+    const requestId = this.parseUuid(rawRequestId, 'Invalid lifecycle request id.');
+    const correlationId = requestCorrelationId(request);
+    const scope: AccessScopeDto = { type: 'branch', organizationId, branchId };
+    await this.authorize(user.id, request, 'card.inventory.manage', scope, { type: 'branch', id: branchId }, correlationId);
+    await this.assertActiveScope(organizationId, branchId);
+    return success(
+      await this.wallet.transitionCardLifecycleRequest(
+        { organizationId, branchId, requestId, ...body },
+        this.commandMeta(user.id, correlationId, idempotencyKey),
+      ),
+      request,
+    );
+  }
+
   @Post('organizations/:organizationId/branches/:branchId/customer-households/lookup')
   @UseGuards(TrustedOriginGuard)
   @HttpCode(HttpStatus.OK)
@@ -314,6 +372,9 @@ export class OperationsCardsController {
           householdName: name,
           maskedPhone,
           activeMemberCount: members.filter((member) => member.status === 'active').length,
+          members: members
+            .filter((member) => member.status === 'active')
+            .map(({ id: memberId, displayName }) => ({ memberId, displayName })),
         })),
       },
       request,
@@ -358,7 +419,7 @@ export class OperationsCardsController {
         organizationId,
         branchId,
         cardId,
-        { householdId: body.householdId, reason: body.reason },
+        { householdId: body.householdId, memberId: body.memberId ?? null, reason: body.reason },
         this.commandMeta(user.id, correlationId, idempotencyKey),
       ),
       request,
@@ -402,7 +463,7 @@ export class OperationsCardsController {
         organizationId,
         branchId,
         assignmentId,
-        { householdId: body.householdId, reason: body.reason },
+        { householdId: body.householdId, memberId: body.memberId ?? null, reason: body.reason },
         this.commandMeta(user.id, correlationId, idempotencyKey),
       ),
       request,

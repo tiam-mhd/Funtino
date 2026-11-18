@@ -1,0 +1,48 @@
+.page {
+  display: grid;
+  gap: 1rem;
+  width: min(100%, 72rem);
+  margin-inline: auto;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  margin: 0 0 .4rem;
+  color: var(--color-text-muted, #667085);
+  font-size: .9rem;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: clamp(1.4rem, 4vw, 2rem);
+}
+
+.panel {
+  display: grid;
+  gap: .6rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
+  line-height: 1.9;
+}
+
+.panel h2,
+.panel p,
+.panel ol {
+  margin-block: 0;
+}
+
+.panel ol {
+  padding-inline-start: 1.25rem;
+}
+
+@media (max-width: 40rem) {
+  .page { padding: .9rem; }
+  .panel { padding: 1rem; }
+}

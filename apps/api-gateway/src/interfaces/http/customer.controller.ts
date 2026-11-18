@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -50,12 +51,24 @@ const profileSchema = z.object({
 });
 const claimSchema = z.object({ householdId: z.string().uuid() });
 const branchQuerySchema = z.object({ branchId: z.string().uuid().optional() });
+const cardTransactionQuerySchema = z.object({
+  cursor: z.string().max(512).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+  kind: z.enum(['top_up', 'spend', 'refund', 'adjustment', 'issuance', 'card_replacement']).optional(),
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+}).strict();
+const cardLifecycleRequestSchema = z.object({
+  action: z.enum(['lost', 'replacement']),
+  reason: z.string().trim().min(8).max(500),
+}).strict();
 type HouseholdBody = z.infer<typeof householdSchema>;
 type MemberBody = z.infer<typeof memberSchema>;
 type CardLinkBody = z.infer<typeof cardLinkSchema>;
 type ProfileBody = z.infer<typeof profileSchema>;
 type ClaimBody = z.infer<typeof claimSchema>;
 type BranchQuery = z.infer<typeof branchQuerySchema>;
+type CardTransactionQuery = z.infer<typeof cardTransactionQuerySchema>;
 
 @Controller('api/v1/customer')
 export class CustomerController {
@@ -184,6 +197,61 @@ export class CustomerController {
   @UseGuards(SessionGuard)
   async cards(@CurrentUser() user: { id: string }, @Req() request: AuthenticatedRequest) {
     return success(await this.customerService.listCards(user.id), request);
+  }
+
+  @Get('households/:householdId/cards/:cardId/transactions')
+  @UseGuards(SessionGuard)
+  async cardTransactions(
+    @CurrentUser() user: { id: string },
+    @Param('householdId') householdId: string,
+    @Param('cardId') cardId: string,
+    @Query(new ZodValidationPipe(cardTransactionQuerySchema)) query: CardTransactionQuery,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return success(
+      await this.customerService.listCardTransactions(user.id, householdId, cardId, query),
+      request,
+    );
+  }
+
+  @Get('households/:householdId/cards/:cardId/lifecycle-requests')
+  @UseGuards(SessionGuard)
+  async cardLifecycleRequests(
+    @CurrentUser() user: { id: string },
+    @Param('householdId') householdId: string,
+    @Param('cardId') cardId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return success(
+      await this.customerService.listCardLifecycleRequests(user.id, householdId, cardId),
+      request,
+    );
+  }
+
+  @Post('households/:householdId/cards/:cardId/lifecycle-requests')
+  @UseGuards(SessionGuard)
+  @HttpCode(HttpStatus.CREATED)
+  async createCardLifecycleRequest(
+    @CurrentUser() user: { id: string },
+    @Param('householdId') householdId: string,
+    @Param('cardId') cardId: string,
+    @Body(new ZodValidationPipe(cardLifecycleRequestSchema)) body: z.infer<typeof cardLifecycleRequestSchema>,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    if (!z.string().uuid().safeParse(idempotencyKey).success)
+      throw new BadRequestException('A valid Idempotency-Key is required.');
+    return success(
+      await this.customerService.createCardLifecycleRequest({
+        userId: user.id,
+        householdId,
+        cardId,
+        ...body,
+        correlationId: requestCorrelationId(request),
+        idempotencyKey: idempotencyKey!,
+      }),
+      request,
+    );
   }
 
   @Post('cards/link')

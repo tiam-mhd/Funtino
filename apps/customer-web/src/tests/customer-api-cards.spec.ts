@@ -38,6 +38,8 @@ test('card API accepts the scoped DTO and strips unknown/raw identifier fields',
       walletId: null,
       isStale: false,
       freshness: 'fresh',
+      balanceRial: 125000,
+      pendingTransactionCount: 0,
     },
   ]);
   context.after(restoreFetch);

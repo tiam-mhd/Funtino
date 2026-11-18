@@ -8,6 +8,7 @@ import type { IdentityAccessClient } from '../infrastructure/identity-access/ide
 import type { CustomerHouseholdClient } from '../infrastructure/customer-household/customer-household.client.js';
 import type { WalletClient } from '../infrastructure/wallet/wallet.client.js';
 import type { OrganizationBranchClient } from '../infrastructure/organization-branch/organization-branch.client.js';
+import type { DeviceIntegrationClient } from '../infrastructure/device-integration/device-integration.client.js';
 import { InMemoryFuntinoStore } from '../infrastructure/store/funtino-store.js';
 
 process.env.NODE_ENV = 'test';
@@ -211,14 +212,22 @@ test('customer card presentation derives family/branch only from owner and Walle
         organizationId: '13131313-1313-4313-8313-131313131313',
         branchId,
         householdId,
+        memberId: null,
         maskedIdentifier: '•••• 1234',
         status: 'assigned' as const,
         verificationStatus: 'verified' as const,
         assignedAt: '2026-10-01T10:00:00.000Z',
       },
     ],
+    getCardLedgerSummary: async () => ({
+      householdId, cardId, memberId: null, balanceRial: null, lastConfirmedSnapshotAt: null,
+      lastAppliedEventId: null, freshness: 'unknown' as const, pendingTransactionCount: 0,
+      reconciliationDifferenceRial: null,
+    }),
   } as unknown as WalletClient;
-  const customer = new CustomerService(store, owner, wallet, {} as OrganizationBranchClient);
+  const customer = new CustomerService(
+    store, owner, wallet, {} as OrganizationBranchClient, {} as DeviceIntegrationClient,
+  );
   const cards = await customer.listCards(adminUserId);
 
   assert.equal(cards.length, 1);

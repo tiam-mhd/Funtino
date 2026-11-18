@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { DomainError } from '@funtino/backend-core';
 import { z } from 'zod';
+import { WalletClient } from '../../infrastructure/wallet/wallet.client.js';
 import {
   DeviceIntegrationClient,
   type DeviceCommandMeta,
@@ -90,6 +91,7 @@ const updateSchema = z
   })
   .strict()
   .refine((value) => value.displayName !== undefined || value.status !== undefined);
+const edgeReplaySchema = z.object({ reason: z.string().trim().min(10).max(500) }).strict();
 
 type DevicePageQuery = z.infer<typeof pageSchema>;
 
@@ -100,6 +102,7 @@ export class OperationsDevicesController {
     private readonly identityAccess: IdentityAccessClient,
     private readonly organizationBranch: OrganizationBranchClient,
     private readonly devices: DeviceIntegrationClient,
+    private readonly wallet: WalletClient,
   ) {}
 
   @Get('devices')
@@ -244,6 +247,61 @@ export class OperationsDevicesController {
       ),
       request,
     );
+  }
+
+  @Get('organizations/:organizationId/branches/:branchId/edge-sync')
+  @Header('cache-control', 'no-store, private')
+  @Header('pragma', 'no-cache')
+  async getEdgeSyncStatus(
+    @CurrentUser() user: { id: string },
+    @Param('organizationId') rawOrganizationId: string,
+    @Param('branchId') rawBranchId: string,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const organizationId = this.parseUuid(rawOrganizationId, 'Invalid organization id.');
+    const branchId = this.parseUuid(rawBranchId, 'Invalid branch id.');
+    const correlationId = requestCorrelationId(request);
+    const scope: AccessScopeDto = { type: 'branch', organizationId, branchId };
+    await this.authorize(user.id, request, 'device.health.read', scope, { type: 'branch', id: branchId }, correlationId);
+    await this.assertActiveScope(organizationId, branchId);
+    const canReadWallet = await this.allowed(
+      user.id,
+      request,
+      'card.inventory.read',
+      scope,
+      { type: 'branch', id: branchId },
+      correlationId,
+    );
+    const [deviceSync, walletReview] = await Promise.all([
+      this.devices.getEdgeSyncStatus(organizationId, branchId),
+      canReadWallet ? this.wallet.getBranchEdgeReviewSummary(organizationId, branchId) : Promise.resolve(null),
+    ]);
+    return success({ ...deviceSync, walletReview }, request);
+  }
+
+  @Post('organizations/:organizationId/branches/:branchId/edge-sync/dead-letters/:eventId/replay')
+  @UseGuards(TrustedOriginGuard)
+  @Header('cache-control', 'no-store, private')
+  async replayEdgeDeadLetter(
+    @CurrentUser() user: { id: string },
+    @Param('organizationId') rawOrganizationId: string,
+    @Param('branchId') rawBranchId: string,
+    @Param('eventId') rawEventId: string,
+    @Headers('idempotency-key') idempotencyKey: string | undefined,
+    @Body(new ZodValidationPipe(edgeReplaySchema)) body: z.infer<typeof edgeReplaySchema>,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const organizationId = this.parseUuid(rawOrganizationId, 'Invalid organization id.');
+    const branchId = this.parseUuid(rawBranchId, 'Invalid branch id.');
+    const eventId = this.parseUuid(rawEventId, 'Invalid Edge event id.');
+    const correlationId = requestCorrelationId(request);
+    const scope: AccessScopeDto = { type: 'branch', organizationId, branchId };
+    await this.authorize(user.id, request, 'device.maintenance.manage', scope, { type: 'branch', id: branchId }, correlationId);
+    await this.assertActiveScope(organizationId, branchId);
+    return success(await this.devices.replayEdgeDeadLetter(
+      { organizationId, branchId, eventId, reason: body.reason },
+      this.commandMeta(user.id, correlationId, idempotencyKey),
+    ), request);
   }
 
   private scopeFromQuery(query: DevicePageQuery): AccessScopeDto {

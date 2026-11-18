@@ -34,6 +34,7 @@ export type OperationsCardAssignment = {
   organizationId: string;
   branchId: string;
   householdId: string;
+  memberId: string | null;
   maskedIdentifier: string;
   status: 'in_stock' | 'assigned' | 'blocked' | 'retired';
   verificationStatus: OperationsCardVerificationStatus;
@@ -45,6 +46,22 @@ export type OperationsHouseholdMatch = {
   householdName: string;
   maskedPhone: string;
   activeMemberCount: number;
+  members: Array<{ memberId: string; displayName: string }>;
+};
+
+export type OperationsCardLifecycleRequest = {
+  id: string;
+  cardId: string;
+  replacementCardId: string | null;
+  householdId: string;
+  memberId: string | null;
+  action: 'lost' | 'replacement';
+  status: 'requested' | 'in_review' | 'approved' | 'rejected' | 'completed';
+  reason: string;
+  createdAt: string;
+  organizationId: string;
+  branchId: string;
+  maskedIdentifier: string;
 };
 
 function cardsPath(organizationId: string, branchId: string) {
@@ -129,7 +146,7 @@ export function lookupOperationsHouseholds(
 
 export function assignOperationsCard(
   card: OperationsCard,
-  input: { phone: string; householdId: string; reason: string },
+  input: { phone: string; householdId: string; memberId?: string | null; reason: string },
   idempotencyKey: string,
 ): Promise<OperationsCardAssignment> {
   return apiRequest(
@@ -140,7 +157,7 @@ export function assignOperationsCard(
 
 export function transferOperationsCard(
   assignment: OperationsCardAssignment,
-  input: { phone: string; householdId: string; reason: string },
+  input: { phone: string; householdId: string; memberId?: string | null; reason: string },
   idempotencyKey: string,
 ): Promise<OperationsCardAssignment> {
   return apiRequest(
@@ -157,5 +174,38 @@ export function cancelOperationsCardAssignment(
   return apiRequest(
     `${branchAssignmentsPath(assignment.organizationId, assignment.branchId)}/${encodeURIComponent(assignment.id)}/cancel`,
     { method: 'POST', body: input, headers: { 'Idempotency-Key': idempotencyKey } },
+  );
+}
+
+export async function listOperationsCardLifecycleRequests(input: {
+  organizationId: string;
+  branchId: string;
+  cursor?: string;
+  status?: OperationsCardLifecycleRequest['status'];
+}): Promise<{ items: OperationsCardLifecycleRequest[]; nextCursor: string | null }> {
+  const query = new URLSearchParams({ pageSize: '50' });
+  if (input.cursor) query.set('cursor', input.cursor);
+  if (input.status) query.set('status', input.status);
+  const page = await apiRequestPage<{ items: OperationsCardLifecycleRequest[] }>(
+    `/api/v1/operations/organizations/${encodeURIComponent(input.organizationId)}/branches/${encodeURIComponent(input.branchId)}/card-lifecycle-requests?${query}`,
+  );
+  return { items: page.data.items, nextCursor: page.nextCursor };
+}
+
+export function transitionOperationsCardLifecycleRequest(input: {
+  organizationId: string;
+  branchId: string;
+  requestId: string;
+  status: Exclude<OperationsCardLifecycleRequest['status'], 'requested'>;
+  reason: string;
+  idempotencyKey: string;
+}): Promise<Omit<OperationsCardLifecycleRequest, 'organizationId' | 'branchId' | 'maskedIdentifier'> & { duplicate: boolean }> {
+  return apiRequest(
+    `/api/v1/operations/organizations/${encodeURIComponent(input.organizationId)}/branches/${encodeURIComponent(input.branchId)}/card-lifecycle-requests/${encodeURIComponent(input.requestId)}`,
+    {
+      method: 'PATCH',
+      body: { status: input.status, reason: input.reason },
+      headers: { 'Idempotency-Key': input.idempotencyKey },
+    },
   );
 }

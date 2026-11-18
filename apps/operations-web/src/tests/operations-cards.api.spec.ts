@@ -62,6 +62,7 @@ function assignment(): OperationsCardAssignment {
     organizationId,
     branchId,
     householdId,
+    memberId: null,
     maskedIdentifier: '•••• 1029',
     status: 'assigned',
     verificationStatus: 'verified',
@@ -186,6 +187,7 @@ test('branch assignment list and exact-phone lookup stay scoped and avoid puttin
             householdName: 'خانواده‌ی الف',
             maskedPhone: '••••••4567',
             activeMemberCount: 2,
+            members: [],
           },
         ],
       });

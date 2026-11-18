@@ -5,6 +5,7 @@ import type { Session } from '../domain/models.js';
 import { OperationsDevicesController } from '../interfaces/http/operations-devices.controller.js';
 import type { AuthenticatedRequest } from '../interfaces/http/current-user.decorator.js';
 import type { DeviceIntegrationClient } from '../infrastructure/device-integration/device-integration.client.js';
+import type { WalletClient } from '../infrastructure/wallet/wallet.client.js';
 import type { IdentityAccessClient } from '../infrastructure/identity-access/identity-access.client.js';
 import type { OrganizationBranchClient } from '../infrastructure/organization-branch/organization-branch.client.js';
 
@@ -43,11 +44,13 @@ function controller(
   access: Partial<IdentityAccessClient> = {},
   owner: Partial<OrganizationBranchClient> = {},
   devices: Partial<DeviceIntegrationClient> = {},
+  wallet: Partial<WalletClient> = {},
 ) {
   return new OperationsDevicesController(
     access as IdentityAccessClient,
     owner as OrganizationBranchClient,
     devices as DeviceIntegrationClient,
+    wallet as WalletClient,
   );
 }
 
@@ -127,6 +130,70 @@ test('device listing validates live owner scope and returns only server-evaluate
   });
   assert.equal(result.nextCursor, deviceId);
   assert.deepEqual(checks, ['device.health.read', 'device.register', 'device.maintenance.manage']);
+});
+
+test('Edge sync reads only the authorized branch and omits Wallet review data without card permission', async () => {
+  const permissions: string[] = [];
+  let walletCalled = false;
+  const instance = controller(
+    { evaluateAuthorization: async (_user, _session, input) => {
+      permissions.push(input.permission);
+      return { allowed: input.permission === 'device.health.read', policyVersion: 3, catalogVersion: 1 };
+    } },
+    {
+      getOrganization: async () => ({ status: 'active' }) as never,
+      getOrganizationBranch: async () => ownerBranch() as never,
+    },
+    { getEdgeSyncStatus: async (orgId, branch) => ({
+      organizationId: orgId, branchId: branch, installations: [], pendingCount: 0,
+      deadLetterCount: 0, deadLetters: [], deadLettersTruncated: false,
+    }) as never },
+    { getBranchEdgeReviewSummary: async () => { walletCalled = true; throw new Error('must not read'); } },
+  );
+  const result = await instance.getEdgeSyncStatus(
+    { id: userId }, organizationId, branchId, request(),
+  );
+  assert.deepEqual(permissions, ['device.health.read', 'card.inventory.read']);
+  assert.equal(walletCalled, false);
+  assert.equal((result as { data: { walletReview: null } }).data.walletReview, null);
+});
+
+test('Edge dead-letter replay is branch scoped and keeps the operator reason and idempotency key', async () => {
+  const permissions: string[] = [];
+  let replayInput: unknown;
+  let meta: unknown;
+  const instance = controller(
+    { evaluateAuthorization: async (_user, _session, input) => {
+      permissions.push(input.permission);
+      return { allowed: true, policyVersion: 3, catalogVersion: 1 };
+    } },
+    {
+      getOrganization: async () => ({ status: 'active' }) as never,
+      getOrganizationBranch: async () => ownerBranch() as never,
+    },
+    { replayEdgeDeadLetter: async (input, commandMeta) => {
+      replayInput = input;
+      meta = commandMeta;
+      return { eventId: deviceId, outboxEventId: '88888888-8888-4888-8888-888888888888', status: 'queued_for_replay' };
+    } },
+  );
+  await instance.replayEdgeDeadLetter(
+    { id: userId },
+    organizationId,
+    branchId,
+    deviceId,
+    idempotencyKey,
+    { reason: 'Reviewed queue failure and fixed route' },
+    request(),
+  );
+  assert.deepEqual(permissions, ['device.maintenance.manage']);
+  assert.deepEqual(replayInput, {
+    organizationId,
+    branchId,
+    eventId: deviceId,
+    reason: 'Reviewed queue failure and fixed route',
+  });
+  assert.deepEqual(meta, { actorUserId: userId, correlationId, idempotencyKey });
 });
 
 test('inactive branch blocks listing and registration even when IAM allows the actor', async () => {
