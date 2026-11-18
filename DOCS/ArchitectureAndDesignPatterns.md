@@ -35,6 +35,7 @@
 | Wallet                | موجودی فیزیکی کارت، تخصیص فعال خانواده/شعبه، history و ledger        | `wallet.card-assignment-changed.v1`, Wallet ledger events                 |
 | Payment & Orders      | سفارش، پرداخت، برگشت و تطبیق                                         | PaymentConfirmed، RefundCompleted                                         |
 | Device Integration    | کارت فیزیکی، دستگاه و sync                                           | DeviceTransactionImported، SyncFailed                                     |
+| Pricing & Promotions  | نسخه‌ی قیمت، rule، promotion، سقف مصرف و محاسبه‌ی قیمت               | `pricing.rule-changed.v1`, `pricing.rules-published.v1`                    |
 | Loyalty & CRM         | مأموریت، کمپین، کوپن و امتیاز                                        | MissionCompleted، RewardGranted                                           |
 | Notifications         | ارسال و وضعیت پیام                                                   | NotificationSent، DeliveryFailed                                          |
 | Realtime Gateway      | کانال‌های زنده و roomهای مجاز                                        | RealtimeProjectionUpdated                                                 |
@@ -44,7 +45,9 @@
 
 سرویس `services/organization-branch` مالک schema `organization_branch` است. Gateway برای discovery شعبه و اعتبارسنجی `branchId` از API داخلی این مالک استفاده می‌کند؛ شناسه‌ی شعبه در کارت Gateway یک reference opaque است و هیچ FK بین schemaها وجود ندارد. جدول‌های organization/branch/membership قدیمی فقط تا پایان cutover و انتقال جداگانه‌ی Membership نگه داشته می‌شوند.
 
-`services/customer-household` مالک household، member و دسترسی خانوادگی است؛ Gateway و Wallet فقط با API خصوصی این سرویس اعتبارسنجی می‌کنند و هیچ جدول مشترکی نمی‌خوانند. Wallet برای هر `(householdId, branchId)` حداکثر یک کارت فعال و برای هر کارت حداکثر یک تخصیص فعال نگه می‌دارد. کارت نسخه‌ی اول مشترک خانواده است، نه عضو؛ انتقال household فقط در همان شعبه مجاز است و انتقال کارت بین شعبه‌ها workflow مستقل و فعلاً خارج از API است. تا زمانی که قرارداد مالی/واحد پول یا پیوند معتبر رویداد دستگاه آماده نشده، گزارش مبلغ شارژ/مصرف یا انتساب دستگاه به خانواده تولید نمی‌شود.
+`services/customer-household` مالک household، member و دسترسی خانوادگی است؛ Gateway و Wallet فقط با API خصوصی این سرویس اعتبارسنجی می‌کنند و هیچ جدول مشترکی نمی‌خوانند. Wallet برای هر کارت فقط یک تخصیص فعال نگه می‌دارد؛ یک household در هر شعبه می‌تواند چند کارت داشته باشد و `memberId` nullable کارت مشترک خانواده را از کارت اختصاصی عضو جدا می‌کند. انتقال مالکیت با تاریخچه‌ی immutable ثبت می‌شود. تغییر قید قبلی در [ADR-0030](decisions/0030-windows-edge-wallet-ledger-pricing.md) ثبت شده است.
+
+Wallet مالک دفترکل append-only کارت فیزیکی و projection مانده است؛ بدون baseline کامل یا snapshot فیزیکی تأییدشده، projection مقدار `unknown`/`stale` دارد و از رویداد ناقص عدد ساخته نمی‌شود. Device Integration ورودی v1 را تا پایان مهاجرت نگه می‌دارد و Edge v2 را با هویت نصب دریافت می‌کند. رویدادهای مالی فقط در Wallet اعمال می‌شوند. `services/pricing-promotions` مالک ruleهای immutable و محاسبه‌ی نسخه‌دار است. Device Integration snapshot کامل و امضاشده‌ی شعبه را با APIهای ownerها می‌سازد و هیچ جدول سرویس دیگری را مستقیم نمی‌خواند.
 
 سیاست عمر نشست مدیریتی مالک Identity & Access است و فقط از BFF در API Gateway به سه وب‌اپ می‌رسد. IAM مدت مطلق ۱ تا ۱۲ ساعت برای نشست‌های مدیریتی جدید را در `policy_state` نگه می‌دارد؛ cookie و رکورد session در Gateway یک expiry دارند. customer و management session audience و cookie جدا دارند. ورود مدیریتی OTP و در صورت فعال‌بودن رمز مدیریت را تأیید می‌کند؛ MFA در ورود اجباری نیست و TOTP/recovery فقط برای command پرریسک step-up می‌شود. proof به همان management session و نسخه‌ی عامل بسته است؛ تغییر session policy از API دارای مجوز، idempotency، audit و Outbox انجام می‌شود. [ADR-0025](decisions/0025-management-audience-optional-password-and-risk-policy.md) بر بخش per-login MFA در ADR-0020 اولویت دارد و عمر نشست را حفظ می‌کند.
 
@@ -235,6 +238,7 @@ permissionهای مجاز از اجتماع grantهای membershipهای فعا�
 | سازمان و شعبه    | Organization & Branch                                                    |
 | خانواده و رضایت  | Customer & Household                                                     |
 | موجودی و ledger  | Wallet؛ مبلغ مالی مشتری فقط با قرارداد منبع/واحد معتبر                   |
+| قیمت و promotion | Pricing & Promotions؛ نسخه‌ی منتشرشده‌ی rule و snapshot آفلاین          |
 | پرداخت           | Payment & Orders و provider تطبیق‌شده                                    |
 | مصرف فیزیکی کارت | سامانه‌ی RFID؛ گزارش خانوادگی فقط پس از resolve معتبر رخداد به کارت/شعبه |
 | پیشرفت و پاداش   | Loyalty & CRM                                                            |

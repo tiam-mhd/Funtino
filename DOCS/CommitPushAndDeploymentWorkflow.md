@@ -17,7 +17,7 @@ Source monorepo منبع حقیقت است. Runtime repositoryها snapshot قا
 | Source path                                                                                                                                                                      | Bundle/repository                   | Processها                   | Runflare item        |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | --------------------------- | -------------------- |
 | apps/customer-web، apps/operations-web، apps/system-web، packages/design-system                                                                                                  | frontend / funtino-frontend-runtime | 3000، 3001، 3002            | Funtino Frontend     |
-| apps/api-gateway، apps/realtime-gateway، هفت service موجود در `services/*`، packages/backend-core، packages/event-contracts، scripts/worker-startup.mjs و scripts/runtime-bundle | backend / funtino-backend-runtime   | 4000 تا 4080 طبق manifest   | Funtino Backend      |
+| apps/api-gateway، apps/realtime-gateway، نه service موجود در `services/*`، packages/backend-core، packages/event-contracts، scripts/worker-startup.mjs و scripts/runtime-bundle | backend / funtino-backend-runtime   | 4000 تا 4100 طبق manifest   | Funtino Backend      |
 | infra/docker-compose.yml یا providerهای managed                                                                                                                                  | بدون Git deployment                 | PostgreSQL، RabbitMQ، Redis | itemهای داده‌ی مستقل |
 
 فرانت سه host مستقل را به پورت‌های 3000 تا 3002 route می‌کند. Backend، api.funtino.ir را به 4000 و realtime.funtino.ir را به 4010 route می‌کند. پورت‌های 4020 تا 4080 فقط route خصوصی دارند. endpointهای عمومی HTTPS هستند؛ processهای Backend برای ارتباط داخلی از ClusterIP name/Port واقعی Runflare طبق ADR-0018 استفاده می‌کنند.
@@ -96,7 +96,7 @@ Source commit، deployment commit و deployed revision سه مقدار مستق�
 
 Database schema و migration با انتشار app یکی فرض نمی‌شود. Migration نسخه‌دار، owner-specific و قبل از consumer اجرا می‌شود. فقط پنج Worker مشخص‌شده در ADR-0015 startup migration دارند. API Gateway، Realtime، Device Integration و Notifications migration را در startup اجرا نمی‌کنند.
 
-تغییر contract/database باید سازگاری processهای هر دو revision را بررسی کند. برای migration ناسازگار برنامه‌ی expand/contract و rollback لازم است. یک backend bundle واحد کل ۹ process را با هم rollback می‌کند.
+تغییر contract/database باید سازگاری processهای هر دو revision را بررسی کند. برای migration ناسازگار برنامه‌ی expand/contract و rollback لازم است. یک backend bundle واحد کل ۱۱ process را با هم rollback می‌کند.
 
 ## ۸. گزارش اجباری انتشار
 

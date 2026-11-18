@@ -2,13 +2,13 @@
 
 ## تصمیم فعلی
 
-ADR-0016 نگاشت ۱۲ application deployment قبلی را با دو runtime bundle جایگزین کرده است. این تصمیم تنها تعداد imageهای برنامه را تغییر می‌دهد؛ سه frontend، دو gateway و هفت worker همچنان processها و مرزهای منطقی جدا دارند.
+ADR-0016 نگاشت ۱۲ application deployment قبلی را با دو runtime bundle جایگزین کرده است. این تصمیم تعداد imageهای برنامه را تغییر می‌دهد؛ سه frontend، دو gateway و نه service همچنان processها و مرزهای منطقی جدا دارند.
 
 | لایه             | repository / item                 | محتوا                                                                               |
 | ---------------- | --------------------------------- | ----------------------------------------------------------------------------------- |
 | Source           | ریشه‌ی Funtino در Git محلی        | monorepo کامل؛ منبع تغییر و ورودی GitNexus                                          |
 | Frontend runtime | funtino-frontend-runtime          | customer-web، operations-web، system-web و design-system؛ سه process                |
-| Backend runtime  | funtino-backend-runtime           | دو gateway، هفت service، backend-core، event-contracts و startup runner؛ نه process |
+| Backend runtime  | funtino-backend-runtime           | دو gateway، نه service، backend-core، event-contracts و startup runner؛ یازده process |
 | Data             | itemهای جدا در Runflare، بدون Git | PostgreSQL، RabbitMQ و Redis                                                        |
 
 دو deployment repository کنار source و به‌صورت Git repository مستقل قرار می‌گیرند؛ داخل source submodule یا nested repository نیستند. Snapshot از source ساخته می‌شود و محل توسعه‌ی feature نیست. وجود Git محلی یا snapshot به‌تنهایی remote، GitHub، Auto Pull یا اتصال Runflare را ایجاد نمی‌کند.
@@ -32,10 +32,11 @@ ADR-0002 تصمیم اولیه‌ی یک repository به‌ازای هر item ر
 | Backend  | Wallet                | 4070 | شبکه‌ی داخلی                                      |
 | Backend  | Customer & Household  | 4080 | شبکه‌ی داخلی                                      |
 | Backend  | Forms                 | 4090 | شبکه‌ی داخلی                                      |
+| Backend  | Pricing & Promotions  | 4100 | شبکه‌ی داخلی                                      |
 
 هر process روی port فعلی خودش و host برابر 0.0.0.0 گوش می‌دهد. برای هر target port باید network/route مختص همان process ساخته شود و هر domain به network متناظر وصل شود. مستند Runflare امکان افزودن چند network، انتقال Port به Target Port و اتصال domain به network انتخاب‌شده را توضیح می‌دهد؛ نام دقیق network و mapping پورت باید از حساب واقعی ثبت شود. NodePort مستقیم برای ارتباط backend production انتخاب نشود. [تنظیمات شبکه‌ی Runflare](https://docs.runflare.com/general/network-settings/)
 
-API Gateway، Realtime و سه وب‌اپ route عمومی دارند. هفت worker از اینترنت عمومی route نمی‌گیرند. ارتباط HTTP بین processهای Backend از ClusterIP خصوصی مقصد و Port 80 انجام می‌شود؛ URL هر متغیر باید نام دقیق همان Network از پنل Runflare را داشته باشد. در production فقط HTTPS یا `http://<single-label-ending-in--service>:80` بدون credential/path/query/fragment مجاز است و redirect درخواست‌های دارای service token دنبال نمی‌شود. برای مثال، اگر ClusterIP هویت `http:80 -> 4040` را نشان دهد، `IDENTITY_ACCESS_URL` برابر `http://<exact-identity-network-name>:80` است؛ همین قاعده برای Organization & Branch، Customer & Household، Wallet، Device Integration و Analytics در متغیرهای داخلی مربوط اعمال می‌شود. نام `.internal.funtino.ir` تا وقتی DNS و TLS واقعی ندارد استفاده نشود. NodePort و localhost جایگزین ClusterIP نیستند. آدرس‌های عمومی HTTPS می‌مانند. جزئیات در [ADR-0018](decisions/0018-backend-clusterip-service-urls.md) آمده است. Realtime برای دامنه‌ی خودش نیاز به فعال‌بودن Socket.IO/WebSocket دارد. [راهنمای WebSocket در Runflare](https://runflare.com/docs/how-to-setup-websocket/)
+API Gateway، Realtime و سه وب‌اپ route عمومی دارند. نه service از اینترنت عمومی route نمی‌گیرند. Edge v2 فقط از شبکه‌ی داخلی احرازشده در Device Integration قابل دسترس است. ارتباط HTTP بین processهای Backend از ClusterIP خصوصی مقصد و Port 80 انجام می‌شود؛ URL هر متغیر باید نام دقیق همان Network از پنل Runflare را داشته باشد. در production فقط HTTPS یا `http://<single-label-ending-in--service>:80` بدون credential/path/query/fragment مجاز است و redirect درخواست‌های دارای service token دنبال نمی‌شود. برای مثال، اگر ClusterIP هویت `http:80 -> 4040` را نشان دهد، `IDENTITY_ACCESS_URL` برابر `http://<exact-identity-network-name>:80` است؛ همین قاعده برای Organization & Branch، Customer & Household، Wallet، Device Integration، Pricing & Promotions و Analytics در متغیرهای داخلی مربوط اعمال می‌شود. نام `.internal.funtino.ir` تا وقتی DNS و TLS واقعی ندارد استفاده نشود. NodePort و localhost جایگزین ClusterIP نیستند. آدرس‌های عمومی HTTPS می‌مانند. جزئیات در [ADR-0018](decisions/0018-backend-clusterip-service-urls.md) آمده است. Realtime برای دامنه‌ی خودش نیاز به فعال‌بودن Socket.IO/WebSocket دارد. [راهنمای WebSocket در Runflare](https://runflare.com/docs/how-to-setup-websocket/)
 
 ## ساخت و اجرای دو bundle
 
@@ -81,7 +82,13 @@ pnpm --filter @funtino/device-integration prisma:migrate
 
 هر دو job باید URL/credential migration مستقل همان مالک را داشته باشند؛ Gateway از `DATABASE_MIGRATION_URL` و Device از `DEVICE_INTEGRATION_MIGRATION_DATABASE_URL` استفاده می‌کند. چون Prisma schema هر دو datasource URL را تعریف می‌کند، job باید هر دو متغیر URL را مقداردهی کند و آن‌ها را به همان database/schema مالک اشاره دهد؛ URL مستقیم migration با مجوز DDL استفاده می‌شود. این secretها فقط در محیط همان job قرار می‌گیرند و به process دائمی API Gateway یا Device Integration داده نمی‌شوند. اگر job شکست خورد یا timeout شد، rollout متوقف بماند؛ وضعیت Prisma و lockهای PostgreSQL بررسی شود و migration history خودکار resolve یا پاک نشود.
 
-Wallet در فهرست پنج Worker از قبل مجازشده در ADR-0015 است؛ startup runner خودش migration نسخه‌دار Wallet را با `WALLET_MIGRATION_DATABASE_URL` و fail-closed اجرا می‌کند. برای این تغییر Worker جدیدی به runner اضافه نشود. schema audit reason در Forms از قبل nullable است و در این تغییر migration تازه‌ای ندارد. nullable-reason migrationهای Wallet و Device هر کدام حد انتظار lock پنج ثانیه و زمان statement برابر ۱۲۰ ثانیه دارند. تغییر auth/session در API Gateway و تمام OpenAPI/UIهای مصرف‌کننده هر دو snapshot backend و frontend را اثر می‌دهد؛ هیچ secret رمز یا hash به Docker build arg، image یا repository نمی‌رود.
+Wallet در فهرست پنج Worker از قبل مجازشده در ADR-0015 است؛ startup runner خودش migration نسخه‌دار Wallet را با `WALLET_MIGRATION_DATABASE_URL` و fail-closed اجرا می‌کند. برای این تغییر Worker جدیدی به runner اضافه نشود. Pricing & Promotions خارج از این فهرست است و migration مستقل دارد:
+
+```sh
+pnpm --filter @funtino/pricing-promotions prisma:migrate
+```
+
+این job با `PRICING_PROMOTIONS_MIGRATION_DATABASE_URL` و credential مستقل schema مالک اجرا می‌شود؛ به startup runner یا process دائمی Pricing داده نمی‌شود. schema audit reason در Forms از قبل nullable است و در این تغییر migration تازه‌ای ندارد. migrationهای Wallet و Device حد انتظار lock پنج ثانیه و زمان statement برابر ۱۲۰ ثانیه دارند. تغییر auth/session در API Gateway و تمام OpenAPI/UIهای مصرف‌کننده هر دو snapshot backend و frontend را اثر می‌دهد؛ هیچ secret رمز یا hash به Docker build arg، image یا repository نمی‌رود.
 
 Bootstrap مالک مقید به شماره طبق ADR-0021 است و migration تازه‌ای ندارد. تغییر CLI، Gateway endpoint داخلی و allow-listها فقط Backend bundle را اثر می‌دهد. در Runflare Backend، شماره‌ی مالک را در `SYSTEM_ADMIN_OWNER_PHONE_E164`، secret lookup را در `SYSTEM_ADMIN_BOOTSTRAP_LOOKUP_TOKEN` و برای mutationهای عادی IAM، `IDENTITY_ACCESS_MANAGEMENT_WRITES_ENABLED=true` را تنظیم کن؛ دستور نهایی user UUID نمی‌پذیرد و مقصد را از Gateway روی loopback می‌گیرد.
 
@@ -90,7 +97,7 @@ Bootstrap مالک مقید به شماره طبق ADR-0021 است و migration 
 | تغییر source                                          | Runtimeهای لازم                                                           |
 | ----------------------------------------------------- | ------------------------------------------------------------------------- |
 | یکی از سه web app یا design-system                    | Frontend                                                                  |
-| یکی از دو gateway یا هفت service                      | Backend                                                                   |
+| یکی از دو gateway یا نه service                       | Backend                                                                   |
 | backend-core یا event-contracts                       | Backend                                                                   |
 | package/config/contract مشترک میان backend و frontend | هر دو                                                                     |
 | root toolchain، lockfile یا exporter مشترک            | هر دو، اگر خروجی snapshot آن‌ها تغییر کند                                 |
@@ -119,6 +126,14 @@ Bootstrap مالک مقید به شماره طبق ADR-0021 است و migration 
 - [ADR-0015: migration پنج Worker](decisions/0015-worker-startup-migrations.md)
 - [ADR-0022: فرم‌ساز و مالکیت پاسخ‌ها](decisions/0022-dynamic-forms.md)
 
+### Pricing & Promotions
+
+- `services/pricing-promotions` یک process داخلی از `funtino-backend-runtime` روی port `4100` و مالک مستقل schema `pricing_promotions` است.
+- `PRICING_PROMOTIONS_DATABASE_URL` فقط به process Pricing داده می‌شود؛ `PRICING_PROMOTIONS_API_TOKEN` فقط در allow-list مصرف‌کنندگان داخلی مجاز قرار می‌گیرد. کلید امضای snapshotهای قیمت نیز runtime-only است.
+- migration با job نسخه‌دار مستقل اجرا می‌شود و Pricing به پنج Worker مجاز startup migration اضافه نمی‌شود.
+- رفتار قیمت Windows تا دریافت و اجرای golden vectorهای تأییدشده قابل اعلام parity یا cutover نیست؛ promotion دارای سقف مصرف بدون offline quota در snapshot مجاز نمی‌شود.
+- تغییر service روی Backend اثر دارد؛ تغییر قرارداد/API یا UI مصرف‌کننده bundle متناسب را هم اثر می‌دهد.
+
 ### Forms
 
 - `services/forms` یک process داخلی از `funtino-backend-runtime` و port آن `4090` است؛ snapshot باید manifest، supervisor، healthcheck، Dockerfile، `.dockerignore` و build check را همگام نگه دارد.
@@ -126,3 +141,5 @@ Bootstrap مالک مقید به شماره طبق ADR-0021 است و migration 
 - رابط مدیریت فرم برای ساخت پیوند عمومی از `NEXT_PUBLIC_CUSTOMER_WEB_URL` در build استفاده می‌کند؛ مقدار production برابر `https://app.funtino.ir` است و این تنظیم public است، نه secret.
 - migrationهای schema در Forms، هرگاه لازم شوند، با job/فرمان نسخه‌دار و credential migration مستقل اجرا می‌شوند؛ startup migration برای Forms ممنوع است. تغییر فعلی در Forms migration دیتابیس ندارد؛ ستون audit reason از قبل nullable است و reason اصلاح پاسخ همچنان الزامی می‌ماند.
 - هر تغییر API Gateway، Forms، `event-contracts` یا backend shared package روی Backend اثر دارد. تغییر `forms-schema`, `forms-renderer` یا UI روی Frontend هم اثر دارد؛ تغییر مشترک پیش از انتشار هر دو bundle را همگام می‌کند.
+
+برای جای‌گذاری routeهای Edge، زمان‌بندی migrationهای مالکانه، دسترسی محیطی، اجرای dry-run و rollback امن به [راهنمای عملیات Windows Edge و Wallet](WindowsEdgeWalletOperations.md) مراجعه کنید.

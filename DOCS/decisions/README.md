@@ -45,3 +45,6 @@
 - [ADR-0027: قالب یکپارچه‌ی فهرست پنل‌های مدیریت و مرز چرخه‌ی حذف](0027-management-list-page-and-deletion-lifecycle.md)
 - [ADR-0028: مدیریت نقش‌های scoped در پنل Operations](0028-operations-scoped-role-management.md)
 - [ADR-0029: مدیریت اعضای scoped در پنل Operations](0029-operations-scoped-member-management.md)
+- [ADR-0030: Edge ویندوز، دفترکل کارت و قیمت‌گذاری مرکزی — پذیرفته‌شده](0030-windows-edge-wallet-ledger-pricing.md)
+
+- [راهنمای عملیات Windows Edge، Wallet و rollback](../WindowsEdgeWalletOperations.md)

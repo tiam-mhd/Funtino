@@ -46,6 +46,8 @@
         export-runflare-bundles.mjs
         snapshot-integrity.mjs
         snapshot-integrity.spec.mjs
+      migrations/
+        edge-history-backfill.mjs
       runtime-bundle/
         supervisor.mjs
         healthcheck.mjs
@@ -72,7 +74,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 | runtime bundle | source scope                                                                  | deployment repository      | پردازه‌ها                                                                                                                                  |
 | -------------- | ----------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Frontend       | سه web app و `packages/design-system`                                         | `funtino-frontend-runtime` | Customer :3000، Operations :3001، System :3002                                                                                             |
-| Backend        | دو gateway، هفت service، `backend-core`، `event-contracts` و runner migration | `funtino-backend-runtime`  | API :4000، Realtime :4010، Device :4020، Notifications :4030، IAM :4040، Organization :4050، Analytics :4060، Wallet :4070، Customer :4080 |
+| Backend        | دو gateway، نه service، `backend-core`، `event-contracts` و runner migration | `funtino-backend-runtime`  | API :4000، Realtime :4010، Device :4020، Notifications :4030، IAM :4040، Organization :4050، Analytics :4060، Wallet :4070، Customer :4080، Forms :4090، Pricing :4100 |
 
 `Funtino-platform.code-workspace` فقط نمای source و همین دو sibling deployment است. بازبودن چند folder در VS Code به‌معنای sync، commit مشترک یا push خودکار نیست. برای تشخیص repository مقصد و کنترل divergence از [قانون canonical انتشار](CommitPushAndDeploymentWorkflow.md) استفاده کن.
 
@@ -189,6 +191,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
       organization-branch/
       customer-household/
       wallet/
+      pricing-promotions/
       payment-orders/
       device-integration/
       loyalty-crm/
@@ -197,7 +200,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 
 هر service فولدرهای استاندارد خود را دارد و نباید با import داخلی از service دیگر وابسته شود.
 
-در هر Worker دارای startup migration طبق ADR-0015، `prisma/schema.prisma` و migrationهای نسخه‌دار زیر `prisma/` همان سرویس باقی می‌مانند؛ `prisma/bootstrap.prisma` فقط برای اتصال به schema موجود `public` هنگام اجرای `CREATE SCHEMA` است و دیتامدل/لیست schemaهای Worker را جایگزین نمی‌کند. در `services/organization-branch/`، API خصوصی در `src/interfaces/http/`، use caseها در `src/application/`، relay در `src/infrastructure/messaging/outbox/` و CLI انتقال در `src/bootstrap/` قرار می‌گیرد. قراردادها در `contracts/openapi/` و `contracts/events/` نسخه‌بندی می‌شوند؛ Gateway فقط client داخلی مصرف می‌کند و نباید Prisma client این سرویس را import کند.
+در هر Worker دارای startup migration طبق ADR-0015، `prisma/schema.prisma` و migrationهای نسخه‌دار زیر `prisma/` همان سرویس باقی می‌مانند؛ `prisma/bootstrap.prisma` فقط برای اتصال به schema موجود `public` هنگام اجرای `CREATE SCHEMA` است و دیتامدل/لیست schemaهای Worker را جایگزین نمی‌کند. `services/pricing-promotions/` مالک schema مستقل `pricing_promotions` است و migration آن فقط با job نسخه‌دار جدا اجرا می‌شود؛ به startup runner اضافه نمی‌شود. Edge history dry-run در `scripts/migrations/edge-history-dry-run.mjs` قرار می‌گیرد و به‌صورت پیش‌فرض write ندارد. در `services/organization-branch/`، API خصوصی در `src/interfaces/http/`، use caseها در `src/application/`، relay در `src/infrastructure/messaging/outbox/` و CLI انتقال در `src/bootstrap/` قرار می‌گیرد. قراردادها در `contracts/openapi/` و `contracts/events/` نسخه‌بندی می‌شوند؛ Gateway فقط client داخلی مصرف می‌کند و نباید Prisma client سرویس دیگری را import کند.
 
 ## ۴. packageهای مشترک
 
@@ -524,7 +527,8 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 - interfaces فقط ورودی/خروجی را مدیریت می‌کند و منطق دامنه در آن قرار نمی‌گیرد.
 - migration هر سرویس جدا ثبت و اجرا می‌شود.
 - `scripts/worker-startup.mjs` ابزار استقرار ریشه است، نه منطق دامنه؛ فقط Docker پنج Worker نام‌برده در ADR-0015 آن را برای migration پیش از start اجرا می‌کند.
-- ماژول‌های organization/branch، identity/authorization، device registry و card assignment در service مالک خود و زیر ساختار فوق قرار می‌گیرند؛ انتقال owner موجود در Gateway مرحله‌ای و با backfill/compatibility plan است.
+- ماژول‌های organization/branch، identity/authorization، device registry، Edge snapshot و card assignment/ledger در service مالک خود و زیر ساختار فوق قرار می‌گیرند؛ انتقال owner موجود در Gateway مرحله‌ای و با backfill/compatibility plan است.
+- Pricing/Promotions، versionهای منتشرشده، eligibility، سقف offline و audit فقط در `services/pricing-promotions/` قرار می‌گیرد؛ gateway و UI تنها API داخلی/عمومی قرارداددار را مصرف می‌کنند.
 - permission catalog و evaluator در `services/identity-access/src/domain/` و use caseهای role/assignment/override زیر `application/` قرار می‌گیرند؛ gateway و web فقط contract و client مصرف می‌کنند.
 - پورت اعتبارسنجی scope در IAM زیر `services/identity-access/src/application/ports/` و client خصوصی owner زیر `services/identity-access/src/infrastructure/organization-branch/` قرار می‌گیرد؛ Identity Access implementation سرویس Organization & Branch را import نمی‌کند و فقط OpenAPI/HTTP داخلی را مصرف می‌کند.
 - controllerهای عمومی در `apps/api-gateway/src/interfaces/http/` و internal clientهای مالکانه زیر `apps/api-gateway/src/infrastructure/` قرار می‌گیرند؛ هیچ app به Prisma/schema سرویس دیگر import نمی‌کند.
@@ -544,6 +548,8 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
         common/
         identity/
         wallet/
+        pricing/
+        device/
         payment/
         device/
         loyalty/
@@ -608,3 +614,5 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 - `packages/forms-schema/` فقط schema، validation و typeهای مشترک است؛ `packages/forms-renderer/` renderer React مشترک preview و customer runtime را نگه می‌دارد.
 - کد customer در `apps/customer-web/src/features/forms/` و route عمومی در `apps/customer-web/src/app/[locale]/forms/[slug]/`؛ کد عملیاتی در `apps/operations-web/src/features/forms/` و routeهای آن زیر `src/app/`؛ کد سیستمی در `apps/system-web/src/features/forms/` و route آن زیر `src/app/[locale]/(console)/forms/` قرار می‌گیرد.
 - Gateway controller در `apps/api-gateway/src/interfaces/http/` و client داخلی Forms در `apps/api-gateway/src/infrastructure/forms/` است. هیچ app یا service دیگری Prisma client/schema مربوط به Forms را import نمی‌کند.
+
+برای جای‌گذاری routeهای Edge، زمان‌بندی migrationهای مالکانه، دسترسی محیطی، اجرای dry-run و rollback امن به [راهنمای عملیات Windows Edge و Wallet](WindowsEdgeWalletOperations.md) مراجعه کنید.
