@@ -30,6 +30,10 @@ const GENERATED_PATH_SEGMENTS = new Set([
   '.turbo',
   'coverage',
 ]);
+const COMMITTED_EDGE_CONTRACT_SOURCE_PATHS = new Set([
+  'packages/event-contracts/src/generated',
+  'packages/event-contracts/src/generated/windows-edge-contract.v1.ts',
+]);
 const SAFE_GIT_DIRECTORY_ENV = createSafeGitEnvironment();
 
 const BUNDLES = Object.freeze({
@@ -118,7 +122,9 @@ function assertNotProtectedPath(path) {
 }
 
 function isGeneratedSnapshotPath(relativePath) {
-  const parts = toPosixPath(relativePath).split('/');
+  const normalizedPath = toPosixPath(relativePath);
+  if (COMMITTED_EDGE_CONTRACT_SOURCE_PATHS.has(normalizedPath)) return false;
+  const parts = normalizedPath.split('/');
   return parts.some((part) => GENERATED_PATH_SEGMENTS.has(part));
 }
 
