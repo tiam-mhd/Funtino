@@ -119,6 +119,7 @@ model CardInventory {
   organizationId     String                 @map("organization_id") @db.Uuid
   branchId           String                 @map("branch_id") @db.Uuid
   externalCardId     String                 @unique(map: "wallet_card_inventory_external_id_key") @map("external_card_id") @db.VarChar(160)
+  cardUidHash        String?                @unique(map: "wallet_card_uid_hash_key") @map("card_uid_hash") @db.Char(64)
   status             CardInventoryStatus    @default(in_stock)
   verificationStatus CardVerificationStatus @default(unknown) @map("verification_status")
   version            Int                    @default(1)
@@ -247,6 +248,7 @@ model CardLedgerEntry {
   memberId              String?            @map("member_id") @db.Uuid
   deviceId              String?            @map("device_id") @db.Uuid
   sourceDeviceId        String?            @map("source_device_id") @db.VarChar(160)
+  attractionId          String?            @map("attraction_id") @db.Uuid
   transactionKind       CardLedgerKind     @map("transaction_kind")
   amountRial            BigInt             @map("amount_rial")
   currencyCode          String             @map("currency_code") @db.Char(3)

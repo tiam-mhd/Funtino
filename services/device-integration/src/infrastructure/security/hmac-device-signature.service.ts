@@ -27,11 +27,18 @@ export class HmacDeviceSignatureService implements DeviceSignatureVerifier {
     if (!keyId || keyId.length > 120 || !signature || signature.length > 80) return false;
     const secret = readEdgeKeys()[keyId];
     if (!secret) return false;
-    const match = /^sha256=([a-f0-9]{64})$/i.exec(signature);
+    const match = /^sha256=([a-f0-9]{64})$/.exec(signature);
     if (!match) return false;
     const expected = createHmac('sha256', secret).update(rawBody).digest();
     const supplied = Buffer.from(match[1], 'hex');
     return supplied.length === expected.length && timingSafeEqual(expected, supplied);
+  }
+
+  signEdge(rawBody: Buffer, keyId: string | undefined): string | null {
+    if (!keyId || keyId.length > 120) return null;
+    const secret = readEdgeKeys()[keyId];
+    if (!secret) return null;
+    return `sha256=${createHmac('sha256', secret).update(rawBody).digest('hex')}`;
   }
 }
 

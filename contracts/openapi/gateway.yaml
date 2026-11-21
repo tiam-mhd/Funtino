@@ -1310,7 +1310,8 @@ paths:
           schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
         - name: kind
           in: query
-          schema: { type: string, enum: [top_up, spend, refund, adjustment, issuance, card_replacement] }
+          schema:
+            { type: string, enum: [top_up, spend, refund, adjustment, issuance, card_replacement] }
         - name: from
           in: query
           schema: { type: string, format: date-time }
@@ -1842,11 +1843,46 @@ paths:
       operationId: getOperationsBranchEdgeSyncStatus
       description: Requires device.health.read for this branch. Wallet ledger review counts are included only when card.inventory.read is also granted. Identifiers and payloads are minimized.
       responses:
-        '200': { description: Installation heartbeats, snapshot versions, queue counts, dead-letter metadata and permitted Wallet review counts. }
+        '200':
+          {
+            description: Installation heartbeats,
+            snapshot versions,
+            queue counts,
+            dead-letter metadata and permitted Wallet review counts.,
+          }
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { description: Branch not found in the organization. }
-        '503': { description: Device Integration or Wallet is unavailable; the response fails closed. }
+        '503':
+          { description: Device Integration or Wallet is unavailable; the response fails closed. }
+  /api/v1/operations/edge/operator-token:
+    post:
+      x-funtino-availability: implemented
+      operationId: issueOperationsEdgeOperatorToken
+      description: Management session only. Gateway resolves an active branch and IAM evaluates every requested permission. The opaque token is returned once, expires within five minutes, is branch-scoped, and must be stored only in protected Windows runtime memory.
+      security:
+        - managementSessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EdgeOperatorTokenRequest' }
+      responses:
+        '200':
+          description: One-time opaque token response. Cache-Control is no-store.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'no-store, private' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EdgeOperatorTokenResponse' }
+        '400': { description: Invalid branch or permission request. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Active branch not found. }
+        '503':
+          { description: IAM or Organization & Branch owner is unavailable; no token is issued. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/edge-sync/dead-letters/{eventId}/replay:
     security:
       - managementSessionCookie: []
@@ -1878,7 +1914,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { description: Dead-letter event was not found in this branch. }
-        '409': { description: The event is no longer dead-lettered or its envelope failed validation. }
+        '409':
+          { description: The event is no longer dead-lettered or its envelope failed validation. }
         '503': { description: Device Integration is unavailable; replay fails closed. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/cards:
     security:
@@ -2099,7 +2136,8 @@ paths:
         '403': { description: Missing card.inventory.manage for this exact branch. }
         '404': { description: Request is not present in the requested branch. }
         '409': { description: Card or request changed concurrently, or transition is invalid. }
-        '503': { description: IAM, Organization & Branch or Wallet is unavailable; access fails closed. }
+        '503':
+          { description: IAM, Organization & Branch or Wallet is unavailable; access fails closed. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/cards/{cardId}/assignments:
     security:
       - managementSessionCookie: []
@@ -2696,6 +2734,51 @@ paths:
       responses:
         '200':
           description: Idempotent mission claim.
+  /internal/v1/edge/identities/lookup:
+    post:
+      operationId: lookupMaskedEdgeCustomerPhones
+      summary: Return masked phone values for explicitly supplied customer IDs
+      description: Private Device Integration call. Requires the dedicated service token and x-funtino-service-id=device-integration. Raw phone values are never returned or logged by this route.
+      security:
+        - deviceIntegrationInternalToken: []
+          deviceIntegrationServiceIdentity: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userIds]
+              properties:
+                userIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { type: string, format: uuid }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Masked identity records for the supplied known user IDs only.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      required: [customerId, maskedPhone]
+                      properties:
+                        customerId: { type: string, format: uuid }
+                        maskedPhone: { type: string, maxLength: 24, pattern: '.*[•*xX].*' }
+                      additionalProperties: false
+                additionalProperties: false
+        '400': { description: Lookup request is invalid. }
+        '401': { description: Internal Device Integration authentication failed. }
+        '503': { description: Gateway identity storage is unavailable. }
 components:
   securitySchemes:
     sessionCookie:
@@ -2708,7 +2791,22 @@ components:
       in: cookie
       name: funtino_management_session
       description: Management audience session cookie shared by Operations and System applications.
+    deviceIntegrationInternalToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+      description: Dedicated runtime secret held only by Device Integration and Gateway.
+    deviceIntegrationServiceIdentity:
+      type: apiKey
+      in: header
+      name: x-funtino-service-id
+      description: Must equal device-integration.
   parameters:
+    CorrelationId:
+      name: x-correlation-id
+      in: header
+      required: false
+      schema: { type: string, format: uuid }
     SystemOrganizationId:
       name: organizationId
       in: path
@@ -3799,7 +3897,25 @@ components:
               type: array
               items:
                 type: object
-                required: [id, eventId, cardId, householdId, memberId, deviceId, deviceName, reversalOfEntryId, transactionKind, amountRial, grossAmountRial, discountAmountRial, netAmountRial, currencyCode, occurredAt, status]
+                required:
+                  [
+                    id,
+                    eventId,
+                    cardId,
+                    householdId,
+                    memberId,
+                    deviceId,
+                    deviceName,
+                    reversalOfEntryId,
+                    transactionKind,
+                    amountRial,
+                    grossAmountRial,
+                    discountAmountRial,
+                    netAmountRial,
+                    currencyCode,
+                    occurredAt,
+                    status,
+                  ]
                 properties:
                   id: { type: string, format: uuid }
                   eventId: { type: string, format: uuid }
@@ -3809,7 +3925,11 @@ components:
                   deviceId: { type: [string, 'null'], format: uuid }
                   deviceName: { type: [string, 'null'] }
                   reversalOfEntryId: { type: [string, 'null'], format: uuid }
-                  transactionKind: { type: string, enum: [top_up, spend, refund, adjustment, issuance, card_replacement] }
+                  transactionKind:
+                    {
+                      type: string,
+                      enum: [top_up, spend, refund, adjustment, issuance, card_replacement],
+                    }
                   amountRial: { type: [integer, 'null'] }
                   grossAmountRial: { type: [integer, 'null'] }
                   discountAmountRial: { type: [integer, 'null'] }
@@ -3820,7 +3940,8 @@ components:
     CustomerCardLifecycleRequest:
       type: object
       additionalProperties: false
-      required: [id, cardId, replacementCardId, householdId, memberId, action, status, reason, createdAt]
+      required:
+        [id, cardId, replacementCardId, householdId, memberId, action, status, reason, createdAt]
       properties:
         id: { type: string, format: uuid }
         cardId: { type: string, format: uuid }
@@ -3999,6 +4120,59 @@ components:
           type: string
           enum: [sun, star, rainbow, rocket, crown, bear, cat, fox]
           nullable: true
+    EdgeOperatorPermission:
+      type: string
+      enum:
+        [
+          card.inventory.read,
+          card.inventory.manage,
+          card.assign,
+          card.transfer,
+          card.unassign,
+          customer.lookup.limited,
+          customer.provisional.create,
+          customer.family.read,
+          customer.family.manage,
+          customer.profile.manage,
+        ]
+    EdgeOperatorTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [branchId, permissionKeys]
+      properties:
+        branchId: { type: string, format: uuid }
+        permissionKeys:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EdgeOperatorPermission' }
+    EdgeOperatorTokenResponse:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { const: success }
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            [token, tokenId, permissionKeys, branchId, expiresAt, policyVersion, catalogVersion]
+          properties:
+            token: { type: string, minLength: 32, maxLength: 256, writeOnly: true }
+            tokenId: { type: string, format: uuid }
+            permissionKeys:
+              {
+                type: array,
+                minItems: 1,
+                maxItems: 10,
+                items: { $ref: '#/components/schemas/EdgeOperatorPermission' },
+              }
+            branchId: { type: string, format: uuid }
+            expiresAt: { type: string, format: date-time }
+            policyVersion: { type: integer, minimum: 1 }
+            catalogVersion: { type: integer, minimum: 1 }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
     AccessScope:
       oneOf:
         - type: object
@@ -4769,7 +4943,11 @@ components:
           additionalProperties: false
           required: [items]
           properties:
-            items: { type: array, items: { $ref: '#/components/schemas/OperationsCardLifecycleRequest' } }
+            items:
+              {
+                type: array,
+                items: { $ref: '#/components/schemas/OperationsCardLifecycleRequest' },
+              }
         nextCursor: { type: [string, 'null'], format: uuid }
         meta: { $ref: '#/components/schemas/ResponseMeta' }
     OperationsCardAssignRequest:

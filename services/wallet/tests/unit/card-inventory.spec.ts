@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   isCardStatusTransitionAllowed,
   cardAuditSnapshot,
+  hashCanonicalCardUid,
   maskExternalCardId,
   normalizeExternalCardId,
   toCardInventoryView,
@@ -22,12 +23,21 @@ test('card identifier masking never reveals identifiers shorter than four charac
   assert.equal(maskExternalCardId('CARD-4821'), '•••• 4821');
 });
 
+test('canonical card UID hashes match the shared Windows Edge golden vector', () => {
+  assert.equal(
+    hashCanonicalCardUid('01:02-03 04'),
+    '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517',
+  );
+  assert.equal(hashCanonicalCardUid('CARD-4821'), null);
+});
+
 test('card DTO and audit snapshot never include the physical identifier', () => {
   const record: CardInventoryRecord = {
     id: '11111111-1111-4111-8111-111111111111',
     organizationId: '22222222-2222-4222-8222-222222222222',
     branchId: '33333333-3333-4333-8333-333333333333',
     externalCardId: 'PRIVATE-CARD-4821',
+    cardUidHash: null,
     status: 'in_stock',
     verificationStatus: 'unknown',
     version: 1,

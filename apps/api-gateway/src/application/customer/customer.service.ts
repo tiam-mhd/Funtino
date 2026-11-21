@@ -9,9 +9,13 @@ import type {
 } from '../../domain/models.js';
 import { FUNTINO_STORE, type FuntinoStorePort } from '../../infrastructure/store/funtino-store.js';
 import { CustomerHouseholdClient } from '../../infrastructure/customer-household/customer-household.client.js';
-import { WalletClient, type WalletCardLifecycleAction } from '../../infrastructure/wallet/wallet.client.js';
+import {
+  WalletClient,
+  type WalletCardLifecycleAction,
+} from '../../infrastructure/wallet/wallet.client.js';
 import { OrganizationBranchClient } from '../../infrastructure/organization-branch/organization-branch.client.js';
 import { DeviceIntegrationClient } from '../../infrastructure/device-integration/device-integration.client.js';
+import { isCustomerProfileOwnerEnabled } from './customer-profile-ownership.js';
 
 @Injectable()
 export class CustomerService {
@@ -80,16 +84,39 @@ export class CustomerService {
   }
 
   async getProfile(userId: string) {
-    const user = await this.store.getUser(userId);
-    const avatar = await this.store.getUserAvatar(userId);
-    return presentProfile(user, avatar);
+    if (!isCustomerProfileOwnerEnabled()) {
+      return presentLegacyProfile(
+        await this.store.getUser(userId),
+        await this.store.getUserAvatar(userId),
+      );
+    }
+    const [user, profile] = await Promise.all([
+      this.store.getUser(userId),
+      this.householdOwner.getCustomerProfile(userId),
+    ]);
+    return presentProfile(user, profile);
   }
 
   async updateProfile(userId: string, input: UserProfileUpdate, correlationId: string) {
-    const user = await this.store.updateUserProfile(userId, input);
-    await this.store.recordAudit(userId, 'customer.profile_updated', 'user', userId, correlationId);
-    const avatar = await this.store.getUserAvatar(userId);
-    return presentProfile(user, avatar);
+    if (!isCustomerProfileOwnerEnabled()) {
+      const user = await this.store.updateUserProfile(userId, input);
+      await this.store.recordAudit(
+        userId,
+        'customer.profile_updated',
+        'user',
+        userId,
+        correlationId,
+      );
+      return presentLegacyProfile(user, await this.store.getUserAvatar(userId));
+    }
+    const [user, profile] = await Promise.all([
+      this.store.getUser(userId),
+      this.householdOwner.updateCustomerProfile(userId, input, {
+        correlationId,
+        idempotencyKey: correlationId,
+      }),
+    ]);
+    return presentProfile(user, profile);
   }
 
   async saveAvatar(
@@ -97,19 +124,31 @@ export class CustomerService {
     input: { mimeType: string; data: Buffer },
     correlationId: string,
   ) {
-    const user = await this.store.saveUserAvatar({ userId, ...input });
-    await this.store.recordAudit(
-      userId,
-      'customer.avatar_updated',
-      'user_avatar',
-      userId,
-      correlationId,
-    );
-    return presentProfile(user, await this.store.getUserAvatar(userId));
+    if (!isCustomerProfileOwnerEnabled()) {
+      const user = await this.store.saveUserAvatar({ userId, ...input });
+      await this.store.recordAudit(
+        userId,
+        'customer.avatar_updated',
+        'user_avatar',
+        userId,
+        correlationId,
+      );
+      return presentLegacyProfile(user, await this.store.getUserAvatar(userId));
+    }
+    const [user, profile] = await Promise.all([
+      this.store.getUser(userId),
+      this.householdOwner.saveCustomerAvatar(userId, input, {
+        correlationId,
+        idempotencyKey: correlationId,
+      }),
+    ]);
+    return presentProfile(user, profile);
   }
 
   async getAvatar(userId: string): Promise<UserAvatar> {
-    const avatar = await this.store.getUserAvatar(userId);
+    const avatar = isCustomerProfileOwnerEnabled()
+      ? await this.householdOwner.getCustomerAvatar(userId)
+      : await this.store.getUserAvatar(userId);
     if (!avatar) {
       throw new DomainError('NOT_FOUND', 'تصویر پروفایل پیدا نشد.');
     }
@@ -161,25 +200,27 @@ export class CustomerService {
     const assignments = await Promise.all(
       households.map((household) => this.wallet.listHouseholdAssignments(household.id)),
     );
-    return Promise.all(assignments.flatMap((items) =>
-      items.map(async (item) => {
-        const summary = await this.wallet.getCardLedgerSummary(item.householdId, item.cardId);
-        return ({
-        id: item.cardId,
-        householdId: item.householdId,
-        memberId: item.memberId,
-        branchId: item.branchId,
-        maskedCardId: `•••• •••• ${item.maskedIdentifier.slice(-4)}`,
-        status: item.status === 'assigned' ? ('active' as const) : ('blocked' as const),
-        lastSyncedAt: summary.lastConfirmedSnapshotAt,
-        walletId: null,
-        isStale: summary.freshness !== 'fresh',
-        freshness: summary.freshness,
-        balanceRial: summary.balanceRial,
-        pendingTransactionCount: summary.pendingTransactionCount,
-      });
-      }),
-    ));
+    return Promise.all(
+      assignments.flatMap((items) =>
+        items.map(async (item) => {
+          const summary = await this.wallet.getCardLedgerSummary(item.householdId, item.cardId);
+          return {
+            id: item.cardId,
+            householdId: item.householdId,
+            memberId: item.memberId,
+            branchId: item.branchId,
+            maskedCardId: `•••• •••• ${item.maskedIdentifier.slice(-4)}`,
+            status: item.status === 'assigned' ? ('active' as const) : ('blocked' as const),
+            lastSyncedAt: summary.lastConfirmedSnapshotAt,
+            walletId: null,
+            isStale: summary.freshness !== 'fresh',
+            freshness: summary.freshness,
+            balanceRial: summary.balanceRial,
+            pendingTransactionCount: summary.pendingTransactionCount,
+          };
+        }),
+      ),
+    );
   }
 
   async listCardTransactions(
@@ -199,7 +240,9 @@ export class CustomerService {
       throw new DomainError('FORBIDDEN', 'Household access is required.');
     }
     const assignments = await this.wallet.listHouseholdAssignments(householdId);
-    const assignment = assignments.find((item) => item.cardId.toLowerCase() === cardId.toLowerCase());
+    const assignment = assignments.find(
+      (item) => item.cardId.toLowerCase() === cardId.toLowerCase(),
+    );
     if (!assignment) {
       throw new DomainError('NOT_FOUND', 'Card assignment not found.');
     }
@@ -210,12 +253,14 @@ export class CustomerService {
       status: 'active',
       pageSize: 100,
     });
-    const deviceNames = new Map(devicePage.items.map((device) => [device.id.toLowerCase(), device.displayName]));
+    const deviceNames = new Map(
+      devicePage.items.map((device) => [device.id.toLowerCase(), device.displayName]),
+    );
     return {
       ...page,
       items: page.items.map((item) => ({
         ...item,
-        deviceName: item.deviceId ? deviceNames.get(item.deviceId.toLowerCase()) ?? null : null,
+        deviceName: item.deviceId ? (deviceNames.get(item.deviceId.toLowerCase()) ?? null) : null,
       })),
     };
   }
@@ -255,7 +300,9 @@ export class CustomerService {
     if (!households.some((household) => household.id.toLowerCase() === householdId.toLowerCase()))
       throw new DomainError('FORBIDDEN', 'Household access is required.');
     const assignments = await this.wallet.listHouseholdAssignments(householdId);
-    const assignment = assignments.find((item) => item.cardId.toLowerCase() === cardId.toLowerCase());
+    const assignment = assignments.find(
+      (item) => item.cardId.toLowerCase() === cardId.toLowerCase(),
+    );
     if (!assignment) throw new DomainError('NOT_FOUND', 'Card assignment not found.');
     return assignment;
   }
@@ -374,11 +421,46 @@ function presentBranch(branch: Branch | undefined) {
   };
 }
 
-function presentProfile(user: User, avatar: UserAvatar | undefined) {
+function presentLegacyProfile(user: User, avatar: UserAvatar | undefined) {
   return {
     ...user,
     avatarUrl: avatar ? '/api/v1/customer/profile/avatar' : null,
     avatarUpdatedAt: avatar?.updatedAt ?? null,
     profileCompleted: Boolean(user.profileCompletedAt),
+  };
+}
+
+function presentProfile(
+  user: User,
+  profile: {
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    birthDate: string | null;
+    gender: string | null;
+    city: string | null;
+    avatarPreset: string | null;
+    hasUploadedAvatar: boolean;
+    avatarUpdatedAt: string | null;
+    profileCompletedAt: string | null;
+    profileCompleted: boolean;
+    version: number;
+  },
+) {
+  return {
+    ...user,
+    displayName: [profile.firstName, profile.lastName].filter(Boolean).join(' ') || null,
+    firstName: profile.firstName,
+    lastName: profile.lastName,
+    email: profile.email,
+    birthDate: profile.birthDate,
+    gender: profile.gender,
+    city: profile.city,
+    avatarPreset: profile.avatarPreset,
+    profileCompletedAt: profile.profileCompletedAt,
+    avatarUrl: profile.hasUploadedAvatar ? '/api/v1/customer/profile/avatar' : null,
+    avatarUpdatedAt: profile.avatarUpdatedAt,
+    profileCompleted: profile.profileCompleted,
+    profileVersion: profile.version,
   };
 }

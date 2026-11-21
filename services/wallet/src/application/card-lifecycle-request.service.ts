@@ -2,7 +2,10 @@ import { ConflictException, Inject, Injectable, NotFoundException } from '@nestj
 import { createHash, randomUUID } from 'node:crypto';
 import { createEventEnvelope, eventTypes } from '@funtino/event-contracts';
 import { Prisma } from '../../generated/prisma/index.js';
-import { BRANCH_SCOPE_VALIDATOR, type BranchScopeValidator } from './ports/branch-scope-validator.port.js';
+import {
+  BRANCH_SCOPE_VALIDATOR,
+  type BranchScopeValidator,
+} from './ports/branch-scope-validator.port.js';
 import { CardInventoryService } from './card-inventory.service.js';
 import { PrismaService } from '../infrastructure/persistence/prisma/prisma.service.js';
 
@@ -37,12 +40,15 @@ export class CardLifecycleRequestService {
     requesterId: string;
     correlationId: string;
     idempotencyKey: string;
+    requesterType?: 'customer' | 'operations';
+    expectedVersion?: number;
   }) {
     const requestHash = hash({
       householdId: input.householdId,
       cardId: input.cardId,
       action: input.action,
       reason: input.reason,
+      expectedVersion: input.expectedVersion ?? null,
     });
     const existing = await this.prisma.cardLifecycleRequest.findUnique({
       where: { idempotencyKey: input.idempotencyKey },
@@ -54,67 +60,87 @@ export class CardLifecycleRequestService {
     }
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const assignment = await tx.cardAssignment.findFirst({
-          where: { cardId: input.cardId, householdId: input.householdId },
-          include: { card: { select: { status: true, verificationStatus: true } } },
-        });
-        if (!assignment) throw new NotFoundException('Active card assignment not found.');
-        if (assignment.card.status !== 'assigned' || assignment.card.verificationStatus !== 'verified')
-          throw new ConflictException('Only a verified active card can have a lifecycle request.');
-        const existingOpenRequest = await tx.cardLifecycleRequest.findFirst({
-          where: {
-            cardId: input.cardId,
-            householdId: input.householdId,
-            status: { in: ['requested', 'in_review', 'approved'] },
-          },
-        });
-        if (existingOpenRequest)
-          throw new ConflictException('An open lifecycle request already exists for this card.');
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const assignment = await tx.cardAssignment.findFirst({
+            where: { cardId: input.cardId, householdId: input.householdId },
+            include: {
+              card: { select: { status: true, verificationStatus: true, version: true } },
+            },
+          });
+          if (!assignment) throw new NotFoundException('Active card assignment not found.');
+          if (
+            input.expectedVersion !== undefined &&
+            assignment.card.version !== input.expectedVersion
+          ) {
+            throw new ConflictException('Card changed concurrently; reload before retrying.');
+          }
+          if (
+            assignment.card.status !== 'assigned' ||
+            assignment.card.verificationStatus !== 'verified'
+          )
+            throw new ConflictException(
+              'Only a verified active card can have a lifecycle request.',
+            );
+          const existingOpenRequest = await tx.cardLifecycleRequest.findFirst({
+            where: {
+              cardId: input.cardId,
+              householdId: input.householdId,
+              status: { in: ['requested', 'in_review', 'approved'] },
+            },
+          });
+          if (existingOpenRequest)
+            throw new ConflictException('An open lifecycle request already exists for this card.');
 
-        const requestId = randomUUID();
-        const record = await tx.cardLifecycleRequest.create({
-          data: {
-            id: requestId,
-            cardId: input.cardId,
-            organizationId: assignment.organizationId,
-            branchId: assignment.branchId,
-            householdId: input.householdId,
-            memberId: assignment.memberId,
-            action: input.action,
-            status: 'requested',
-            reason: input.reason,
-            requestHash,
-            idempotencyKey: input.idempotencyKey,
-            requesterId: input.requesterId,
-            correlationId: input.correlationId,
-          },
-        });
-        const after = view(record);
-        await tx.cardLifecycleRequestHistory.create({
-          data: {
-            id: randomUUID(),
-            requestId,
-            actorUserId: input.requesterId,
-            actorType: 'customer',
-            action: 'requested',
-            status: 'requested',
-            reason: input.reason,
-            correlationId: input.correlationId,
-            idempotencyKey: input.idempotencyKey,
-            commandHash: requestHash,
-            after: after as unknown as Prisma.InputJsonValue,
-          },
-        });
-        await this.writeLifecycleEvent(tx, record, input.correlationId);
-        return { ...after, duplicate: false };
-      });
+          const requestId = randomUUID();
+          const record = await tx.cardLifecycleRequest.create({
+            data: {
+              id: requestId,
+              cardId: input.cardId,
+              organizationId: assignment.organizationId,
+              branchId: assignment.branchId,
+              householdId: input.householdId,
+              memberId: assignment.memberId,
+              action: input.action,
+              status: 'requested',
+              reason: input.reason,
+              requestHash,
+              idempotencyKey: input.idempotencyKey,
+              requesterId: input.requesterId,
+              correlationId: input.correlationId,
+            },
+          });
+          const after = view(record);
+          await tx.cardLifecycleRequestHistory.create({
+            data: {
+              id: randomUUID(),
+              requestId,
+              actorUserId: input.requesterId,
+              actorType: input.requesterType ?? 'customer',
+              action: 'requested',
+              status: 'requested',
+              reason: input.reason,
+              correlationId: input.correlationId,
+              idempotencyKey: input.idempotencyKey,
+              commandHash: requestHash,
+              after: after as unknown as Prisma.InputJsonValue,
+            },
+          });
+          await this.writeLifecycleEvent(tx, record, input.correlationId);
+          return { ...after, duplicate: false };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
     } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034')
+        throw new ConflictException('Card changed concurrently; reload before retrying.');
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+        throw error;
       const duplicate = await this.prisma.cardLifecycleRequest.findUnique({
         where: { idempotencyKey: input.idempotencyKey },
       });
-      if (duplicate?.requestHash.trim() === requestHash) return { ...view(duplicate), duplicate: true };
+      if (duplicate?.requestHash.trim() === requestHash)
+        return { ...view(duplicate), duplicate: true };
       throw new ConflictException('Idempotency key conflicts with a different card request.');
     }
   }
@@ -156,7 +182,7 @@ export class CardLifecycleRequestService {
         branchId: row.branchId,
         maskedIdentifier: maskIdentifier(row.card.externalCardId),
       })),
-      nextCursor: hasNext ? page.at(-1)?.id ?? null : null,
+      nextCursor: hasNext ? (page.at(-1)?.id ?? null) : null,
     };
   }
 
@@ -193,7 +219,9 @@ export class CardLifecycleRequestService {
         select: { cardId: true },
       });
       if (!replacement)
-        throw new ConflictException('A verified replacement card must be assigned to the same household member first.');
+        throw new ConflictException(
+          'A verified replacement card must be assigned to the same household member first.',
+        );
       replacementCardId = replacement.cardId;
     }
 
@@ -209,7 +237,9 @@ export class CardLifecycleRequestService {
     });
     if (duplicate) {
       if (duplicate.requestId !== input.requestId || duplicate.commandHash.trim() !== commandHash)
-        throw new ConflictException('Idempotency key conflicts with a different card request action.');
+        throw new ConflictException(
+          'Idempotency key conflicts with a different card request action.',
+        );
       return { ...(duplicate.after as unknown as LifecycleView), duplicate: true };
     }
     if (!isTransitionAllowed(current.status, input.status))
@@ -217,7 +247,11 @@ export class CardLifecycleRequestService {
 
     // Approval blocks the old physical card first; a failed concurrent update leaves it safely blocked.
     if (input.status === 'approved') {
-      const card = await this.cardInventory.getCard(input.organizationId, input.branchId, current.cardId);
+      const card = await this.cardInventory.getCard(
+        input.organizationId,
+        input.branchId,
+        current.cardId,
+      );
       if (card.status === 'assigned') {
         await this.cardInventory.changeStatus(
           {
@@ -236,7 +270,9 @@ export class CardLifecycleRequestService {
           },
         );
       } else if (card.status !== 'blocked' && card.status !== 'retired') {
-        throw new ConflictException('The card state must be reviewed before approving this request.');
+        throw new ConflictException(
+          'The card state must be reviewed before approving this request.',
+        );
       }
     }
 
@@ -248,7 +284,9 @@ export class CardLifecycleRequestService {
         });
         if (changed.count !== 1)
           throw new ConflictException('Card lifecycle request changed concurrently; refresh it.');
-        const updated = await tx.cardLifecycleRequest.findUniqueOrThrow({ where: { id: current.id } });
+        const updated = await tx.cardLifecycleRequest.findUniqueOrThrow({
+          where: { id: current.id },
+        });
         const before = view(current);
         const after = view(updated);
         await tx.cardLifecycleRequestHistory.create({
@@ -271,13 +309,16 @@ export class CardLifecycleRequestService {
         return { ...after, duplicate: false };
       });
     } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') throw error;
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+        throw error;
       const replay = await this.prisma.cardLifecycleRequestHistory.findUnique({
         where: { idempotencyKey: input.idempotencyKey },
       });
       if (replay?.requestId === input.requestId && replay.commandHash.trim() === commandHash)
         return { ...(replay.after as unknown as LifecycleView), duplicate: true };
-      throw new ConflictException('Idempotency key conflicts with a different card request action.');
+      throw new ConflictException(
+        'Idempotency key conflicts with a different card request action.',
+      );
     }
   }
 

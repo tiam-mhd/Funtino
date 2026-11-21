@@ -33,7 +33,7 @@
     "runtime:export:backend": "node scripts/deployment/export-runflare-bundles.mjs backend",
     "test:e2e:scope": "node tests/e2e/scope-security.smoke.mjs",
     "test:e2e:a11y": "node tests/e2e/accessibility.audit.mjs",
-    "contracts:check": "node scripts/quality/validate-contracts.mjs",
+    "contracts:check": "node scripts/contracts/generate-edge-contracts.mjs --check && node scripts/quality/validate-contracts.mjs",
     "monitoring:config:check": "node scripts/quality/validate-monitoring-config.mjs",
     "database:restore-smoke": "node scripts/database/backup-restore-smoke.mjs",
     "quality:ci": "pnpm format:check && pnpm contracts:check && pnpm monitoring:config:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e:scope",

@@ -239,6 +239,53 @@ paths:
           in: header
           required: true
           schema: { type: string, minLength: 1, maxLength: 120 }
+        - name: x-edge-signature
+          in: header
+          required: true
+          schema: { type: string, pattern: '^sha256=[a-f0-9]{64}$' }
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeEventBatchRequest'
+      responses:
+        '200':
+          description: Each event is accepted, recognized as duplicate, or rejected with a safe error code and retryability.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeIngestResponse'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { description: Installation rate limit exceeded; retry after reconnect. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/customers/temporary:
+    post:
+      operationId: registerTemporaryEdgeCustomer
+      summary: Create an idempotent pending customer reconciliation record
+      description: Requires the registered installation HMAC and a short-lived IAM operator token with customer.provisional.create for the installation branch. The installation scope supplies branchId; no name or phone matching is performed.
+      security:
+        - edgeHmacSignature: []
+          edgeOperatorBearer: []
+      parameters:
+        - name: x-edge-installation-id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+        - name: x-edge-key-id
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 120 }
+        - name: x-edge-signature
+          in: header
+          required: true
+          schema: { type: string, pattern: '^sha256=[a-f0-9]{64}$' }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
         - $ref: '#/components/parameters/OptionalCorrelationId'
       requestBody:
         required: true
@@ -246,39 +293,350 @@ paths:
           application/json:
             schema:
               type: object
-              required: [sourceInstanceId, events]
+              required: [provisionalId]
               properties:
-                sourceInstanceId: { type: string, format: uuid }
-                events:
-                  type: array
-                  minItems: 1
-                  maxItems: 100
-                  items: { $ref: '../events/device/edge-transaction-payload.v2.schema.json' }
+                provisionalId: { type: string, format: uuid }
               additionalProperties: false
       responses:
-        '200':
-          description: Each event is accepted, recognized as duplicate, or rejected with a safe error code and retryability.
+        '201':
+          description: Central record is pending review and is not a confirmed customer.
           content:
             application/json:
               schema:
                 type: object
-                required: [results]
+                required:
+                  [provisionalId, sourceInstanceId, branchId, status, createdAt, customerConfirmed]
                 properties:
-                  results:
-                    type: array
-                    items:
-                      type: object
-                      required: [status, eventId, errorCode, retryable]
-                      properties:
-                        status: { type: string, enum: [accepted, duplicate, rejected] }
-                        eventId: { type: [string, 'null'], format: uuid }
-                        errorCode: { type: [string, 'null'], maxLength: 80 }
-                        retryable: { type: boolean }
-                      additionalProperties: false
+                  provisionalId: { type: string, format: uuid }
+                  sourceInstanceId: { type: string, format: uuid }
+                  branchId: { type: string, format: uuid }
+                  status: { type: string, enum: [pending_review, linked, rejected] }
+                  createdAt: { type: string, format: date-time }
+                  customerConfirmed: { type: boolean, const: false }
                 additionalProperties: false
         '400': { $ref: '#/components/responses/InvalidRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '429': { description: Installation rate limit exceeded; retry after reconnect. }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/customers:
+    get:
+      operationId: searchEdgeCustomers
+      summary: Search customers with the limited fields needed for a verified card assignment
+      description: The installation resolves branch scope. Requires the customer.lookup.limited IAM permission. Search results contain stable IDs, display name, masked phone and record version only; linking always uses customerId/householdId/memberId, never name or phone similarity.
+      security:
+        - edgeHmacSignature: []
+          edgeOperatorBearer: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+        - name: branchId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: query
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 120 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Limited search results; phone values are masked and are not used to establish identity.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeCustomerSearchPage'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/customers/{customerId}:
+    get:
+      operationId: readEdgeCustomerProfile
+      summary: Read a branch-authorized customer profile
+      description: Requires the customer.lookup.limited IAM permission and a household relationship established through an active Wallet card assignment.
+      security:
+        - edgeHmacSignature: []
+          edgeOperatorBearer: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: branchId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Minimal online profile and masked phone. Uploaded avatar bytes and phone number are omitted.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeCustomerProfile'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    patch:
+      operationId: updateEdgeCustomerProfile
+      summary: Apply a versioned, idempotent customer profile update
+      description: Requires customer.profile.manage for the installation branch. Branch scope is checked against the installation registry; expectedVersion conflicts return 409 and the client must reload before retrying.
+      security:
+        - edgeHmacSignature: []
+          edgeOperatorBearer: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeCustomerProfilePatchRequest'
+      responses:
+        '200':
+          description: Profile version and masked phone only.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeProfileMutationResult'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/households/{householdId}:
+    get:
+      operationId: readEdgeHousehold
+      summary: Read a household and its active members for the installed branch
+      description: Requires customer.family.read. The installation branch and Wallet mapping are validated server-side.
+      security:
+        - edgeHmacSignature: []
+          edgeOperatorBearer: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: branchId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Household and active member data with record versions.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeHouseholdRead'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    patch:
+      operationId: updateEdgeHousehold
+      summary: Apply a versioned, idempotent household update
+      description: Requires customer.family.manage for the installation branch. expectedVersion conflicts return 409.
+      security:
+        - edgeHmacSignature: []
+          edgeOperatorBearer: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeHouseholdPatchRequest'
+      responses:
+        '200':
+          description: Updated household ID and version only.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeHouseholdMutationResult'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/households/{householdId}/members:
+    post:
+      operationId: addEdgeHouseholdMember
+      summary: Add a household member with an idempotency key
+      description: Requires customer.family.manage for the installation branch. New members do not receive a card assignment automatically.
+      security:
+        - edgeHmacSignature: []
+          edgeOperatorBearer: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeHouseholdMemberCreateRequest'
+      responses:
+        '201':
+          description: New member ID, household ID and record version only.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeHouseholdMemberMutationResult'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/cards/assignments:
+    post:
+      operationId: assignEdgeCard
+      summary: Assign a verified physical card to a household or one member
+      description: Requires card.assign. Branch and organization come from the registered installation; Wallet verifies the household, member, physical-card verification, expectedVersion and unique active allocation. An empty or null memberId means a shared household card.
+      security:
+        - edgeHmacSignature: []
+          edgeOperatorBearer: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeCardAssignmentRequest'
+      responses:
+        '201':
+          description: Assignment and card verification state; physical UID is omitted.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeCardAssignmentResult'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/cards/{cardId}/block:
+    post:
+      operationId: blockEdgeCard
+      summary: Block a physical card in the installation branch
+      description: Requires card.inventory.manage. Wallet checks the expected record version, records append-only card history and returns only a masked identifier.
+      security:
+        - edgeHmacSignature: []
+          edgeOperatorBearer: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeCardCommandRequest'
+      responses:
+        '200':
+          description: Blocked card state and new record version; physical UID is omitted.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeCardBlockResult'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/cards/{cardId}/replacement-requests:
+    post:
+      operationId: requestEdgeCardReplacement
+      summary: Create an idempotent replacement request for the mapped household
+      description: Requires card.inventory.manage. Household identity is resolved from the active Wallet mapping for the installation branch; callers cannot supply another household ID. Wallet checks the expected card version and emits an append-only lifecycle event.
+      security:
+        - edgeHmacSignature: []
+          edgeOperatorBearer: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+        - name: cardId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeCardCommandRequest'
+      responses:
+        '201':
+          description: Lifecycle request identifier and status.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeCardReplacementRequestResult'
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Installation request quota exceeded; retry later. }
         '503': { $ref: '#/components/responses/Unavailable' }
   /internal/v2/edge/balances/reconcile:
     post:
@@ -306,7 +664,20 @@ paths:
           application/json:
             schema:
               type: object
-              required: [sourceInstanceId, branchId, snapshotId, snapshotVersion, cardId, householdId, memberId, localSequence, balanceRial, currencyCode, observedAt]
+              required:
+                [
+                  sourceInstanceId,
+                  branchId,
+                  snapshotId,
+                  snapshotVersion,
+                  cardId,
+                  householdId,
+                  memberId,
+                  localSequence,
+                  balanceRial,
+                  currencyCode,
+                  observedAt,
+                ]
               properties:
                 sourceInstanceId: { type: string, format: uuid }
                 branchId: { type: string, format: uuid }
@@ -327,12 +698,26 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [snapshotId, cardId, balanceRial, differenceRial, freshness, observedAt, duplicate]
+                required:
+                  [
+                    snapshotId,
+                    cardId,
+                    balanceRial,
+                    differenceRial,
+                    freshness,
+                    observedAt,
+                    duplicate,
+                  ]
                 properties:
                   snapshotId: { type: string, format: uuid }
                   cardId: { type: string, format: uuid }
                   balanceRial: { type: [integer, 'null'], minimum: 0, maximum: 9007199254740991 }
-                  differenceRial: { type: [integer, 'null'], minimum: -9007199254740991, maximum: 9007199254740991 }
+                  differenceRial:
+                    {
+                      type: [integer, 'null'],
+                      minimum: -9007199254740991,
+                      maximum: 9007199254740991,
+                    }
                   freshness: { type: string, enum: [fresh, pending_sync, stale, unknown] }
                   observedAt: { type: string, format: date-time }
                   duplicate: { type: boolean }
@@ -340,7 +725,10 @@ paths:
         '400': { $ref: '#/components/responses/InvalidRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { description: Installation rate limit exceeded; retry after reconnect. }
-        '409': { description: Snapshot is older than an applied transaction or physical card ownership cannot be verified at read time. }
+        '409':
+          {
+            description: Snapshot is older than an applied transaction or physical card ownership cannot be verified at read time.,
+          }
         '503': { $ref: '#/components/responses/Unavailable' }
   /internal/v1/operations/edge-sync/organizations/{organizationId}/branches/{branchId}:
     get:
@@ -359,7 +747,11 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200': { description: Branch-scoped installations, latest snapshots and event-delivery counters. }
+        '200':
+          {
+            description: Branch-scoped installations,
+            latest snapshots and event-delivery counters.,
+          }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '503': { $ref: '#/components/responses/Unavailable' }
   /internal/v1/operations/edge-sync/organizations/{organizationId}/branches/{branchId}/dead-letters/{eventId}/replay:
@@ -406,7 +798,7 @@ paths:
     get:
       operationId: getSignedBranchEdgeSnapshotPage
       summary: Fetch a resumable, signed immutable offline snapshot for the installation branch
-      description: Sign the UTF-8 bytes `GET\n` plus the exact request target path and query using the registered installation HMAC key. Keep the previously completed snapshot until every page of the new snapshot has been verified.
+      description: Sign the empty request body with the installation key identified by x-edge-key-id. The signed response includes signingKeyId in its canonical JSON. Keep the previous complete snapshot until every new page has been verified.
       security:
         - edgeHmacSignature: []
       parameters:
@@ -418,6 +810,10 @@ paths:
           in: header
           required: true
           schema: { type: string, minLength: 1, maxLength: 120 }
+        - name: x-edge-signature
+          in: header
+          required: true
+          schema: { type: string, pattern: '^sha256=[a-f0-9]{64}$' }
         - name: branchId
           in: query
           required: true
@@ -432,42 +828,12 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [snapshotId, snapshotVersion, branchId, generatedAt, validFrom, validUntil, documentHash, pricing, attractions, settings, items, nextCursor, signature, signingKeyId]
-                properties:
-                  snapshotId: { type: string, format: uuid }
-                  snapshotVersion: { type: string, maxLength: 120 }
-                  branchId: { type: string, format: uuid }
-                  generatedAt: { type: string, format: date-time }
-                  validFrom: { type: string, format: date-time }
-                  validUntil: { type: string, format: date-time }
-                  documentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
-                  pricing:
-                    type: object
-                    required: [status, version, reasonCode, rules]
-                    properties:
-                      status: { type: string, const: disabled }
-                      version: { type: 'null' }
-                      reasonCode: { type: string, const: PENDING_WINDOWS_GOLDEN_VECTORS }
-                      rules: { type: array, maxItems: 0 }
-                    additionalProperties: false
-                  attractions: { type: array, maxItems: 0 }
-                  settings: { type: array, maxItems: 0 }
-                  items:
-                    type: array
-                    items:
-                      type: object
-                      required: [kind, value]
-                      properties:
-                        kind: { type: string, enum: [device, card_mapping, attraction, setting] }
-                        value: { type: object }
-                      additionalProperties: false
-                  nextCursor: { type: [string, 'null'], maxLength: 1024 }
-                  signature: { type: string, pattern: '^sha256=[a-f0-9]{64}$' }
-                  signingKeyId: { type: string, minLength: 1, maxLength: 120 }
-                additionalProperties: false
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeSnapshotPage'
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '410': { description: Snapshot cursor is expired; request a new complete snapshot and retain the previous one until it succeeds. }
+        '410':
+          {
+            description: Snapshot cursor is expired; request a new complete snapshot and retain the previous one until it succeeds.,
+          }
         '503': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
@@ -486,7 +852,27 @@ components:
       in: header
       name: x-edge-signature
       description: sha256=<hex HMAC-SHA256 of the exact raw JSON body; pair with installation ID and key ID headers.
+    edgeOperatorBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: FuntinoEdgeOperatorToken
+      description: Short-lived, branch-scoped opaque token issued by API Gateway after IAM permission evaluation.
   parameters:
+    EdgeInstallationId:
+      name: x-edge-installation-id
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    EdgeKeyId:
+      name: x-edge-key-id
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 120 }
+    EdgeSignature:
+      name: x-edge-signature
+      in: header
+      required: true
+      schema: { type: string, pattern: '^sha256=[a-f0-9]{64}$' }
     ServiceId:
       name: x-funtino-service-id
       in: header

@@ -181,7 +181,12 @@ export class DeviceRegistryService {
   }
 
   async registerEdgeInstallation(
-    input: { sourceInstanceId: string; organizationId: string; branchId: string; currentKeyId: string },
+    input: {
+      sourceInstanceId: string;
+      organizationId: string;
+      branchId: string;
+      currentKeyId: string;
+    },
     meta: DeviceCommandMeta,
   ): Promise<EdgeInstallationRecord> {
     const currentKeyId = normalizeEdgeKeyId(input.currentKeyId);
@@ -265,7 +270,7 @@ export class DeviceRegistryService {
       }
       try {
         const status = await this.repository.importEdgeTransactionEvent(event, input.correlationId);
-        results.push({ status, eventId: event.eventId, retryable: false });
+        results.push({ status, eventId: event.eventId, errorCode: null, retryable: false });
       } catch (error) {
         if (error instanceof ConflictException || error instanceof DomainError) {
           results.push({

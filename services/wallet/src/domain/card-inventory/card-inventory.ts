@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export const CARD_INVENTORY_STATUSES = ['in_stock', 'assigned', 'blocked', 'retired'] as const;
 export type CardInventoryStatus = (typeof CARD_INVENTORY_STATUSES)[number];
 export const CARD_MANUAL_STATUS_TARGETS = ['in_stock', 'blocked', 'retired'] as const;
@@ -11,6 +13,7 @@ export type CardInventoryRecord = {
   organizationId: string;
   branchId: string;
   externalCardId: string;
+  cardUidHash: string | null;
   status: CardInventoryStatus;
   verificationStatus: CardVerificationStatus;
   version: number;
@@ -20,7 +23,7 @@ export type CardInventoryRecord = {
 
 export type CardInventoryView = Omit<
   CardInventoryRecord,
-  'externalCardId' | 'createdAt' | 'updatedAt'
+  'externalCardId' | 'cardUidHash' | 'createdAt' | 'updatedAt'
 > & {
   maskedIdentifier: string;
   createdAt: string;
@@ -50,6 +53,16 @@ export function normalizeExternalCardId(value: string): string {
     throw new Error('CARD_IDENTIFIER_INVALID');
   }
   return normalized;
+}
+
+export function hashCanonicalCardUid(value: string): string | null {
+  const canonical = value
+    .trim()
+    .normalize('NFC')
+    .replace(/[\s:-]/gu, '')
+    .toUpperCase();
+  if (!/^(?:[0-9A-F]{2}){1,80}$/u.test(canonical)) return null;
+  return createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
 
 export function maskExternalCardId(value: string): string {

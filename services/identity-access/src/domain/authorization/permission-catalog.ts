@@ -1,4 +1,4 @@
-export const permissionCatalogVersion = 6;
+export const permissionCatalogVersion = 8;
 
 export const permissionCatalog = [
   { key: 'organization.create', scopes: ['global'], delegable: false, stepUp: true },
@@ -125,10 +125,28 @@ export const permissionCatalog = [
     stepUp: false,
   },
   {
+    key: 'customer.provisional.create',
+    scopes: ['branch', 'organization', 'global'],
+    delegable: true,
+    stepUp: false,
+  },
+  {
     key: 'customer.family.read',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
     stepUp: false,
+  },
+  {
+    key: 'customer.family.manage',
+    scopes: ['branch', 'organization', 'global'],
+    delegable: true,
+    stepUp: true,
+  },
+  {
+    key: 'customer.profile.manage',
+    scopes: ['branch', 'organization', 'global'],
+    delegable: true,
+    stepUp: true,
   },
   {
     key: 'report.read',

@@ -19,19 +19,26 @@ import { CardLifecycleRequestService } from '../../application/card-lifecycle-re
 import { WalletServiceTokenGuard } from './service-token.guard.js';
 
 const uuid = z.string().uuid();
-const requestSchema = z.object({
-  action: z.enum(['lost', 'replacement']),
-  reason: z.string().trim().min(8).max(500),
-}).strict();
-const statusSchema = z.object({
-  status: z.enum(['in_review', 'approved', 'rejected', 'completed']),
-  reason: z.string().trim().min(8).max(500),
-}).strict();
-const branchQuerySchema = z.object({
-  status: z.enum(['requested', 'in_review', 'approved', 'rejected', 'completed']).optional(),
-  cursor: z.string().uuid().optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(50),
-}).strict();
+const requestSchema = z
+  .object({
+    action: z.enum(['lost', 'replacement']),
+    expectedVersion: z.number().int().positive().optional(),
+    reason: z.string().trim().min(8).max(500),
+  })
+  .strict();
+const statusSchema = z
+  .object({
+    status: z.enum(['in_review', 'approved', 'rejected', 'completed']),
+    reason: z.string().trim().min(8).max(500),
+  })
+  .strict();
+const branchQuerySchema = z
+  .object({
+    status: z.enum(['requested', 'in_review', 'approved', 'rejected', 'completed']).optional(),
+    cursor: z.string().uuid().optional(),
+    pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  })
+  .strict();
 
 @Controller('internal/v1')
 @UseGuards(WalletServiceTokenGuard)
@@ -58,11 +65,22 @@ export class CardLifecycleRequestController {
   ) {
     const parsed = requestSchema.safeParse(rawBody);
     if (!parsed.success) throw new BadRequestException('Card lifecycle request is invalid.');
-    const single = (name: string) => typeof headers[name] === 'string' ? headers[name] as string : undefined;
+    const single = (name: string) =>
+      typeof headers[name] === 'string' ? (headers[name] as string) : undefined;
     const requesterId = uuid.safeParse(single('x-funtino-actor-user-id'));
     const correlationId = uuid.safeParse(single('x-correlation-id'));
     const idempotencyKey = uuid.safeParse(single('idempotency-key'));
-    if (!requesterId.success || !correlationId.success || !idempotencyKey.success)
+    const callerService = single('x-funtino-service-id');
+    if (callerService === 'device-integration' && parsed.data.expectedVersion === undefined)
+      throw new BadRequestException(
+        'Expected card version is required for Edge lifecycle requests.',
+      );
+    if (
+      !requesterId.success ||
+      !correlationId.success ||
+      !idempotencyKey.success ||
+      (callerService !== 'api-gateway' && callerService !== 'device-integration')
+    )
       throw new BadRequestException('Actor, correlation, and idempotency headers are required.');
     return this.requests.createRequest({
       householdId,
@@ -71,6 +89,8 @@ export class CardLifecycleRequestController {
       requesterId: requesterId.data,
       correlationId: correlationId.data,
       idempotencyKey: idempotencyKey.data,
+      requesterType: callerService === 'device-integration' ? 'operations' : 'customer',
+      expectedVersion: parsed.data.expectedVersion,
     });
   }
 
@@ -98,7 +118,8 @@ export class CardLifecycleRequestController {
   ) {
     const parsed = statusSchema.safeParse(rawBody);
     if (!parsed.success) throw new BadRequestException('Card lifecycle action is invalid.');
-    const single = (name: string) => typeof headers[name] === 'string' ? headers[name] as string : undefined;
+    const single = (name: string) =>
+      typeof headers[name] === 'string' ? (headers[name] as string) : undefined;
     const actorUserId = uuid.safeParse(single('x-funtino-actor-user-id'));
     const correlationId = uuid.safeParse(single('x-correlation-id'));
     const idempotencyKey = uuid.safeParse(single('idempotency-key'));

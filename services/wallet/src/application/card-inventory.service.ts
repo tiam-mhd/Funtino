@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
 import {
   isCardStatusTransitionAllowed,
+  hashCanonicalCardUid,
   normalizeExternalCardId,
   type CardAssignmentView,
   type CardInventoryView,
@@ -54,6 +55,7 @@ export class CardInventoryService {
       organizationId,
       branchId,
       externalCardId,
+      cardUidHash: hashCanonicalCardUid(externalCardId),
       reason: normalizedReason,
     };
     const replay = await this.repository.findIdempotentMutation<CardInventoryView>(

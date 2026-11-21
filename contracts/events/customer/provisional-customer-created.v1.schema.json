@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.funtino.ir/events/customer/provisional-customer-created.v1.json",
+  "allOf": [
+    { "$ref": "https://contracts.funtino.ir/events/common/envelope.v1.json" },
+    {
+      "properties": {
+        "eventType": { "const": "customer.provisional-created.v1" },
+        "payload": {
+          "type": "object",
+          "required": ["provisionalId", "sourceInstanceId", "branchId", "status"],
+          "properties": {
+            "provisionalId": { "type": "string", "format": "uuid" },
+            "sourceInstanceId": { "type": "string", "format": "uuid" },
+            "branchId": { "type": "string", "format": "uuid" },
+            "status": { "const": "pending_review" }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

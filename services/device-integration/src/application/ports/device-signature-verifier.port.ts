@@ -5,4 +5,5 @@ export interface DeviceSignatureVerifier {
   verify(rawBody: Buffer, signature: string | undefined): boolean;
   isEdgeConfigured(): boolean;
   verifyEdge(rawBody: Buffer, keyId: string | undefined, signature: string | undefined): boolean;
+  signEdge(rawBody: Buffer, keyId: string | undefined): string | null;
 }

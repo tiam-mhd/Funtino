@@ -18,9 +18,9 @@ export type UserProfileUpdate = {
   lastName?: string | null;
   email?: string | null;
   birthDate?: string | null;
-  gender?: string | null;
+  gender?: 'female' | 'male' | 'other' | 'prefer_not_to_say' | null;
   city?: string | null;
-  avatarPreset?: string | null;
+  avatarPreset?: 'sun' | 'star' | 'rainbow' | 'rocket' | 'crown' | 'bear' | 'cat' | 'fox' | null;
 };
 
 export type UserAvatar = {

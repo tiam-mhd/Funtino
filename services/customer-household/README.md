@@ -6,7 +6,7 @@
 
 - قرارداد داخلی: `contracts/openapi/customer-household.yaml`.
 - Gateway تنها ورودی عمومیِ customer است؛ API داخلی این سرویس نباید public ingress داشته باشد.
-- Callerهای Gateway و Wallet tokenهای جدا و مستقل دارند (`CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN` و `CUSTOMER_HOUSEHOLD_WALLET_TOKEN`). در production URL خصوصی باید HTTPS باشد و token واقعی فقط در Secret زمان اجرا قرار گیرد.
+- Callerهای Gateway، Wallet و Device Integration tokenهای جدا و مستقل دارند (`CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN`, `CUSTOMER_HOUSEHOLD_WALLET_TOKEN` و `CUSTOMER_HOUSEHOLD_DEVICE_INTEGRATION_TOKEN`). Device Integration فقط برای مسیر ثبت provisional مشتری مجاز است. در production URL خصوصی باید HTTPS باشد و token واقعی فقط در Secret زمان اجرا قرار گیرد.
 - هویت مشتری از نشست احراز‌شده‌ی Gateway می‌آید. داده‌ی کودک حداقلی است و scope دسترسی household در هر خواندن/تغییر سمت سرور بررسی می‌شود.
 - رویدادهای نسخه‌دار در Outbox پایدار ذخیره می‌شوند؛ مصرف‌کنندگان باید idempotent باشند. پیام‌ها شامل داده‌ی حداقلی و بدون شناسه‌ی حساس غیرضروری هستند.
 - مدل گراف از `FamilyPerson`، عضویت household و edgeهای `parent_of`، `spouse_of`، `sibling_of` و `guardian_of` استفاده می‌کند. متن قدیمی relationship فقط برای بازبینی نگه داشته می‌شود و واقعیت گراف محسوب نمی‌شود.

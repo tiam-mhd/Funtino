@@ -5,6 +5,7 @@ import { AccessMutationJournalService } from './application/access-mutation-jour
 import { AccessManagementService } from './application/access-management.service.js';
 import { AccessManagementCryptoService } from './application/access-management-crypto.service.js';
 import { AccessPolicyService } from './application/access-policy.service.js';
+import { EdgeOperatorTokenService } from './application/edge-operator-token.service.js';
 import { ORGANIZATION_SCOPE_OWNER } from './application/ports/organization-scope-owner.port.js';
 import { MfaCryptoService } from './application/mfa-crypto.service.js';
 import { MfaService } from './application/mfa.service.js';
@@ -17,14 +18,20 @@ import { PrismaService } from './infrastructure/persistence/prisma/prisma.servic
 import { OrganizationScopeOwnerClient } from './infrastructure/organization-branch/organization-scope-owner.client.js';
 import { HealthController } from './interfaces/http/health.controller.js';
 import { IdentityAccessController } from './interfaces/http/identity-access.controller.js';
+import { EdgeOperatorTokenController } from './interfaces/http/edge-operator-token.controller.js';
+import {
+  EdgeOperatorDeviceIntegrationTokenGuard,
+  EdgeOperatorGatewayTokenGuard,
+} from './interfaces/http/edge-operator-token.guards.js';
 import { ServiceTokenGuard } from './interfaces/http/service-token.guard.js';
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true })],
-  controllers: [HealthController, IdentityAccessController],
+  controllers: [HealthController, IdentityAccessController, EdgeOperatorTokenController],
   providers: [
     PrismaService,
     AccessPolicyService,
+    EdgeOperatorTokenService,
     AccessManagementService,
     AccessManagementCryptoService,
     OrganizationScopeOwnerClient,
@@ -33,6 +40,8 @@ import { ServiceTokenGuard } from './interfaces/http/service-token.guard.js';
     MfaService,
     AccessMutationJournalService,
     ServiceTokenGuard,
+    EdgeOperatorGatewayTokenGuard,
+    EdgeOperatorDeviceIntegrationTokenGuard,
     AccessOutboxRelayService,
     {
       provide: ACCESS_EVENT_BUS,

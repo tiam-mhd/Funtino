@@ -113,7 +113,12 @@ export class CardInventoryController {
   }
 }
 
-function commandMeta(headers: Record<string, string | string[] | undefined>) {
+function commandMeta(headers: Record<string, string | string[] | undefined>): {
+  callerService: 'api-gateway' | 'device-integration';
+  actorUserId: string;
+  correlationId: string;
+  idempotencyKey: string;
+} {
   const single = (name: string): string | undefined => {
     const value = headers[name];
     return typeof value === 'string' ? value : undefined;
@@ -125,11 +130,18 @@ function commandMeta(headers: Record<string, string | string[] | undefined>) {
     throw new BadRequestException('Actor, correlation, and Idempotency-Key headers are required.');
   }
   return {
-    callerService: 'api-gateway' as const,
+    callerService: serviceCaller(headers),
     actorUserId: actorUserId.data,
     correlationId: correlationId.data,
     idempotencyKey: idempotencyKey.data,
   };
+}
+
+function serviceCaller(headers: Record<string, string | string[] | undefined>) {
+  const value = headers['x-funtino-service-id'];
+  if (value !== 'api-gateway' && value !== 'device-integration')
+    throw new BadRequestException('Internal service identity is invalid.');
+  return value;
 }
 
 function parseVersion(value: unknown): number {

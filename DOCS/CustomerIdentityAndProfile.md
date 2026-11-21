@@ -40,13 +40,36 @@ Operations and System family support requires `customer.family.read`, exact-phon
 - `GET /api/v1/customer/cards` returns cards assigned to households the authenticated customer may access, with masked physical identifier, branch, lifecycle status, and explicit freshness. It does not expose a raw physical identifier, member-specific assignment, balance, or unsourced card history.
 - A branch-specific projection is authorized only through a current Wallet assignment for an accessible household; branch discovery alone does not grant customer access.
 
+## Profile ownership and cutover
+
+Customer & Household owns customer profile fields and uploaded avatars in `customer_profiles`; API Gateway continues to own login identity, phone number and sessions. The link is the stable Gateway `userId`, with no cross-schema foreign key. Customer Web keeps the same session-based `/api/v1/customer/profile` routes; Gateway delegates profile reads and writes to the owner and returns avatar bytes only to that authenticated customer.
+
+Migration `services/customer-household/prisma/migrations/0003_customer_profile_owner` is additive. It keeps the Gateway profile columns and `user_avatars` as the rollback source. `CUSTOMER_PROFILE_OWNER_ENABLED=false` leaves Gateway as the only profile writer before cutover; `true` routes reads and writes to Customer & Household. A single Gateway process never writes both owners. The default stays false until the reviewed backfill is complete.
+
+For a controlled cutover, pause customer profile/avatar mutations across all Gateway replicas, deploy the additive Customer & Household schema, and run the one-shot plan with read-only `DATABASE_URL` plus the target owner's migration credential:
+
+```powershell
+node scripts/migrations/customer-profile-owner-backfill.mjs
+```
+
+Review only counts and checksum. Apply is a separate explicit command and must repeat the reviewed checksum; production requires a one-shot migration environment and `--allow-production`:
+
+```powershell
+$env:FUNTINO_ONE_SHOT_MIGRATION = 'true'
+node scripts/migrations/customer-profile-owner-backfill.mjs `
+  --apply --target-environment production --allow-production `
+  --confirm-checksum <reviewed-sha256>
+```
+
+This package did not execute that command against production. Resolve every `rejected` profile and repeat dry-run before apply. The tool inserts missing profile rows, never overwrites a Customer & Household row, resumes safely after partial batches, and reports only counts, rejection codes and a checksum. After verifying counts/checksum, change the Gateway flag for every replica in a maintenance window and resume profile mutations. Once new owner writes begin, do not roll back by switching the flag to false: restore the owner snapshot or use a reviewed forward migration, preserving both audit histories.
+
 ## Storage and deployment
 
 - Development uses the in-memory adapter and exposes a code only when `NODE_ENV != production` and `EXPOSE_DEV_OTP=true`.
-- Customer profile/session data remains on the existing Gateway store for this slice; household/member data is owned by Customer & Household, and inventory/assignment data by Wallet, each with its own PostgreSQL schema, credentials, API and migrations.
-- The source now includes additive migrations for Customer & Household and Wallet assignment history. Production backfill, reconciliation, and read/write cutover have not been run; the Gateway legacy household/card rows are migration input only until a separately approved staged cutover.
+- Before cutover, the Gateway remains the sole profile owner for compatibility. After the flag is enabled, Customer & Household owns profile fields and avatars; the old Gateway columns remain only as migration/rollback source and are not dual-written.
+- Production backfill, reconciliation, and profile read/write cutover have not been run. Household, member, and inventory data remain in their owning services and use separate APIs and migrations.
 - Production OTP requires a real Parsgreen token in the runtime secret store; it is not included in this repository.
-- Profile image data is stored in PostgreSQL `user_avatars` for the MVP, avoiding ephemeral container storage.
+- Before cutover, profile image data remains in the Gateway `user_avatars` table. After cutover it is stored in Customer & Household PostgreSQL as profile-owned avatar data; the private owner API accepts only approved image MIME types and checks image signatures and the 2 MB cap.
 - Avatar uploads accept JPEG, PNG and WebP and are capped at 2 MB. The customer UI accepts the original image only as a local crop source, lets the user pan/zoom inside a fixed `1:1` frame, and uploads the resulting square image (512×512 JPEG for the current implementation).
 - Birth date is presented as a text-like customer field in the customer UI. Tapping the field opens the Persian calendar picker with day/month/year wheels inside a focused dialog; the wheels are not shown in the form by default. The selected values are converted to the API contract's Gregorian ISO `YYYY-MM-DD` value; no locale-dependent native browser date input is used.
 - The server CORS contract explicitly allows the credentialed profile `PATCH` request and its `OPTIONS` preflight: methods are `GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS`, and the request headers used by the customer client are explicitly allowed.

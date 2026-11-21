@@ -10,6 +10,350 @@ security:
   - CustomerHouseholdGatewayToken: []
     ServiceIdentity: []
 paths:
+  /internal/v1/customer-profiles/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/ActorUserId'
+    get:
+      operationId: getCustomerOwnedProfile
+      summary: Read one profile owned by Customer & Household for the matching Gateway identity
+      responses:
+        '200':
+          description: Versioned profile and avatar metadata; binary image data is available only from the separate self-scoped avatar route.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'no-store, private' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerProfile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    patch:
+      operationId: updateCustomerOwnedProfile
+      summary: Versioned, idempotent profile update for the matching customer identity
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerProfileUpdate' }
+      responses:
+        '200':
+          description: Profile updated and audit recorded without retaining profile field values in the audit payload.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerProfile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/customer-profiles/{userId}/avatar:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/ActorUserId'
+    get:
+      operationId: getCustomerOwnedAvatar
+      summary: Read the uploaded avatar for the matching customer identity
+      responses:
+        '200':
+          description: Base64 encoded, size limited image bytes; null when the customer has no uploaded avatar.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/CustomerAvatar'
+                  - type: 'null'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      operationId: saveCustomerOwnedAvatar
+      summary: Replace the uploaded avatar with a versioned idempotent command
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerAvatarCommand' }
+      responses:
+        '200':
+          description: Avatar replaced, profile version incremented, and mutation audit recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerProfile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/edge/provisional-customers:
+    post:
+      operationId: createPendingEdgeCustomerRecord
+      summary: Idempotently record a minimal provisional identity from an authenticated Edge installation
+      description: Stores only the Windows provisional ID, installation, branch, actor, status and audit/outbox metadata. It is not a customer account and never matches by name or phone.
+      security:
+        - CustomerHouseholdDeviceIntegrationToken: []
+          ServiceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provisionalId, sourceInstanceId, branchId]
+              properties:
+                provisionalId: { type: string, format: uuid }
+                sourceInstanceId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+              additionalProperties: false
+      responses:
+        '201':
+          description: Pending provisional identifier; not a confirmed customer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProvisionalCustomer' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/edge/customers/search:
+    post:
+      operationId: searchEdgeCustomersInCustomerHousehold
+      summary: Search identity profiles for an authorized Edge operator
+      description: Device Integration validates the installation HMAC, branch and IAM operator permission before calling this owner endpoint. Search is limited to stable customer IDs, display names, household/member IDs and record version; phone remains null here and is masked by the Gateway identity owner.
+      security:
+        - CustomerHouseholdDeviceIntegrationToken: []
+          ServiceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceInstanceId, branchId, query, pageSize]
+              properties:
+                sourceInstanceId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                query: { type: string, minLength: 1, maxLength: 120 }
+                cursor: { type: string, format: uuid }
+                pageSize: { type: integer, minimum: 1, maximum: 100 }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Limited search results from the active customer owner.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeCustomerSearchPage'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/edge/customers/{customerId}/read:
+    post:
+      operationId: readEdgeCustomerProfileInCustomerHousehold
+      summary: Read the minimal profile for a branch-related customer
+      security:
+        - CustomerHouseholdDeviceIntegrationToken: []
+          ServiceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceInstanceId, branchId, householdIds]
+              properties:
+                sourceInstanceId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                householdIds:
+                  type: array
+                  maxItems: 10000
+                  items: { type: string, format: uuid }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Profile fields only; raw phone and uploaded avatar bytes are omitted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EdgeOwnerCustomerProfile' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/edge/customers/{customerId}:
+    patch:
+      operationId: updateEdgeCustomerProfileInCustomerHousehold
+      summary: Apply a versioned and idempotent profile update
+      security:
+        - CustomerHouseholdDeviceIntegrationToken: []
+          ServiceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceInstanceId, branchId, householdIds, expectedVersion]
+              minProperties: 5
+              properties:
+                sourceInstanceId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                householdIds:
+                  { type: array, maxItems: 10000, items: { type: string, format: uuid } }
+                expectedVersion: { type: integer, minimum: 1 }
+                firstName: { type: [string, 'null'], minLength: 1, maxLength: 60 }
+                lastName: { type: [string, 'null'], minLength: 1, maxLength: 60 }
+                birthDate: { type: [string, 'null'], format: date }
+                gender:
+                  { type: [string, 'null'], enum: [female, male, other, prefer_not_to_say, null] }
+                city: { type: [string, 'null'], maxLength: 80 }
+                avatarPreset: { type: [string, 'null'], maxLength: 32 }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Customer ID and new profile version only.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EdgeOwnerProfileMutationResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/edge/households/{householdId}:
+    get:
+      operationId: readEdgeHouseholdInCustomerHousehold
+      summary: Read an active household and its active members
+      security:
+        - CustomerHouseholdDeviceIntegrationToken: []
+          ServiceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: sourceInstanceId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: branchId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Household and active member records with versions.
+          content:
+            application/json:
+              schema:
+                $ref: '../events/device/windows-edge-contract.v1.schema.json#/$defs/EdgeHouseholdRead'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    patch:
+      operationId: updateEdgeHouseholdInCustomerHousehold
+      summary: Apply a versioned and idempotent household update
+      security:
+        - CustomerHouseholdDeviceIntegrationToken: []
+          ServiceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceInstanceId, branchId, expectedVersion, name]
+              properties:
+                sourceInstanceId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                expectedVersion: { type: integer, minimum: 1 }
+                name: { type: string, minLength: 2, maxLength: 80 }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Household ID and new record version only.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EdgeOwnerHouseholdMutationResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /internal/v1/edge/households/{householdId}/members:
+    post:
+      operationId: addEdgeHouseholdMemberInCustomerHousehold
+      summary: Add a member with an idempotency key
+      security:
+        - CustomerHouseholdDeviceIntegrationToken: []
+          ServiceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - name: householdId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceInstanceId, branchId, displayName, relationship]
+              properties:
+                sourceInstanceId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                displayName: { type: string, minLength: 2, maxLength: 80 }
+                relationship: { type: string, minLength: 2, maxLength: 40 }
+                birthDate: { type: [string, 'null'], format: date }
+                isDependent: { type: boolean }
+              additionalProperties: false
+      responses:
+        '201':
+          description: Member ID, household ID and version only.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EdgeOwnerMemberMutationResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
   /internal/v1/households:
     post:
       operationId: createCustomerHousehold
@@ -437,6 +781,10 @@ components:
       type: apiKey
       in: header
       name: x-funtino-service-token
+    CustomerHouseholdDeviceIntegrationToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
     ServiceIdentity:
       type: apiKey
       in: header
@@ -473,6 +821,141 @@ components:
       required: true
       schema: { type: string, format: uuid }
   schemas:
+    ProvisionalCustomer:
+      type: object
+      additionalProperties: false
+      required: [provisionalId, sourceInstanceId, branchId, status, createdAt]
+      properties:
+        provisionalId: { type: string, format: uuid }
+        sourceInstanceId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        status: { type: string, enum: [pending_review, linked, rejected] }
+        createdAt: { type: string, format: date-time }
+    EdgeOwnerCustomerProfile:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          customerId,
+          firstName,
+          lastName,
+          birthDate,
+          gender,
+          city,
+          avatarPreset,
+          hasUploadedAvatar,
+          profileCompleted,
+          recordVersion,
+        ]
+      properties:
+        customerId: { type: string, format: uuid }
+        firstName: { type: [string, 'null'], maxLength: 60 }
+        lastName: { type: [string, 'null'], maxLength: 60 }
+        birthDate: { type: [string, 'null'], format: date }
+        gender: { type: [string, 'null'], enum: [female, male, other, prefer_not_to_say, null] }
+        city: { type: [string, 'null'], maxLength: 80 }
+        avatarPreset: { type: [string, 'null'], maxLength: 32 }
+        hasUploadedAvatar: { type: boolean }
+        profileCompleted: { type: boolean }
+        recordVersion: { type: integer, minimum: 1 }
+    EdgeOwnerProfileMutationResult:
+      type: object
+      additionalProperties: false
+      required: [userId, version]
+      properties:
+        userId: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+    EdgeOwnerHouseholdMutationResult:
+      type: object
+      additionalProperties: false
+      required: [id, version]
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+    EdgeOwnerMemberMutationResult:
+      type: object
+      additionalProperties: false
+      required: [id, householdId, version]
+      properties:
+        id: { type: string, format: uuid }
+        householdId: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+    CustomerProfile:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          userId,
+          firstName,
+          lastName,
+          email,
+          birthDate,
+          gender,
+          city,
+          avatarPreset,
+          hasUploadedAvatar,
+          avatarUpdatedAt,
+          profileCompletedAt,
+          profileCompleted,
+          version,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        userId: { type: string, format: uuid }
+        firstName: { type: [string, 'null'], maxLength: 60 }
+        lastName: { type: [string, 'null'], maxLength: 60 }
+        email: { type: [string, 'null'], format: email, maxLength: 160 }
+        birthDate: { type: [string, 'null'], format: date }
+        gender: { type: [string, 'null'], enum: [female, male, other, prefer_not_to_say, null] }
+        city: { type: [string, 'null'], maxLength: 80 }
+        avatarPreset:
+          {
+            type: [string, 'null'],
+            enum: [sun, star, rainbow, rocket, crown, bear, cat, fox, null],
+          }
+        hasUploadedAvatar: { type: boolean }
+        avatarUpdatedAt: { type: [string, 'null'], format: date-time }
+        profileCompletedAt: { type: [string, 'null'], format: date-time }
+        profileCompleted: { type: boolean }
+        version: { type: integer, minimum: 1 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CustomerProfileUpdate:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion]
+      minProperties: 2
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        firstName: { type: [string, 'null'], minLength: 2, maxLength: 60 }
+        lastName: { type: [string, 'null'], minLength: 2, maxLength: 60 }
+        email: { type: [string, 'null'], format: email, maxLength: 160 }
+        birthDate: { type: [string, 'null'], format: date }
+        gender: { type: [string, 'null'], enum: [female, male, other, prefer_not_to_say, null] }
+        city: { type: [string, 'null'], minLength: 2, maxLength: 80 }
+        avatarPreset:
+          {
+            type: [string, 'null'],
+            enum: [sun, star, rainbow, rocket, crown, bear, cat, fox, null],
+          }
+    CustomerAvatarCommand:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, mimeType, dataBase64]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        mimeType: { type: string, enum: [image/jpeg, image/png, image/webp] }
+        dataBase64: { type: string, format: byte, minLength: 4, maxLength: 2666668 }
+    CustomerAvatar:
+      type: object
+      additionalProperties: false
+      required: [userId, mimeType, dataBase64, updatedAt]
+      properties:
+        userId: { type: string, format: uuid }
+        mimeType: { type: string, enum: [image/jpeg, image/png, image/webp] }
+        dataBase64: { type: string, format: byte, minLength: 4, maxLength: 2666668 }
+        updatedAt: { type: string, format: date-time }
     FamilyReadRequest:
       type: object
       additionalProperties: false

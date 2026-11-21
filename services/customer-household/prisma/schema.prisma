@@ -100,6 +100,25 @@ enum HouseholdInvitationStatus {
   @@schema("customer_household")
 }
 
+enum CustomerProfileGender {
+  female
+  male
+  other
+  prefer_not_to_say
+
+  @@map("customer_profile_gender")
+  @@schema("customer_household")
+}
+
+enum ProvisionalCustomerStatus {
+  pending_review
+  linked
+  rejected
+
+  @@map("provisional_customer_status")
+  @@schema("customer_household")
+}
+
 model Household {
   id          String          @id @default(uuid()) @db.Uuid
   ownerUserId String          @map("owner_user_id") @db.Uuid
@@ -115,6 +134,47 @@ model Household {
 
   @@index([ownerUserId, status, createdAt], map: "customer_household_owner_status_idx")
   @@map("households")
+  @@schema("customer_household")
+}
+
+// Customer identity and login remain owned by API Gateway. This profile is
+// keyed by that stable opaque user UUID without a cross-service foreign key.
+model CustomerProfile {
+  userId             String                 @id @map("user_id") @db.Uuid
+  firstName          String?                @map("first_name") @db.VarChar(60)
+  lastName           String?                @map("last_name") @db.VarChar(60)
+  email              String?                @unique(map: "customer_profiles_email_key") @db.VarChar(160)
+  birthDate          DateTime?              @map("birth_date") @db.Date
+  gender             CustomerProfileGender?
+  city               String?                @db.VarChar(80)
+  avatarPreset       String?                @map("avatar_preset") @db.VarChar(32)
+  avatarData         Bytes?                 @map("avatar_data") @db.ByteA
+  avatarMimeType     String?                @map("avatar_mime_type") @db.VarChar(80)
+  avatarUpdatedAt    DateTime?              @map("avatar_updated_at") @db.Timestamptz(6)
+  profileCompletedAt DateTime?              @map("profile_completed_at") @db.Timestamptz(6)
+  version            Int                    @default(1)
+  createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("customer_profiles")
+  @@schema("customer_household")
+}
+
+// A Windows-only temporary identity is a pending reconciliation key. It is
+// not a customer account and deliberately stores no name, phone, or profile.
+model ProvisionalCustomer {
+  id               String                    @id @db.Uuid
+  provisionalId    String                    @map("provisional_id") @db.Uuid
+  sourceInstanceId String                    @map("source_instance_id") @db.Uuid
+  branchId         String                    @map("branch_id") @db.Uuid
+  createdByUserId  String                    @map("created_by_user_id") @db.Uuid
+  status           ProvisionalCustomerStatus @default(pending_review)
+  createdAt        DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([sourceInstanceId, provisionalId], map: "customer_household_provisional_source_local_key")
+  @@index([branchId, status, createdAt], map: "customer_household_provisional_branch_status_idx")
+  @@map("provisional_customers")
   @@schema("customer_household")
 }
 

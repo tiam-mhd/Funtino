@@ -4,6 +4,7 @@ import type {
   DeviceType,
   ReportedHealthState,
 } from '../../domain/device/device.js';
+import type { EdgeTransactionPayload } from '@funtino/event-contracts';
 
 export type DeviceCommandMeta = {
   callerService: 'api-gateway';
@@ -89,34 +90,7 @@ export type TransactionImportResult = {
   transactionId: string;
 };
 
-export type EdgeTransactionEvent = {
-  eventId: string;
-  sourceInstanceId: string;
-  localTransactionId: string;
-  sourceDatabase: string;
-  organizationId: string;
-  branchId: string;
-  cardId: string;
-  householdId: string;
-  memberId?: string | null;
-  deviceId: string | null;
-  sourceDeviceId: string | null;
-  transactionKind: 'top_up' | 'spend' | 'refund' | 'adjustment' | 'issuance' | 'card_replacement';
-  amountRial: number;
-  currencyCode: 'IRR';
-  grossAmountRial: number;
-  discountAmountRial: number;
-  netAmountRial: number;
-  promotionId: string | null;
-  ruleId: string | null;
-  pricingVersion: string | null;
-  reversalOfLocalTransactionId?: string | null;
-  occurredAt: string;
-  localSequence: number;
-  balanceAfterRial: number | null;
-  operationResult: 'success' | 'cancelled' | 'failed';
-  snapshotVersion: string;
-};
+export type EdgeTransactionEvent = EdgeTransactionPayload;
 
 export type EdgeInstallationRecord = {
   sourceInstanceId: string;
@@ -130,8 +104,8 @@ export type EdgeInstallationRecord = {
 };
 
 export type EdgeImportResult =
-  | { status: 'accepted'; eventId: string; retryable: false }
-  | { status: 'duplicate'; eventId: string; retryable: false }
+  | { status: 'accepted'; eventId: string; errorCode: null; retryable: false }
+  | { status: 'duplicate'; eventId: string; errorCode: null; retryable: false }
   | { status: 'rejected'; eventId: string | null; errorCode: string; retryable: boolean };
 
 export const DEVICE_REGISTRY_REPOSITORY = Symbol('DEVICE_REGISTRY_REPOSITORY');
@@ -161,18 +135,31 @@ export interface DeviceRegistryRepository {
     correlationId: string,
   ): Promise<TransactionImportResult>;
   getEdgeInstallation(sourceInstanceId: string): Promise<EdgeInstallationRecord | null>;
-  registerEdgeInstallation(input: {
+  registerEdgeInstallation(
+    input: {
+      sourceInstanceId: string;
+      organizationId: string;
+      branchId: string;
+      currentKeyId: string;
+    },
+    meta: DeviceCommandMeta,
+  ): Promise<EdgeInstallationRecord>;
+  rotateEdgeInstallationKey(
+    input: {
+      sourceInstanceId: string;
+      currentKeyId: string;
+      expectedVersion: number;
+    },
+    meta: DeviceCommandMeta,
+  ): Promise<EdgeInstallationRecord>;
+  consumeEdgeRateLimit(input: {
     sourceInstanceId: string;
-    organizationId: string;
-    branchId: string;
-    currentKeyId: string;
-  }, meta: DeviceCommandMeta): Promise<EdgeInstallationRecord>;
-  rotateEdgeInstallationKey(input: {
-    sourceInstanceId: string;
-    currentKeyId: string;
-    expectedVersion: number;
-  }, meta: DeviceCommandMeta): Promise<EdgeInstallationRecord>;
-  consumeEdgeRateLimit(input: { sourceInstanceId: string; windowStartedAt: Date; limit: number }): Promise<boolean>;
-  importEdgeTransactionEvent(event: EdgeTransactionEvent, correlationId: string): Promise<'accepted' | 'duplicate'>;
+    windowStartedAt: Date;
+    limit: number;
+  }): Promise<boolean>;
+  importEdgeTransactionEvent(
+    event: EdgeTransactionEvent,
+    correlationId: string,
+  ): Promise<'accepted' | 'duplicate'>;
   isReady(): Promise<void>;
 }

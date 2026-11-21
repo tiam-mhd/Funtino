@@ -16,8 +16,12 @@ channels:
         $ref: '#/components/messages/UserRegistered'
       householdCreated:
         $ref: '#/components/messages/HouseholdCreated'
+      householdUpdated:
+        $ref: '#/components/messages/HouseholdUpdated'
       householdMemberCreated:
         $ref: '#/components/messages/HouseholdMemberCreated'
+      provisionalCustomerCreated:
+        $ref: '#/components/messages/ProvisionalCustomerCreated'
       householdMemberUpdated:
         $ref: '#/components/messages/HouseholdMemberUpdated'
       familyRelationshipChanged:
@@ -95,10 +99,18 @@ components:
       name: HouseholdCreated
       payload:
         $ref: '../events/common/envelope.schema.json'
+    HouseholdUpdated:
+      name: HouseholdUpdated
+      payload:
+        $ref: '../events/common/envelope.schema.json'
     HouseholdMemberCreated:
       name: HouseholdMemberCreated
       payload:
         $ref: '../events/customer/household-member-created.v1.schema.json'
+    ProvisionalCustomerCreated:
+      name: ProvisionalCustomerCreated
+      payload:
+        $ref: '../events/customer/provisional-customer-created.v1.schema.json'
     HouseholdMemberUpdated:
       name: HouseholdMemberUpdated
       payload:

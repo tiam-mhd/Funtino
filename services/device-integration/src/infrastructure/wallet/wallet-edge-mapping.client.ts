@@ -1,22 +1,20 @@
 import { ConflictException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { isRunflareClusterIpServiceBaseUrl } from '@funtino/backend-core';
+import { edgeCardMappingSchema } from '@funtino/event-contracts';
 import { z } from 'zod';
 
-const mappingsSchema = z.array(z.object({
-  cardId: z.string().uuid(),
-  externalCardId: z.string().min(1).max(160),
-  householdId: z.string().uuid(),
-  memberId: z.string().uuid().nullable(),
-}).strict()).max(20_000);
-const reconciliationResultSchema = z.object({
-  snapshotId: z.string().uuid(),
-  cardId: z.string().uuid(),
-  balanceRial: z.number().int().safe().nullable(),
-  differenceRial: z.number().int().safe().nullable(),
-  freshness: z.enum(['fresh', 'pending_sync', 'stale', 'unknown']),
-  observedAt: z.string().datetime({ offset: true }),
-  duplicate: z.boolean(),
-}).strict();
+const mappingsSchema = z.array(edgeCardMappingSchema).max(20_000);
+const reconciliationResultSchema = z
+  .object({
+    snapshotId: z.string().uuid(),
+    cardId: z.string().uuid(),
+    balanceRial: z.number().int().safe().nullable(),
+    differenceRial: z.number().int().safe().nullable(),
+    freshness: z.enum(['fresh', 'pending_sync', 'stale', 'unknown']),
+    observedAt: z.string().datetime({ offset: true }),
+    duplicate: z.boolean(),
+  })
+  .strict();
 
 @Injectable()
 export class WalletEdgeMappingClient {
@@ -28,10 +26,21 @@ export class WalletEdgeMappingClient {
     let url: URL;
     try {
       const base = new URL(baseUrl);
-      if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password || base.search || base.hash ||
-        (process.env.NODE_ENV === 'production' && base.protocol !== 'https:' && !isRunflareClusterIpServiceBaseUrl(base)))
+      if (
+        !['http:', 'https:'].includes(base.protocol) ||
+        base.username ||
+        base.password ||
+        base.search ||
+        base.hash ||
+        (process.env.NODE_ENV === 'production' &&
+          base.protocol !== 'https:' &&
+          !isRunflareClusterIpServiceBaseUrl(base))
+      )
         throw new Error('Invalid Wallet URL');
-      url = new URL(`/internal/v1/organizations/${encodeURIComponent(organizationId)}/branches/${encodeURIComponent(branchId)}/edge-card-mappings`, base);
+      url = new URL(
+        `/internal/v1/organizations/${encodeURIComponent(organizationId)}/branches/${encodeURIComponent(branchId)}/edge-card-mappings`,
+        base,
+      );
     } catch {
       throw new ServiceUnavailableException('Wallet Edge mapping endpoint is invalid.');
     }
@@ -52,11 +61,14 @@ export class WalletEdgeMappingClient {
     }
     if (!response.ok) throw new ServiceUnavailableException('Wallet Edge mapping is unavailable.');
     let value: unknown;
-    try { value = await response.json(); } catch {
+    try {
+      value = await response.json();
+    } catch {
       throw new ServiceUnavailableException('Wallet Edge mapping response is invalid.');
     }
     const parsed = mappingsSchema.safeParse(value);
-    if (!parsed.success) throw new ServiceUnavailableException('Wallet Edge mapping response is invalid.');
+    if (!parsed.success)
+      throw new ServiceUnavailableException('Wallet Edge mapping response is invalid.');
     return parsed.data;
   }
 
@@ -81,8 +93,16 @@ export class WalletEdgeMappingClient {
     let url: URL;
     try {
       const base = new URL(baseUrl);
-      if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password || base.search || base.hash ||
-        (process.env.NODE_ENV === 'production' && base.protocol !== 'https:' && !isRunflareClusterIpServiceBaseUrl(base)))
+      if (
+        !['http:', 'https:'].includes(base.protocol) ||
+        base.username ||
+        base.password ||
+        base.search ||
+        base.hash ||
+        (process.env.NODE_ENV === 'production' &&
+          base.protocol !== 'https:' &&
+          !isRunflareClusterIpServiceBaseUrl(base))
+      )
         throw new Error('Invalid Wallet URL');
       url = new URL('/internal/v2/edge/balances/reconcile', base);
     } catch {
@@ -107,15 +127,23 @@ export class WalletEdgeMappingClient {
       throw new ServiceUnavailableException('Wallet balance reconciliation is unavailable.');
     }
     if (response.status === 409)
-      throw new ConflictException('Wallet rejected the physical balance snapshot for reconciliation.');
-    if (!response.ok) throw new ServiceUnavailableException('Wallet balance reconciliation was rejected.');
+      throw new ConflictException(
+        'Wallet rejected the physical balance snapshot for reconciliation.',
+      );
+    if (!response.ok)
+      throw new ServiceUnavailableException('Wallet balance reconciliation was rejected.');
     let value: unknown;
-    try { value = await response.json(); } catch {
+    try {
+      value = await response.json();
+    } catch {
       throw new ServiceUnavailableException('Wallet balance reconciliation response is invalid.');
     }
     const parsed = reconciliationResultSchema.safeParse(value);
-    if (!parsed.success || parsed.data.snapshotId.toLowerCase() !== input.snapshotId.toLowerCase() ||
-      parsed.data.cardId.toLowerCase() !== input.cardId.toLowerCase())
+    if (
+      !parsed.success ||
+      parsed.data.snapshotId.toLowerCase() !== input.snapshotId.toLowerCase() ||
+      parsed.data.cardId.toLowerCase() !== input.cardId.toLowerCase()
+    )
       throw new ServiceUnavailableException('Wallet balance reconciliation response is invalid.');
     return parsed.data;
   }

@@ -46,5 +46,6 @@
 - [ADR-0028: مدیریت نقش‌های scoped در پنل Operations](0028-operations-scoped-role-management.md)
 - [ADR-0029: مدیریت اعضای scoped در پنل Operations](0029-operations-scoped-member-management.md)
 - [ADR-0030: Edge ویندوز، دفترکل کارت و قیمت‌گذاری مرکزی — پذیرفته‌شده](0030-windows-edge-wallet-ledger-pricing.md)
+- [ADR-0031: توکن اپراتور Edge، رکورد موقت مشتری و انتقال مالکیت پروفایل — پذیرفته‌شده](0031-edge-operator-tokens-and-provisional-customers.md)
 
 - [راهنمای عملیات Windows Edge، Wallet و rollback](../WindowsEdgeWalletOperations.md)

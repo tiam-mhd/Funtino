@@ -11,6 +11,7 @@ import type {
   OperationsAccessContext,
 } from '../infrastructure/identity-access/identity-access.client.js';
 import type { OrganizationBranchClient } from '../infrastructure/organization-branch/organization-branch.client.js';
+import type { CustomerHouseholdClient } from '../infrastructure/customer-household/customer-household.client.js';
 
 const userId = '11111111-1111-4111-8111-111111111111';
 const organizationId = '22222222-2222-4222-8222-222222222222';
@@ -334,9 +335,13 @@ test('selection rechecks active owner state and audits the selected branch only 
 
 test('scope-selection audit persists the complete organization and branch scope without a schema migration', async () => {
   const store = new InMemoryFuntinoStore();
-  const auth = new AuthService(store, {
-    currentAccessContext: async () => ({ memberships: [], policyVersion: 1, catalogVersion: 1 }),
-  } as never);
+  const auth = new AuthService(
+    store,
+    {
+      currentAccessContext: async () => ({ memberships: [], policyVersion: 1, catalogVersion: 1 }),
+    } as never,
+    {} as CustomerHouseholdClient,
+  );
 
   await auth.recordOperationsScopeSelection(
     userId,

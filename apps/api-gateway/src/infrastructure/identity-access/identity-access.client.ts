@@ -229,6 +229,29 @@ const authorizationResultSchema = z.object({
   policyVersion: z.number().int().positive(),
   catalogVersion: z.number().int().positive(),
 });
+const edgeOperatorPermissionSchema = z.enum([
+  'card.inventory.read',
+  'card.inventory.manage',
+  'card.assign',
+  'card.transfer',
+  'card.unassign',
+  'customer.lookup.limited',
+  'customer.provisional.create',
+  'customer.family.read',
+  'customer.family.manage',
+  'customer.profile.manage',
+]);
+const edgeOperatorTokenSchema = z
+  .object({
+    token: z.string().min(32).max(256),
+    tokenId: uuidSchema,
+    permissionKeys: z.array(edgeOperatorPermissionSchema).min(1).max(10),
+    branchId: uuidSchema,
+    expiresAt: z.string().datetime({ offset: true }),
+    policyVersion: z.number().int().positive(),
+    catalogVersion: z.number().int().positive(),
+  })
+  .strict();
 
 type RoleSummaryDto = z.infer<typeof roleSummarySchema>;
 
@@ -251,6 +274,7 @@ export type OperationsAuthorizationRequest = {
   scope: AccessScopeDto;
   resource?: { type: string; id: string };
 };
+export type EdgeOperatorPermission = z.infer<typeof edgeOperatorPermissionSchema>;
 
 type IdentityAccessRequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -867,6 +891,42 @@ export class IdentityAccessClient {
     );
   }
 
+  async issueEdgeOperatorToken(
+    userId: string,
+    session: Session,
+    scope: Extract<AccessScopeDto, { type: 'branch' }>,
+    permissionKeys: EdgeOperatorPermission[],
+    correlationId: string,
+  ) {
+    return this.parse(
+      edgeOperatorTokenSchema,
+      await this.request('/internal/v1/edge-operator-tokens', userId, correlationId, {
+        method: 'POST',
+        session,
+        body: { organizationId: scope.organizationId, branchId: scope.branchId, permissionKeys },
+      }),
+    );
+  }
+
+  async revokeEdgeOperatorTokensForSession(
+    userId: string,
+    sessionId: string,
+    correlationId: string,
+  ) {
+    return this.parse(
+      z.object({ revokedCount: z.number().int().nonnegative() }).strict(),
+      await this.request(
+        '/internal/v1/edge-operator-tokens/revoke-session',
+        userId,
+        correlationId,
+        {
+          method: 'POST',
+          body: { sessionId },
+        },
+      ),
+    );
+  }
+
   protected fetcher(input: URL, init: RequestInit): Promise<Response> {
     return fetch(input, init);
   }
@@ -944,6 +1004,7 @@ export class IdentityAccessClient {
 
     const headers: Record<string, string> = {
       accept: 'application/json',
+      'x-funtino-service-id': 'api-gateway',
       'x-funtino-service-token': serviceToken,
       'cache-control': 'no-store',
     };

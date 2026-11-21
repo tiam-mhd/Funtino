@@ -14,70 +14,35 @@ import {
 } from '@nestjs/common';
 import { normalizeCorrelationId } from '@funtino/backend-core';
 import type { FastifyRequest } from 'fastify';
+import {
+  edgeEventBatchRequestSchema as batchSchema,
+  edgeIngestResponseSchema,
+  edgeTransactionPayloadSchema as edgeEventSchema,
+} from '@funtino/event-contracts';
 import { z } from 'zod';
 import { DeviceRegistryService } from '../../application/device-registry.service.js';
 import {
   DEVICE_SIGNATURE_VERIFIER,
   type DeviceSignatureVerifier,
 } from '../../application/ports/device-signature-verifier.port.js';
-import type { EdgeTransactionEvent } from '../../application/ports/device-registry.repository.js';
 import { WalletEdgeMappingClient } from '../../infrastructure/wallet/wallet-edge-mapping.client.js';
 
 const uuid = z.string().uuid();
-const edgeEventSchema: z.ZodType<EdgeTransactionEvent> = z
+const balanceSnapshotSchema = z
   .object({
-    eventId: uuid,
     sourceInstanceId: uuid,
-    localTransactionId: z.string().trim().min(1).max(160),
-    sourceDatabase: z.string().trim().min(1).max(160),
-    organizationId: uuid,
     branchId: uuid,
+    snapshotId: uuid,
+    snapshotVersion: z.string().trim().min(1).max(120),
     cardId: uuid,
     householdId: uuid,
-    memberId: uuid.nullable().optional().transform((value) => value ?? null),
-    deviceId: uuid.nullable(),
-    sourceDeviceId: z.string().trim().min(1).max(160).nullable(),
-    transactionKind: z.enum([
-      'top_up',
-      'spend',
-      'refund',
-      'adjustment',
-      'issuance',
-      'card_replacement',
-    ]),
-    amountRial: z.number().int().safe(),
+    memberId: uuid.nullable(),
+    localSequence: z.number().int().nonnegative().safe(),
+    balanceRial: z.number().int().nonnegative().safe(),
     currencyCode: z.literal('IRR'),
-    grossAmountRial: z.number().int().nonnegative().safe(),
-    discountAmountRial: z.number().int().nonnegative().safe(),
-    netAmountRial: z.number().int().nonnegative().safe(),
-    promotionId: z.string().trim().min(1).max(160).nullable(),
-    ruleId: z.string().trim().min(1).max(160).nullable(),
-    pricingVersion: z.string().trim().min(1).max(80).nullable(),
-    reversalOfLocalTransactionId: z.string().trim().min(1).max(160).nullable().optional().transform((value) => value ?? null),
-    occurredAt: z.string().datetime({ offset: true }),
-    localSequence: z.number().int().positive().safe(),
-    balanceAfterRial: z.number().int().nonnegative().safe().nullable(),
-    operationResult: z.enum(['success', 'cancelled', 'failed']),
-    snapshotVersion: z.string().trim().min(1).max(120),
+    observedAt: z.string().datetime({ offset: true }),
   })
   .strict();
-
-const batchSchema = z
-  .object({ sourceInstanceId: uuid, events: z.array(z.unknown()).min(1).max(100) })
-  .strict();
-const balanceSnapshotSchema = z.object({
-  sourceInstanceId: uuid,
-  branchId: uuid,
-  snapshotId: uuid,
-  snapshotVersion: z.string().trim().min(1).max(120),
-  cardId: uuid,
-  householdId: uuid,
-  memberId: uuid.nullable(),
-  localSequence: z.number().int().nonnegative().safe(),
-  balanceRial: z.number().int().nonnegative().safe(),
-  currencyCode: z.literal('IRR'),
-  observedAt: z.string().datetime({ offset: true }),
-}).strict();
 
 @Controller('internal/v2/edge')
 export class EdgeController {
@@ -131,7 +96,11 @@ export class EdgeController {
       events,
       correlationId: normalizeCorrelationId(correlationId ?? request.id),
     });
-    return { results };
+    const response = edgeIngestResponseSchema.safeParse({ results });
+    if (!response.success || response.data.results.length !== batch.data.events.length) {
+      throw new ServiceUnavailableException('Edge event acknowledgement could not be validated.');
+    }
+    return response.data;
   }
 
   @Post('balances/reconcile')
@@ -155,10 +124,16 @@ export class EdgeController {
     const parsed = balanceSnapshotSchema.safeParse(rawBodyValue);
     if (!parsed.success) throw new BadRequestException('Physical balance snapshot is invalid.');
     const installation = await this.service.getEdgeInstallation(installationId!);
-    if (!installation || installation.status !== 'active' ||
+    if (
+      !installation ||
+      installation.status !== 'active' ||
       (installation.currentKeyId !== keyId && installation.previousKeyId !== keyId) ||
-      parsed.data.sourceInstanceId !== installation.sourceInstanceId || parsed.data.branchId !== installation.branchId)
-      throw new UnauthorizedException('Edge installation is not authorized for this balance snapshot.');
+      parsed.data.sourceInstanceId !== installation.sourceInstanceId ||
+      parsed.data.branchId !== installation.branchId
+    )
+      throw new UnauthorizedException(
+        'Edge installation is not authorized for this balance snapshot.',
+      );
     if (!(await this.service.consumeEdgeRequestQuota(installationId!)))
       throw new HttpException('Edge request rate limit exceeded.', HttpStatus.TOO_MANY_REQUESTS);
 

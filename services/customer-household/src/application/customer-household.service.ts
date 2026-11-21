@@ -27,7 +27,7 @@ export type HouseholdCommandMeta = {
   actorUserId: string;
   correlationId: string;
   idempotencyKey: string;
-  callerService: 'api-gateway';
+  callerService: 'api-gateway' | 'device-integration';
 };
 
 export type CreateHouseholdInput = { ownerUserId: string; name: string };
@@ -180,6 +180,69 @@ export class CustomerHouseholdService {
         },
       });
       return result;
+    });
+  }
+
+  async updateHousehold(
+    householdId: string,
+    input: { name: string; expectedVersion: number },
+    meta: HouseholdCommandMeta,
+  ): Promise<HouseholdDto> {
+    let name: string;
+    try {
+      name = normalizeHouseholdName(input.name);
+    } catch {
+      throw new BadRequestException('Household name is invalid.');
+    }
+    const command = { householdId, name, expectedVersion: input.expectedVersion };
+    return this.executeIdempotent('household.update', command, meta, async (tx) => {
+      const current = await tx.household.findFirst({
+        where: { id: householdId, status: 'active' },
+      });
+      if (!current) throw new NotFoundException('Household not found.');
+      if (meta.callerService === 'api-gateway' && current.ownerUserId !== meta.actorUserId) {
+        throw new ForbiddenException('Only the household owner can update its name.');
+      }
+      if (current.version !== input.expectedVersion) {
+        throw new ConflictException({ code: 'VERSION_CONFLICT', currentVersion: current.version });
+      }
+      const updated = await tx.household.updateMany({
+        where: { id: householdId, status: 'active', version: input.expectedVersion },
+        data: { name, version: { increment: 1 }, updatedAt: new Date() },
+      });
+      if (updated.count !== 1) {
+        throw new ConflictException({ code: 'VERSION_CONFLICT' });
+      }
+      const saved = await tx.household.findUniqueOrThrow({ where: { id: householdId } });
+      await tx.auditLog.create({
+        data: {
+          id: randomUUID(),
+          actorUserId: meta.actorUserId,
+          callerService: meta.callerService,
+          action: 'customer.household.updated',
+          resourceType: 'household',
+          resourceId: householdId,
+          correlationId: meta.correlationId,
+          before: { version: current.version },
+          after: { version: saved.version },
+        },
+      });
+      const envelope = createEventEnvelope({
+        eventType: eventTypes.householdUpdated,
+        sourceId: 'customer-household',
+        aggregateId: householdId,
+        correlationId: meta.correlationId,
+        payload: { householdId },
+      });
+      await tx.outboxEvent.create({
+        data: {
+          id: envelope.eventId,
+          eventType: envelope.eventType,
+          aggregateId: householdId,
+          envelope: envelope as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return mapHousehold(saved);
     });
   }
 
@@ -1929,17 +1992,23 @@ export class CustomerHouseholdService {
       isDependent: input.isDependent ?? true,
     };
     return this.executeIdempotent('household.member.create', command, meta, async (tx) => {
-      const access = await tx.householdAccess.findFirst({
-        where: {
-          householdId,
-          userId: meta.actorUserId,
-          status: 'active',
-          role: 'owner',
-          household: { status: 'active' },
-        },
-        select: { householdId: true },
-      });
-      if (!access) throw new NotFoundException('Household not found.');
+      if (meta.callerService === 'api-gateway') {
+        const access = await tx.householdAccess.findFirst({
+          where: {
+            householdId,
+            userId: meta.actorUserId,
+            status: 'active',
+            role: 'owner',
+            household: { status: 'active' },
+          },
+          select: { householdId: true },
+        });
+        if (!access) throw new NotFoundException('Household not found.');
+      } else if (
+        !(await tx.household.findFirst({ where: { id: householdId, status: 'active' } }))
+      ) {
+        throw new NotFoundException('Household not found.');
+      }
 
       const now = new Date();
       const member = await tx.householdMember.create({

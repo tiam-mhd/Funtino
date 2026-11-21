@@ -1,9 +1,64 @@
 import { z } from 'zod';
+import { edgeTransactionPayloadSchema } from './generated/windows-edge-contract.v1.js';
+export {
+  edgeTransactionPayloadSchema,
+  edgeEventBatchRequestSchema,
+  edgeIngestResultSchema,
+  edgeIngestResponseSchema,
+  edgeCardMappingSchema,
+  edgeSnapshotItemSchema,
+  edgeSnapshotPageSchema,
+  edgeCardAssignmentRequestSchema,
+  edgeCardCommandRequestSchema,
+  edgeCardAssignmentResultSchema,
+  edgeCardBlockResultSchema,
+  edgeCardReplacementRequestResultSchema,
+  edgeCustomerSearchQuerySchema,
+  edgeCustomerSearchItemSchema,
+  edgeCustomerSearchPageSchema,
+  edgeCustomerProfileSchema,
+  edgeCustomerProfilePatchRequestSchema,
+  edgeHouseholdReadSchema,
+  edgeHouseholdMemberSchema,
+  edgeHouseholdPatchRequestSchema,
+  edgeHouseholdMemberCreateRequestSchema,
+  edgeProfileMutationResultSchema,
+  edgeHouseholdMutationResultSchema,
+  edgeHouseholdMemberMutationResultSchema,
+} from './generated/windows-edge-contract.v1.js';
+export type {
+  EdgeTransactionPayload,
+  EdgeEventBatchRequest,
+  EdgeIngestResult,
+  EdgeIngestResponse,
+  EdgeCardMapping,
+  EdgeSnapshotItem,
+  EdgeSnapshotPage,
+  EdgeCardAssignmentRequest,
+  EdgeCardCommandRequest,
+  EdgeCardAssignmentResult,
+  EdgeCardBlockResult,
+  EdgeCardReplacementRequestResult,
+  EdgeCustomerSearchQuery,
+  EdgeCustomerSearchItem,
+  EdgeCustomerSearchPage,
+  EdgeCustomerProfile,
+  EdgeCustomerProfilePatchRequest,
+  EdgeHouseholdRead,
+  EdgeHouseholdMember,
+  EdgeHouseholdPatchRequest,
+  EdgeHouseholdMemberCreateRequest,
+  EdgeProfileMutationResult,
+  EdgeHouseholdMutationResult,
+  EdgeHouseholdMemberMutationResult,
+} from './generated/windows-edge-contract.v1.js';
 
 export const eventTypes = {
   userRegistered: 'identity.user-registered.v1',
   householdCreated: 'customer.household-created.v1',
+  householdUpdated: 'customer.household-updated.v1',
   householdMemberCreated: 'customer.household-member-created.v1',
+  provisionalCustomerCreated: 'customer.provisional-created.v1',
   householdMemberUpdated: 'customer.household-member-updated.v1',
   familyRelationshipChanged: 'customer.family-relationship-changed.v1',
   familyInvitationChanged: 'customer.family-invitation-changed.v1',
@@ -66,10 +121,21 @@ export const householdCreatedPayloadSchema = z.object({
   ownerUserId: z.string().uuid(),
 });
 
+export const householdUpdatedPayloadSchema = z.object({ householdId: z.string().uuid() }).strict();
+
 export const householdMemberCreatedPayloadSchema = z
   .object({
     householdId: z.string().uuid(),
     memberId: z.string().uuid(),
+  })
+  .strict();
+
+export const provisionalCustomerCreatedPayloadSchema = z
+  .object({
+    provisionalId: z.string().uuid(),
+    sourceInstanceId: z.string().uuid(),
+    branchId: z.string().uuid(),
+    status: z.literal('pending_review'),
   })
   .strict();
 
@@ -126,36 +192,7 @@ export const deviceTransactionImportedPayloadSchema = z.object({
   occurredAt: z.string().datetime({ offset: true }),
 });
 
-export const edgeTransactionImportedV2PayloadSchema = z
-  .object({
-    eventId: z.string().uuid(),
-    sourceInstanceId: z.string().uuid(),
-    localTransactionId: z.string().min(1).max(160),
-    sourceDatabase: z.string().min(1).max(160),
-    organizationId: z.string().uuid(),
-    branchId: z.string().uuid(),
-    cardId: z.string().uuid(),
-    householdId: z.string().uuid(),
-    memberId: z.string().uuid().nullable().optional(),
-    deviceId: z.string().uuid().nullable(),
-    sourceDeviceId: z.string().min(1).max(160).nullable(),
-    transactionKind: z.enum(['top_up', 'spend', 'refund', 'adjustment', 'issuance', 'card_replacement']),
-    amountRial: z.number().int().safe(),
-    currencyCode: z.literal('IRR'),
-    grossAmountRial: z.number().int().nonnegative().safe(),
-    discountAmountRial: z.number().int().nonnegative().safe(),
-    netAmountRial: z.number().int().nonnegative().safe(),
-    promotionId: z.string().min(1).max(160).nullable(),
-    ruleId: z.string().min(1).max(160).nullable(),
-    pricingVersion: z.string().min(1).max(80).nullable(),
-    reversalOfLocalTransactionId: z.string().min(1).max(160).nullable().optional(),
-    occurredAt: z.string().datetime({ offset: true }),
-    localSequence: z.number().int().positive().safe(),
-    balanceAfterRial: z.number().int().nonnegative().safe().nullable(),
-    operationResult: z.enum(['success', 'cancelled', 'failed']),
-    snapshotVersion: z.string().min(1).max(120),
-  })
-  .strict();
+export const edgeTransactionImportedV2PayloadSchema = edgeTransactionPayloadSchema;
 
 export const deviceRegisteredPayloadSchema = z
   .object({
@@ -430,7 +467,9 @@ export const formResponseCorrectedPayloadSchema = z
 export const eventPayloadSchemas = {
   [eventTypes.userRegistered]: userRegisteredPayloadSchema,
   [eventTypes.householdCreated]: householdCreatedPayloadSchema,
+  [eventTypes.householdUpdated]: householdUpdatedPayloadSchema,
   [eventTypes.householdMemberCreated]: householdMemberCreatedPayloadSchema,
+  [eventTypes.provisionalCustomerCreated]: provisionalCustomerCreatedPayloadSchema,
   [eventTypes.householdMemberUpdated]: householdMemberUpdatedPayloadSchema,
   [eventTypes.familyRelationshipChanged]: familyRelationshipChangedPayloadSchema,
   [eventTypes.familyInvitationChanged]: familyInvitationChangedPayloadSchema,

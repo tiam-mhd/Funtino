@@ -3,7 +3,6 @@ import test from 'node:test';
 import { hashSecret } from '@funtino/backend-core';
 import { AuthService } from '../application/auth/auth.service.js';
 import { CustomerService } from '../application/customer/customer.service.js';
-import type { Session } from '../domain/models.js';
 import type { IdentityAccessClient } from '../infrastructure/identity-access/identity-access.client.js';
 import type { CustomerHouseholdClient } from '../infrastructure/customer-household/customer-household.client.js';
 import type { WalletClient } from '../infrastructure/wallet/wallet.client.js';
@@ -49,13 +48,39 @@ function accessClient(systemAdmin = false): IdentityAccessClient {
   } as unknown as IdentityAccessClient;
 }
 
+function customerProfileClient(): CustomerHouseholdClient {
+  return {
+    getCustomerProfile: async (userId: string) => ({
+      userId,
+      firstName: null,
+      lastName: null,
+      email: null,
+      birthDate: null,
+      gender: null,
+      city: null,
+      avatarPreset: null,
+      hasUploadedAvatar: false,
+      avatarUpdatedAt: null,
+      profileCompletedAt: null,
+      profileCompleted: false,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }),
+  } as unknown as CustomerHouseholdClient;
+}
+
 test('customer OTP creates only a customer-audience session without consulting management IAM', async () => {
   const store = new InMemoryFuntinoStore();
-  const auth = new AuthService(store, {
-    currentAccessContext: async () => {
-      throw new Error('customer authentication must not classify management memberships');
-    },
-  } as unknown as IdentityAccessClient);
+  const auth = new AuthService(
+    store,
+    {
+      currentAccessContext: async () => {
+        throw new Error('customer authentication must not classify management memberships');
+      },
+    } as unknown as IdentityAccessClient,
+    customerProfileClient(),
+  );
   const otp = await auth.requestOtp('09121234567');
   assert.ok(otp.devCode);
 
@@ -70,7 +95,7 @@ test('customer OTP creates only a customer-audience session without consulting m
 
 test('management OTP creates a separate session without mandatory TOTP enrollment', async () => {
   const store = new InMemoryFuntinoStore();
-  const auth = new AuthService(store, accessClient(true));
+  const auth = new AuthService(store, accessClient(true), customerProfileClient());
   await store.createUser('+989121234568');
   const otp = await auth.requestOtp('09121234568', 'management_login');
   assert.ok(otp.devCode);
@@ -90,11 +115,15 @@ test('management OTP creates a separate session without mandatory TOTP enrollmen
 test('management IAM failure does not create a session', async () => {
   const store = new InMemoryFuntinoStore();
   store.createUser('09121234569');
-  const auth = new AuthService(store, {
-    currentAccessContext: async () => {
-      throw new Error('IAM unavailable');
-    },
-  } as unknown as IdentityAccessClient);
+  const auth = new AuthService(
+    store,
+    {
+      currentAccessContext: async () => {
+        throw new Error('IAM unavailable');
+      },
+    } as unknown as IdentityAccessClient,
+    customerProfileClient(),
+  );
   const otp = await auth.requestOtp('09121234569', 'management_login');
   assert.ok(otp.devCode);
 
@@ -111,7 +140,7 @@ test('management IAM failure does not create a session', async () => {
 
 test('optional management password gates the second login factor and uses one-time challenges', async () => {
   const store = new InMemoryFuntinoStore();
-  const auth = new AuthService(store, accessClient(true));
+  const auth = new AuthService(store, accessClient(true), customerProfileClient());
   const phone = '09121234570';
   await store.createUser('+989121234570');
   const initialOtp = await auth.requestOtp(phone, 'management_login');
@@ -220,13 +249,23 @@ test('customer card presentation derives family/branch only from owner and Walle
       },
     ],
     getCardLedgerSummary: async () => ({
-      householdId, cardId, memberId: null, balanceRial: null, lastConfirmedSnapshotAt: null,
-      lastAppliedEventId: null, freshness: 'unknown' as const, pendingTransactionCount: 0,
+      householdId,
+      cardId,
+      memberId: null,
+      balanceRial: null,
+      lastConfirmedSnapshotAt: null,
+      lastAppliedEventId: null,
+      freshness: 'unknown' as const,
+      pendingTransactionCount: 0,
       reconciliationDifferenceRial: null,
     }),
   } as unknown as WalletClient;
   const customer = new CustomerService(
-    store, owner, wallet, {} as OrganizationBranchClient, {} as DeviceIntegrationClient,
+    store,
+    owner,
+    wallet,
+    {} as OrganizationBranchClient,
+    {} as DeviceIntegrationClient,
   );
   const cards = await customer.listCards(adminUserId);
 

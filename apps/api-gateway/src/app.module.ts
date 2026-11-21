@@ -14,6 +14,8 @@ import { SystemCustomerFamilyController } from './interfaces/http/system-custome
 import { HealthController } from './interfaces/http/health.controller.js';
 import { OperationsAccessController } from './interfaces/http/operations-access.controller.js';
 import { OperationsDevicesController } from './interfaces/http/operations-devices.controller.js';
+import { OperationsEdgeTokenController } from './interfaces/http/operations-edge-token.controller.js';
+import { EdgeIdentityLookupController } from './interfaces/http/edge-identity-lookup.controller.js';
 import { OperationsMfaController } from './interfaces/http/operations-mfa.controller.js';
 import { OperationsReportsController } from './interfaces/http/operations-reports.controller.js';
 import { OperationsScopeController } from './interfaces/http/operations-scope.controller.js';
@@ -56,6 +58,8 @@ import { SystemFormsController } from './interfaces/http/system-forms.controller
     OperationsAccessController,
     OperationsCardsController,
     OperationsDevicesController,
+    OperationsEdgeTokenController,
+    EdgeIdentityLookupController,
     OperationsFormsController,
     OperationsMfaController,
     OperationsReportsController,

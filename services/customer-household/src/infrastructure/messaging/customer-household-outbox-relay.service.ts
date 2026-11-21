@@ -10,7 +10,12 @@ import { PrismaService } from '../persistence/prisma/prisma.service.js';
 
 export const CUSTOMER_HOUSEHOLD_EVENT_BUS = Symbol('CUSTOMER_HOUSEHOLD_EVENT_BUS');
 export const CUSTOMER_HOUSEHOLD_RABBIT_URL = Symbol('CUSTOMER_HOUSEHOLD_RABBIT_URL');
-const ownEvents = new Set<string>([eventTypes.householdCreated, eventTypes.householdMemberCreated]);
+const ownEvents = new Set<string>([
+  eventTypes.householdCreated,
+  eventTypes.householdUpdated,
+  eventTypes.householdMemberCreated,
+  eventTypes.provisionalCustomerCreated,
+]);
 
 @Injectable()
 export class CustomerHouseholdOutboxRelayService implements OnModuleInit, OnModuleDestroy {

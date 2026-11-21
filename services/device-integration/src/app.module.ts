@@ -20,10 +20,16 @@ import { PrismaDeviceRegistryRepository } from './infrastructure/persistence/pri
 import { PrismaService } from './infrastructure/persistence/prisma/prisma.service.js';
 import { OrganizationBranchScopeClient } from './infrastructure/organization-branch/organization-branch-scope.client.js';
 import { WalletEdgeMappingClient } from './infrastructure/wallet/wallet-edge-mapping.client.js';
+import { EdgeCardOperationsClient } from './infrastructure/wallet/edge-card-operations.client.js';
 import { PricingSnapshotClient } from './infrastructure/pricing/pricing-snapshot.client.js';
+import { EdgeOperatorTokenClient } from './infrastructure/identity-access/edge-operator-token.client.js';
+import { EdgeProvisionalCustomerClient } from './infrastructure/customer-household/edge-provisional-customer.client.js';
+import { EdgeHouseholdOperationsClient } from './infrastructure/customer-household/edge-household-operations.client.js';
+import { EdgeIdentityLookupClient } from './infrastructure/gateway/edge-identity-lookup.client.js';
 import { HmacDeviceSignatureService } from './infrastructure/security/hmac-device-signature.service.js';
 import { DeviceController, DeviceWebhookController } from './interfaces/http/device.controller.js';
 import { EdgeController } from './interfaces/http/edge.controller.js';
+import { EdgeCustomerOperationsController } from './interfaces/http/edge-customer-operations.controller.js';
 import { EdgeInstallationController } from './interfaces/http/edge-installation.controller.js';
 import { EdgeSnapshotController } from './interfaces/http/edge-snapshot.controller.js';
 import { EdgeSyncOperationsController } from './interfaces/http/edge-sync-operations.controller.js';
@@ -49,14 +55,28 @@ function configuredHealthPolicy(): DeviceHealthPolicy {
 
 @Module({
   imports: [ConfigModule.forRoot({ isGlobal: true })],
-  controllers: [DeviceController, DeviceWebhookController, EdgeController, EdgeInstallationController, EdgeSnapshotController, EdgeSyncOperationsController, HealthController],
+  controllers: [
+    DeviceController,
+    DeviceWebhookController,
+    EdgeController,
+    EdgeCustomerOperationsController,
+    EdgeInstallationController,
+    EdgeSnapshotController,
+    EdgeSyncOperationsController,
+    HealthController,
+  ],
   providers: [
     PrismaService,
     DeviceRegistryService,
     EdgeSnapshotService,
     EdgeSyncOperationsService,
     WalletEdgeMappingClient,
+    EdgeCardOperationsClient,
     PricingSnapshotClient,
+    EdgeOperatorTokenClient,
+    EdgeProvisionalCustomerClient,
+    EdgeHouseholdOperationsClient,
+    EdgeIdentityLookupClient,
     DeviceIntegrationServiceTokenGuard,
     DeviceOutboxRelayService,
     PrismaDeviceRegistryRepository,

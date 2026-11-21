@@ -139,6 +139,44 @@ const invitationPreviewSchema = z
   })
   .strict();
 const invalidInvitationPreviewSchema = z.object({ valid: z.literal(false) }).strict();
+const customerProfileSchema = z
+  .object({
+    userId: uuid,
+    firstName: z.string().nullable(),
+    lastName: z.string().nullable(),
+    email: z.string().nullable(),
+    birthDate: z.string().date().nullable(),
+    gender: z.enum(['female', 'male', 'other', 'prefer_not_to_say']).nullable(),
+    city: z.string().nullable(),
+    avatarPreset: z.string().nullable(),
+    hasUploadedAvatar: z.boolean(),
+    avatarUpdatedAt: z.string().datetime({ offset: true }).nullable(),
+    profileCompletedAt: z.string().datetime({ offset: true }).nullable(),
+    profileCompleted: z.boolean(),
+    version: z.number().int().positive(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+const customerAvatarSchema = z
+  .object({
+    userId: uuid,
+    mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+    dataBase64: z.string().min(4).max(2_666_668),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export type CustomerOwnedProfile = z.infer<typeof customerProfileSchema>;
+export type CustomerOwnedProfileUpdate = {
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  birthDate?: string | null;
+  gender?: 'female' | 'male' | 'other' | 'prefer_not_to_say' | null;
+  city?: string | null;
+  avatarPreset?: string | null;
+};
 
 export type CustomerFamily = z.infer<typeof familyResponseSchema>;
 export type CustomerFamilyInvitation = z.infer<typeof invitationSchema>;
@@ -177,6 +215,80 @@ export type CustomerHouseholdMemberInput = {
 export class CustomerHouseholdClient {
   protected fetcher(input: URL, init: RequestInit): Promise<Response> {
     return fetch(input, init);
+  }
+
+  async getCustomerProfile(userId: string): Promise<CustomerOwnedProfile> {
+    const parsed = customerProfileSchema.safeParse(
+      await this.request(`/internal/v1/customer-profiles/${encodeURIComponent(userId)}`, {
+        userId,
+      }),
+    );
+    if (!parsed.success || parsed.data.userId.toLowerCase() !== userId.toLowerCase())
+      throw this.contractError();
+    return parsed.data;
+  }
+
+  async updateCustomerProfile(
+    userId: string,
+    input: CustomerOwnedProfileUpdate,
+    meta: { correlationId: string; idempotencyKey: string },
+  ): Promise<CustomerOwnedProfile> {
+    const current = await this.getCustomerProfile(userId);
+    const parsed = customerProfileSchema.safeParse(
+      await this.request(`/internal/v1/customer-profiles/${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        userId,
+        correlationId: meta.correlationId,
+        idempotencyKey: meta.idempotencyKey,
+        body: { ...input, expectedVersion: current.version },
+      }),
+    );
+    if (!parsed.success || parsed.data.userId.toLowerCase() !== userId.toLowerCase())
+      throw this.contractError();
+    return parsed.data;
+  }
+
+  async saveCustomerAvatar(
+    userId: string,
+    input: { mimeType: string; data: Buffer },
+    meta: { correlationId: string; idempotencyKey: string },
+  ): Promise<CustomerOwnedProfile> {
+    const current = await this.getCustomerProfile(userId);
+    const parsed = customerProfileSchema.safeParse(
+      await this.request(`/internal/v1/customer-profiles/${encodeURIComponent(userId)}/avatar`, {
+        method: 'PUT',
+        userId,
+        correlationId: meta.correlationId,
+        idempotencyKey: meta.idempotencyKey,
+        body: {
+          expectedVersion: current.version,
+          mimeType: input.mimeType,
+          dataBase64: input.data.toString('base64'),
+        },
+      }),
+    );
+    if (!parsed.success || parsed.data.userId.toLowerCase() !== userId.toLowerCase())
+      throw this.contractError();
+    return parsed.data;
+  }
+
+  async getCustomerAvatar(
+    userId: string,
+  ): Promise<{ userId: string; mimeType: string; data: Buffer; updatedAt: string } | undefined> {
+    const value = await this.request(
+      `/internal/v1/customer-profiles/${encodeURIComponent(userId)}/avatar`,
+      { userId },
+    );
+    if (value === null) return undefined;
+    const parsed = customerAvatarSchema.safeParse(value);
+    if (!parsed.success || parsed.data.userId.toLowerCase() !== userId.toLowerCase())
+      throw this.contractError();
+    return {
+      userId,
+      mimeType: parsed.data.mimeType,
+      data: Buffer.from(parsed.data.dataBase64, 'base64'),
+      updatedAt: parsed.data.updatedAt,
+    };
   }
 
   async listHouseholdsForUser(userId: string): Promise<CustomerHousehold[]> {
@@ -469,7 +581,7 @@ export class CustomerHouseholdClient {
   private async request(
     path: string,
     options: {
-      method?: 'GET' | 'POST' | 'PATCH';
+      method?: 'GET' | 'POST' | 'PATCH' | 'PUT';
       userId?: string;
       correlationId?: string;
       idempotencyKey?: string;

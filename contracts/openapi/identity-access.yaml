@@ -51,6 +51,87 @@ paths:
           description: Invalid service credential.
         '503':
           description: Service authentication is not configured.
+  /internal/v1/edge-operator-tokens:
+    post:
+      x-funtino-availability: implemented
+      operationId: issueEdgeOperatorToken
+      description: Accepts only API Gateway service identity. Rechecks active branch ownership and every requested permission. Returns an opaque token once; IAM stores only its SHA-256 hash and fixes expiry to five minutes.
+      security:
+        - serviceToken: []
+          serviceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EdgeOperatorTokenIssueRequest' }
+      responses:
+        '201':
+          description: Token issued and audited. Cache-Control is no-store.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'no-store, private' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EdgeOperatorTokenIssueResponse' }
+        '400': { description: Invalid actor, branch or permission list. }
+        '401': { description: API Gateway service identity or session context is invalid. }
+        '403': { description: Actor lacks one or more requested branch permissions. }
+        '503':
+          {
+            description: IAM or Organization & Branch owner is unavailable; token issuance fails closed.,
+          }
+  /internal/v1/edge-operator-tokens/validate:
+    post:
+      x-funtino-availability: implemented
+      operationId: validateEdgeOperatorToken
+      description: Accepts only Device Integration service identity and its dedicated credential. Checks branch, expiry, revocation, current active branch and current IAM permission on every call.
+      security:
+        - serviceToken: []
+          serviceIdentity: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EdgeOperatorTokenValidateRequest' }
+      responses:
+        '200':
+          description: Operator actor and one currently authorized permission.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EdgeOperatorTokenValidateResponse' }
+        '401': { description: Token is unknown, expired, revoked, or scoped to another branch. }
+        '403': { description: Token does not hold the requested current permission. }
+        '503':
+          {
+            description: IAM or Organization & Branch owner is unavailable; validation fails closed.,
+          }
+  /internal/v1/edge-operator-tokens/revoke-session:
+    post:
+      x-funtino-availability: implemented
+      operationId: revokeEdgeOperatorTokensForSession
+      description: API Gateway calls this after revoking a management session; token hashes and immutable audit history remain.
+      security:
+        - serviceToken: []
+          serviceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionId]
+              additionalProperties: false
+              properties:
+                sessionId: { type: string, format: uuid }
+      responses:
+        '200': { description: Matching active tokens revoked idempotently. }
+        '401': { description: API Gateway service identity is invalid. }
   /internal/v1/mfa/status:
     get:
       x-funtino-availability: implemented
@@ -994,6 +1075,10 @@ components:
       type: apiKey
       in: header
       name: x-funtino-service-token
+    serviceIdentity:
+      type: apiKey
+      in: header
+      name: x-funtino-service-id
   parameters:
     ActorUserId:
       name: x-funtino-actor-user-id
@@ -1098,6 +1183,85 @@ components:
         type: string
         format: uuid
   schemas:
+    EdgeOperatorPermission:
+      type: string
+      enum:
+        [
+          card.inventory.read,
+          card.inventory.manage,
+          card.assign,
+          card.transfer,
+          card.unassign,
+          customer.lookup.limited,
+          customer.provisional.create,
+          customer.family.read,
+          customer.family.manage,
+          customer.profile.manage,
+        ]
+    EdgeOperatorTokenIssueRequest:
+      type: object
+      required: [organizationId, branchId, permissionKeys]
+      additionalProperties: false
+      properties:
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        permissionKeys:
+          {
+            type: array,
+            minItems: 1,
+            maxItems: 10,
+            uniqueItems: true,
+            items: { $ref: '#/components/schemas/EdgeOperatorPermission' },
+          }
+    EdgeOperatorTokenIssueResponse:
+      type: object
+      required: [token, tokenId, permissionKeys, branchId, expiresAt, policyVersion, catalogVersion]
+      additionalProperties: false
+      properties:
+        token: { type: string, minLength: 32, maxLength: 256, writeOnly: true }
+        tokenId: { type: string, format: uuid }
+        permissionKeys:
+          {
+            type: array,
+            minItems: 1,
+            maxItems: 10,
+            items: { $ref: '#/components/schemas/EdgeOperatorPermission' },
+          }
+        branchId: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+        policyVersion: { type: integer, minimum: 1 }
+        catalogVersion: { type: integer, minimum: 1 }
+    EdgeOperatorTokenValidateRequest:
+      type: object
+      required: [token, branchId, permission]
+      additionalProperties: false
+      properties:
+        token: { type: string, minLength: 32, maxLength: 256, writeOnly: true }
+        branchId: { type: string, format: uuid }
+        permission: { $ref: '#/components/schemas/EdgeOperatorPermission' }
+    EdgeOperatorTokenValidateResponse:
+      type: object
+      required:
+        [
+          tokenId,
+          actorUserId,
+          organizationId,
+          branchId,
+          permission,
+          expiresAt,
+          policyVersion,
+          catalogVersion,
+        ]
+      additionalProperties: false
+      properties:
+        tokenId: { type: string, format: uuid }
+        actorUserId: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        permission: { $ref: '#/components/schemas/EdgeOperatorPermission' }
+        expiresAt: { type: string, format: date-time }
+        policyVersion: { type: integer, minimum: 1 }
+        catalogVersion: { type: integer, minimum: 1 }
     AccessScope:
       oneOf:
         - type: object
@@ -1792,7 +1956,8 @@ components:
           type: array
           items:
             type: object
-            required: [membershipId, userId, status, scope, role, version, createdAt, updatedAt, invitation]
+            required:
+              [membershipId, userId, status, scope, role, version, createdAt, updatedAt, invitation]
             properties:
               membershipId:
                 type: string

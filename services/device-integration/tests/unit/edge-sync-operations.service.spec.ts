@@ -41,6 +41,7 @@ function validEnvelope() {
       memberId: null,
       deviceId: null,
       sourceDeviceId: 'reader-01',
+      attractionId: null,
       transactionKind: 'spend',
       amountRial: 100,
       currencyCode: 'IRR',
@@ -55,6 +56,7 @@ function validEnvelope() {
       balanceAfterRial: 900,
       operationResult: 'success',
       snapshotVersion: 'edge-v2-17',
+      reversalOfLocalTransactionId: null,
     },
   });
 }
@@ -91,15 +93,26 @@ function harness(options: { command?: unknown; rows?: unknown[] } = {}) {
   const tx = {
     idempotencyCommand: {
       findUnique: async () => command,
-      create: async ({ data }: { data: unknown }) => { calls.command = data; },
+      create: async ({ data }: { data: unknown }) => {
+        calls.command = data;
+      },
     },
-    $queryRaw: async () => { queryCount += 1; return options.rows ?? [baseRow()]; },
+    $queryRaw: async () => {
+      queryCount += 1;
+      return options.rows ?? [baseRow()];
+    },
     edgeInstallation: { findFirst: async () => ({ sourceInstanceId }) },
-    outboxEvent: { updateMany: async ({ where, data }: { where: unknown; data: unknown }) => {
-      calls.update = { where, data };
-      return { count: 1 };
-    } },
-    edgeOutboxReplayAudit: { create: async ({ data }: { data: unknown }) => { calls.audit = data; } },
+    outboxEvent: {
+      updateMany: async ({ where, data }: { where: unknown; data: unknown }) => {
+        calls.update = { where, data };
+        return { count: 1 };
+      },
+    },
+    edgeOutboxReplayAudit: {
+      create: async ({ data }: { data: unknown }) => {
+        calls.audit = data;
+      },
+    },
   };
   const prisma = {
     $transaction: async <T>(work: (transaction: typeof tx) => Promise<T>) => work(tx),
@@ -132,16 +145,22 @@ test('replay preserves event identity and payload while appending actor, reason 
 
 test('an idempotent replay retry returns the original response without querying or resetting the outbox again', async () => {
   const response = { eventId, status: 'queued_for_replay' as const, outboxEventId };
-  const requestHash = createHash('sha256').update(JSON.stringify({
-    organizationId,
-    branchId,
-    eventId,
-    reason: input().reason,
-  })).digest('hex');
-  const { service, queryCount, calls } = harness({ command: {
-    requestHash,
-    response,
-  } });
+  const requestHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        organizationId,
+        branchId,
+        eventId,
+        reason: input().reason,
+      }),
+    )
+    .digest('hex');
+  const { service, queryCount, calls } = harness({
+    command: {
+      requestHash,
+      response,
+    },
+  });
   const result = await service.replayDeadLetter(input());
   assert.deepEqual(result, response);
   assert.equal(queryCount(), 0);

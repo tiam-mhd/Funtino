@@ -8,7 +8,7 @@ import type {
 export const CARD_INVENTORY_REPOSITORY = Symbol('CARD_INVENTORY_REPOSITORY');
 
 export type CardCommandMeta = {
-  callerService: 'api-gateway';
+  callerService: 'api-gateway' | 'device-integration';
   actorUserId: string;
   correlationId: string;
   idempotencyKey: string;
@@ -18,6 +18,7 @@ export type RegisterCardCommand = {
   organizationId: string;
   branchId: string;
   externalCardId: string;
+  cardUidHash: string | null;
   reason: string | null;
 };
 
@@ -34,6 +35,7 @@ export type AssignCardCommand = {
   organizationId: string;
   branchId: string;
   cardId: string;
+  expectedVersion?: number;
   householdId: string;
   memberId: string | null;
   reason: string;

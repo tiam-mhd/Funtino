@@ -69,6 +69,7 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
           organizationId: command.organizationId,
           branchId: command.branchId,
           externalCardId: command.externalCardId,
+          cardUidHash: command.cardUidHash,
           status: 'in_stock',
           verificationStatus: 'unknown',
           version: 1,
@@ -212,6 +213,9 @@ export class PrismaCardInventoryRepository implements CardInventoryRepository {
         },
       });
       if (!card) throw new NotFoundException('Card inventory record not found.');
+      if (command.expectedVersion !== undefined && card.version !== command.expectedVersion) {
+        throw new ConflictException('Card changed concurrently; reload before retrying.');
+      }
       if (card.status !== 'in_stock' || card.verificationStatus !== 'verified') {
         throw new ConflictException('Only verified cards in stock can be assigned.');
       }
@@ -656,6 +660,7 @@ function mapRecord(row: PrismaCardInventory): CardInventoryRecord {
     organizationId: row.organizationId,
     branchId: row.branchId,
     externalCardId: row.externalCardId,
+    cardUidHash: row.cardUidHash,
     status: row.status as CardInventoryStatus,
     verificationStatus: row.verificationStatus,
     version: row.version,

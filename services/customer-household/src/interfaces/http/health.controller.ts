@@ -20,6 +20,7 @@ export class HealthController {
     const tokens = [
       process.env.CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN,
       process.env.CUSTOMER_HOUSEHOLD_WALLET_TOKEN,
+      process.env.CUSTOMER_HOUSEHOLD_DEVICE_INTEGRATION_TOKEN,
     ];
     const ttlDays = Number(process.env.CUSTOMER_FAMILY_UNREGISTERED_INVITATION_TTL_DAYS ?? '7');
     if (
@@ -39,6 +40,7 @@ export class HealthController {
         configurationKeys: [
           'CUSTOMER_HOUSEHOLD_GATEWAY_TOKEN',
           'CUSTOMER_HOUSEHOLD_WALLET_TOKEN',
+          'CUSTOMER_HOUSEHOLD_DEVICE_INTEGRATION_TOKEN',
           'CUSTOMER_FAMILY_UNREGISTERED_INVITATION_TTL_DAYS',
         ],
       });

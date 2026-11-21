@@ -1,6 +1,12 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
-import { DomainError, generateOpaqueSecret, hashSecret } from '@funtino/backend-core';
+import {
+  createSafeErrorDiagnostic,
+  DomainError,
+  generateOpaqueSecret,
+  hashSecret,
+  writeStructuredLog,
+} from '@funtino/backend-core';
 import {
   FUNTINO_STORE,
   type FuntinoStorePort,
@@ -18,6 +24,8 @@ import {
   IdentityAccessClient,
   type OperationsAccessContext,
 } from '../../infrastructure/identity-access/identity-access.client.js';
+import { CustomerHouseholdClient } from '../../infrastructure/customer-household/customer-household.client.js';
+import { isCustomerProfileOwnerEnabled } from '../customer/customer-profile-ownership.js';
 
 export const SESSION_COOKIE = 'funtino_session';
 export const MANAGEMENT_SESSION_COOKIE = 'funtino_management_session';
@@ -51,6 +59,7 @@ export class AuthService {
   constructor(
     @Inject(FUNTINO_STORE) private readonly store: FuntinoStorePort,
     private readonly identityAccess: IdentityAccessClient,
+    private readonly customerProfiles: CustomerHouseholdClient,
     @Optional() @Inject(OTP_SENDER) private readonly otpSender: OtpSender = new LocalOtpSender(),
   ) {}
 
@@ -290,7 +299,28 @@ export class AuthService {
   }
 
   async logout(token: string | undefined): Promise<void> {
-    if (token) await this.store.revokeSession(hashSecret(token));
+    if (!token) return;
+    const tokenHash = hashSecret(token);
+    const session = await this.store.findSession(tokenHash);
+    await this.store.revokeSession(tokenHash);
+    if (session?.audience !== 'management') return;
+    try {
+      await this.identityAccess.revokeEdgeOperatorTokensForSession(
+        session.userId,
+        session.id,
+        randomUUID(),
+      );
+    } catch (error) {
+      writeStructuredLog({
+        level: 'error',
+        event: 'edge_operator_tokens.session_revocation_failed',
+        service: 'api-gateway',
+        component: 'AuthService.logout',
+        stage: 'revoke_management_session_tokens',
+        dependency: 'identity-access',
+        error: createSafeErrorDiagnostic(error),
+      });
+    }
   }
 
   async recordOperationsScopeSelection(
@@ -396,12 +426,30 @@ export class AuthService {
   }
 
   private async presentUser(user: User): Promise<AuthProfile> {
-    const avatar = await this.store.getUserAvatar(user.id);
+    if (!isCustomerProfileOwnerEnabled()) {
+      const avatar = await this.store.getUserAvatar(user.id);
+      return {
+        ...user,
+        avatarUrl: avatar ? '/api/v1/customer/profile/avatar' : null,
+        avatarUpdatedAt: avatar?.updatedAt ?? null,
+        profileCompleted: Boolean(user.profileCompletedAt),
+      };
+    }
+    const profile = await this.customerProfiles.getCustomerProfile(user.id);
     return {
       ...user,
-      avatarUrl: avatar ? '/api/v1/customer/profile/avatar' : null,
-      avatarUpdatedAt: avatar?.updatedAt ?? null,
-      profileCompleted: Boolean(user.profileCompletedAt),
+      displayName: [profile.firstName, profile.lastName].filter(Boolean).join(' ') || null,
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      email: profile.email,
+      birthDate: profile.birthDate,
+      gender: profile.gender,
+      city: profile.city,
+      avatarPreset: profile.avatarPreset,
+      profileCompletedAt: profile.profileCompletedAt,
+      avatarUrl: profile.hasUploadedAvatar ? '/api/v1/customer/profile/avatar' : null,
+      avatarUpdatedAt: profile.avatarUpdatedAt,
+      profileCompleted: profile.profileCompleted,
     };
   }
 }

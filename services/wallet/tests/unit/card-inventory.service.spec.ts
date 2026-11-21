@@ -49,7 +49,12 @@ function assignment(): CardAssignmentView {
 }
 
 function setup(overrides: Record<string, unknown> = {}) {
-  const calls: { branch?: unknown[]; register?: unknown[]; change?: unknown[] } = {};
+  const calls: {
+    branch?: unknown[];
+    register?: unknown[];
+    change?: unknown[];
+    assign?: unknown[];
+  } = {};
   const repository = {
     findIdempotentMutation: async () => null,
     registerCard: async (...args: unknown[]) => {
@@ -62,6 +67,10 @@ function setup(overrides: Record<string, unknown> = {}) {
     },
     listCards: async () => ({ items: [], nextCursor: null }),
     getCard: async () => card('in_stock'),
+    assignCard: async (...args: unknown[]) => {
+      calls.assign = args;
+      return assignment();
+    },
     isReady: async () => {},
     ...overrides,
   } as unknown as CardInventoryRepository;
@@ -84,8 +93,18 @@ test('registration normalizes the identifier, validates branch ownership, and re
   );
   assert.deepEqual(calls.branch, [organizationId, branchId]);
   assert.equal((calls.register?.[0] as { externalCardId: string }).externalCardId, 'CARD-4821');
+  assert.equal((calls.register?.[0] as { cardUidHash: string | null }).cardUidHash, null);
   assert.equal(result.maskedIdentifier, '•••• 4821');
   assert.equal('externalCardId' in result, false);
+});
+
+test('registration canonicalizes hexadecimal UID to the shared contract hash', async () => {
+  const { service, calls } = setup();
+  await service.registerCard(organizationId, branchId, { externalCardId: '01:02-03 04' }, meta);
+  assert.equal(
+    (calls.register?.[0] as { cardUidHash: string | null }).cardUidHash,
+    '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517',
+  );
 });
 
 test('registration replays a committed command without rechecking branch or writing a second card', async () => {
@@ -194,6 +213,24 @@ test('unblocking a card requires the current branch to be active', async () => {
   );
   assert.deepEqual(calls.branch, [organizationId, branchId]);
   assert.ok(calls.change);
+});
+
+test('Edge assignment validates branch and household and forwards the expected card version', async () => {
+  const { service, calls } = setup();
+  await service.assignCard(
+    {
+      organizationId,
+      branchId,
+      cardId,
+      householdId,
+      memberId: null,
+      expectedVersion: 5,
+      reason: 'Verified card for household',
+    },
+    meta,
+  );
+  assert.deepEqual(calls.branch, [organizationId, branchId]);
+  assert.equal((calls.assign?.[0] as { expectedVersion: number }).expectedVersion, 5);
 });
 
 test('transfer validates requested tenant scope before mutating and forwards the fixed branch', async () => {

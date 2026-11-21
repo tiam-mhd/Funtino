@@ -18,8 +18,17 @@ import { WalletServiceTokenGuard } from './service-token.guard.js';
 
 const uuid = z.string().uuid();
 const reason = z.string().trim().min(8).max(500);
-const assignSchema = z.object({ householdId: uuid, memberId: uuid.nullable().optional(), reason }).strict();
-const transferSchema = z.object({ householdId: uuid, memberId: uuid.nullable().optional(), reason }).strict();
+const assignSchema = z
+  .object({
+    householdId: uuid,
+    memberId: uuid.nullable().optional(),
+    expectedVersion: z.number().int().positive().optional(),
+    reason,
+  })
+  .strict();
+const transferSchema = z
+  .object({ householdId: uuid, memberId: uuid.nullable().optional(), reason })
+  .strict();
 const cancelSchema = z.object({ reason }).strict();
 const listSchema = z
   .object({
@@ -85,7 +94,13 @@ export class CardAssignmentController {
     const parsed = transferSchema.safeParse(rawBody);
     if (!parsed.success) throw new BadRequestException('Card assignment transfer is invalid.');
     return this.service.transferAssignment(
-      { organizationId, branchId, assignmentId, ...parsed.data, memberId: parsed.data.memberId ?? null },
+      {
+        organizationId,
+        branchId,
+        assignmentId,
+        ...parsed.data,
+        memberId: parsed.data.memberId ?? null,
+      },
       commandMeta(headers),
     );
   }
@@ -114,7 +129,12 @@ export class CardAssignmentController {
   }
 }
 
-function commandMeta(headers: Record<string, string | string[] | undefined>) {
+function commandMeta(headers: Record<string, string | string[] | undefined>): {
+  callerService: 'api-gateway' | 'device-integration';
+  actorUserId: string;
+  correlationId: string;
+  idempotencyKey: string;
+} {
   const single = (name: string): string | undefined => {
     const value = headers[name];
     return typeof value === 'string' ? value : undefined;
@@ -122,11 +142,17 @@ function commandMeta(headers: Record<string, string | string[] | undefined>) {
   const actorUserId = uuid.safeParse(single('x-funtino-actor-user-id'));
   const correlationId = uuid.safeParse(single('x-correlation-id'));
   const idempotencyKey = uuid.safeParse(single('idempotency-key'));
-  if (!actorUserId.success || !correlationId.success || !idempotencyKey.success) {
+  const callerService = single('x-funtino-service-id');
+  if (
+    !actorUserId.success ||
+    !correlationId.success ||
+    !idempotencyKey.success ||
+    (callerService !== 'api-gateway' && callerService !== 'device-integration')
+  ) {
     throw new BadRequestException('Actor, correlation, and Idempotency-Key headers are required.');
   }
   return {
-    callerService: 'api-gateway' as const,
+    callerService,
     actorUserId: actorUserId.data,
     correlationId: correlationId.data,
     idempotencyKey: idempotencyKey.data,
