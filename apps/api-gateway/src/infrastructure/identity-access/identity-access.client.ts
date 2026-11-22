@@ -229,7 +229,7 @@ const authorizationResultSchema = z.object({
   policyVersion: z.number().int().positive(),
   catalogVersion: z.number().int().positive(),
 });
-const edgeOperatorPermissionSchema = z.enum([
+export const EDGE_OPERATOR_PERMISSION_KEYS = [
   'card.inventory.read',
   'card.inventory.manage',
   'card.assign',
@@ -240,7 +240,8 @@ const edgeOperatorPermissionSchema = z.enum([
   'customer.family.read',
   'customer.family.manage',
   'customer.profile.manage',
-]);
+] as const;
+const edgeOperatorPermissionSchema = z.enum(EDGE_OPERATOR_PERMISSION_KEYS);
 const edgeOperatorTokenSchema = z
   .object({
     token: z.string().min(32).max(256),

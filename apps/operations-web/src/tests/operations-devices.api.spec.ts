@@ -57,53 +57,124 @@ function device(): OperationsDevice {
 
 test('Edge sync dashboard uses branch session API and validates owner state', async () => {
   const { getOperationsEdgeSyncStatus } = await import('../lib/api/operations-devices');
-  await withFetchStub((input, init) => {
-    const url = new URL(String(input));
-    assert.equal(url.pathname, `/api/v1/operations/organizations/${organizationId}/branches/${branchId}/edge-sync`);
-    assert.equal(init?.credentials, 'include');
-    assert.equal(init?.cache, 'no-store');
-    return successResponse({
-      organizationId,
-      branchId,
-      installations: [],
-      pendingCount: 0,
-      deadLetterCount: 1,
-      deadLetters: [{
-        outboxEventId: eventId,
-        eventId,
-        sourceInstanceId: deviceId,
-        localTransactionId: 'local-12',
-        errorCode: 'PUBLISH_FAILED',
-        attempts: 8,
-        deadLetteredAt: '2026-11-18T10:00:00.000Z',
-        createdAt: '2026-11-18T09:00:00.000Z',
-      }],
-      deadLettersTruncated: false,
-      walletReview: null,
-    });
-  }, async () => {
-    const status = await getOperationsEdgeSyncStatus(organizationId, branchId);
-    assert.equal(status.deadLetterCount, 1);
-    assert.equal(status.deadLetters[0]?.eventId, eventId);
-  });
+  await withFetchStub(
+    (input, init) => {
+      const url = new URL(String(input));
+      assert.equal(
+        url.pathname,
+        `/api/v1/operations/organizations/${organizationId}/branches/${branchId}/edge-sync`,
+      );
+      assert.equal(init?.credentials, 'include');
+      assert.equal(init?.cache, 'no-store');
+      return successResponse({
+        organizationId,
+        branchId,
+        installations: [],
+        pendingCount: 0,
+        deadLetterCount: 1,
+        deadLetters: [
+          {
+            outboxEventId: eventId,
+            eventId,
+            sourceInstanceId: deviceId,
+            localTransactionId: 'local-12',
+            errorCode: 'PUBLISH_FAILED',
+            attempts: 8,
+            deadLetteredAt: '2026-11-18T10:00:00.000Z',
+            createdAt: '2026-11-18T09:00:00.000Z',
+          },
+        ],
+        deadLettersTruncated: false,
+        walletReview: null,
+      });
+    },
+    async () => {
+      const status = await getOperationsEdgeSyncStatus(organizationId, branchId);
+      assert.equal(status.deadLetterCount, 1);
+      assert.equal(status.deadLetters[0]?.eventId, eventId);
+    },
+  );
 });
 
 test('Edge dead-letter replay sends the mandatory review cause with an idempotency key', async () => {
   const { replayOperationsEdgeDeadLetter } = await import('../lib/api/operations-devices');
-  await withFetchStub((input, init) => {
-    const url = new URL(String(input));
-    assert.equal(url.pathname, `/api/v1/operations/organizations/${organizationId}/branches/${branchId}/edge-sync/dead-letters/${eventId}/replay`);
-    assert.equal(init?.method, 'POST');
-    assert.equal(new Headers(init?.headers).get('idempotency-key'), idempotencyKey);
-    assert.deepEqual(JSON.parse(String(init?.body)), { reason: 'Reviewed the failure and fixed the connection' });
-    return successResponse({ eventId, outboxEventId: deviceId, status: 'queued_for_replay' });
-  }, async () => {
-    const result = await replayOperationsEdgeDeadLetter(
-      organizationId, branchId, eventId, 'Reviewed the failure and fixed the connection', idempotencyKey,
-    );
-    assert.equal(result.eventId, eventId);
-    assert.equal(result.status, 'queued_for_replay');
-  });
+  await withFetchStub(
+    (input, init) => {
+      const url = new URL(String(input));
+      assert.equal(
+        url.pathname,
+        `/api/v1/operations/organizations/${organizationId}/branches/${branchId}/edge-sync/dead-letters/${eventId}/replay`,
+      );
+      assert.equal(init?.method, 'POST');
+      assert.equal(new Headers(init?.headers).get('idempotency-key'), idempotencyKey);
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        reason: 'Reviewed the failure and fixed the connection',
+      });
+      return successResponse({ eventId, outboxEventId: deviceId, status: 'queued_for_replay' });
+    },
+    async () => {
+      const result = await replayOperationsEdgeDeadLetter(
+        organizationId,
+        branchId,
+        eventId,
+        'Reviewed the failure and fixed the connection',
+        idempotencyKey,
+      );
+      assert.equal(result.eventId, eventId);
+      assert.equal(result.status, 'queued_for_replay');
+    },
+  );
+});
+
+test('pairing permission choices are fetched from the authenticated branch session without caching', async () => {
+  const { getOperationsEdgePairingPermissions } = await import('../lib/api/operations-devices');
+  await withFetchStub(
+    (input, init) => {
+      const url = new URL(String(input));
+      assert.equal(url.pathname, '/api/v1/operations/edge/pairing-permissions');
+      assert.equal(url.searchParams.get('branchId'), branchId);
+      assert.equal(init?.credentials, 'include');
+      assert.equal(init?.cache, 'no-store');
+      return successResponse({ branchId, permissionKeys: ['card.assign'] });
+    },
+    async () => {
+      const result = await getOperationsEdgePairingPermissions(branchId);
+      assert.deepEqual(result, { branchId, permissionKeys: ['card.assign'] });
+    },
+  );
+});
+
+test('pairing approval sends only selected permissions and reuses the caller idempotency key', async () => {
+  const { approveOperationsEdgePairing } = await import('../lib/api/operations-devices');
+  await withFetchStub(
+    (input, init) => {
+      assert.equal(new URL(String(input)).pathname, '/api/v1/operations/edge/pairing-approvals');
+      assert.equal(init?.method, 'POST');
+      assert.equal(init?.credentials, 'include');
+      assert.equal(new Headers(init?.headers).get('idempotency-key'), idempotencyKey);
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        branchId,
+        code: 'ABCD2-EFGH3',
+        permissionKeys: ['card.assign'],
+      });
+      return successResponse({
+        status: 'approved',
+        branchId,
+        permissionKeys: ['card.assign'],
+        expiresAt: '2026-11-22T12:05:00.000Z',
+      });
+    },
+    async () => {
+      const result = await approveOperationsEdgePairing(
+        branchId,
+        'ABCD2-EFGH3',
+        ['card.assign'],
+        idempotencyKey,
+      );
+      assert.equal(result.status, 'approved');
+      assert.deepEqual(result.permissionKeys, ['card.assign']);
+    },
+  );
 });
 
 test('branch-scoped device listing sends selected scope and preserves cursor/capability data', async () => {

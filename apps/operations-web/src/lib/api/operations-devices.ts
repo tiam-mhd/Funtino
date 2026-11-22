@@ -79,6 +79,42 @@ export type OperationsEdgeSyncStatus = {
   } | null;
 };
 
+export type OperationsEdgePermission =
+  | 'card.inventory.read'
+  | 'card.inventory.manage'
+  | 'card.assign'
+  | 'card.transfer'
+  | 'card.unassign'
+  | 'customer.lookup.limited'
+  | 'customer.provisional.create'
+  | 'customer.family.read'
+  | 'customer.family.manage'
+  | 'customer.profile.manage';
+
+export async function getOperationsEdgePairingPermissions(branchId: string) {
+  return apiRequest<{ branchId: string; permissionKeys: OperationsEdgePermission[] }>(
+    `/api/v1/operations/edge/pairing-permissions?branchId=${encodeURIComponent(branchId)}`,
+  );
+}
+
+export async function approveOperationsEdgePairing(
+  branchId: string,
+  code: string,
+  permissionKeys: OperationsEdgePermission[],
+  idempotencyKey: string,
+) {
+  return apiRequest<{
+    status: 'approved';
+    branchId: string;
+    permissionKeys: OperationsEdgePermission[];
+    expiresAt: string;
+  }>('/api/v1/operations/edge/pairing-approvals', {
+    method: 'POST',
+    body: { branchId, code, permissionKeys },
+    headers: { 'Idempotency-Key': idempotencyKey },
+  });
+}
+
 export async function getOperationsEdgeSyncStatus(organizationId: string, branchId: string) {
   return apiRequest<OperationsEdgeSyncStatus>(
     `/api/v1/operations/organizations/${encodeURIComponent(organizationId)}/branches/${encodeURIComponent(branchId)}/edge-sync`,

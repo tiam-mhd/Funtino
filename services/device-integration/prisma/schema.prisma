@@ -170,6 +170,43 @@ model EdgeInstallationAudit {
   @@schema("device_integration")
 }
 
+model EdgeOperatorPairing {
+  id                      String   @id @db.Uuid
+  sourceInstanceId        String   @map("source_instance_id") @db.Uuid
+  organizationId          String   @map("organization_id") @db.Uuid
+  branchId                String   @map("branch_id") @db.Uuid
+  pairingCodeHash         String   @unique @map("pairing_code_hash") @db.Char(64)
+  pollSecretHash          String   @map("poll_secret_hash") @db.Char(64)
+  status                  String   @default("pending") @db.VarChar(20)
+  expiresAt               DateTime @map("expires_at") @db.Timestamptz(6)
+  actorUserId             String?  @map("actor_user_id") @db.Uuid
+  managementSessionId     String?  @map("management_session_id") @db.Uuid
+  permissionKeys          Json?    @map("permission_keys")
+  approvalIdempotencyKey  String?  @unique @map("approval_idempotency_key") @db.Uuid
+  approvalRequestHash     String?  @map("approval_request_hash") @db.Char(64)
+  approvedAt              DateTime? @map("approved_at") @db.Timestamptz(6)
+  claimedAt               DateTime? @map("claimed_at") @db.Timestamptz(6)
+  issuedAt                DateTime? @map("issued_at") @db.Timestamptz(6)
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([sourceInstanceId, status, expiresAt], map: "edge_operator_pairings_install_status_expiry_idx")
+  @@index([actorUserId, createdAt], map: "edge_operator_pairings_actor_created_idx")
+  @@map("edge_operator_pairings")
+  @@schema("device_integration")
+}
+
+model EdgeOperatorPairingRateLimit {
+  actorUserId     String   @map("actor_user_id") @db.Uuid
+  windowStartedAt DateTime @map("window_started_at") @db.Timestamptz(0)
+  attemptCount    Int      @default(0) @map("attempt_count")
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([actorUserId, windowStartedAt])
+  @@map("edge_operator_pairing_rate_limits")
+  @@schema("device_integration")
+}
+
 model EdgeSnapshot {
   id               String   @id @db.Uuid
   sourceInstanceId String   @map("source_instance_id") @db.Uuid

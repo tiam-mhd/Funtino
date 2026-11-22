@@ -76,3 +76,17 @@ Pricing/Promotions آماده‌ی تعریف، نسخه‌گذاری و audit �
 - در rotation، کلید فعلی و قبلی نصب تا پایان عمر snapshot/cursor معتبر می‌مانند. Windows در همه‌ی صفحه‌های یک snapshot همان `keyId` را می‌فرستد. کلید قبلی را فقط پس از پایان TTL و sync نصب‌ها حذف کنید.
 - `DEVICE_EDGE_SNAPSHOT_SIGNING_SECRET` و `DEVICE_EDGE_SNAPSHOT_SIGNING_KEY_ID` دیگر برای v2 استفاده نمی‌شوند؛ بعد از انتشار نسخه‌ی جدید، این دو متغیر قدیمی را از آیتم Device Integration حذف کنید.
 - فیلد mapping شبکه‌ی Wallet فقط `cardUidHash` را می‌دهد. UID خام در response یا log مجاز نیست. UIDهای موجود با hash خالی تا زمان re-registration/تأیید مالکانه در snapshot آفلاین ظاهر نمی‌شوند.
+
+## جفت‌سازی امن اپراتور ویندوز
+
+Windows برای خواندن مرکزی، درخواست `POST /internal/v2/edge/operator-pairings` را با HMAC همان نصب و بدنهٔ `{}` آغاز می‌کند. پاسخ شامل `pairingId`، کد قابل‌تأیید در Operations، `pollSecret`، زمان انقضا و فاصلهٔ poll است. Device Integration فقط SHA-256 کد و راز poll را ذخیره می‌کند. کد نمایشی برای مسیر مرورگر است؛ Windows برای poll و cancel از `pairingId` و `pollSecret` استفاده می‌کند.
+
+اپراتور در نشست مدیریت‌شدهٔ Operations، branch فعال را انتخاب می‌کند. فهرست دسترسی‌ها از `GET /api/v1/operations/edge/pairing-permissions?branchId=...` و ارزیابی زندهٔ IAM می‌آید؛ انتخابی از پیش فعال نیست. تأیید با `POST /api/v1/operations/edge/pairing-approvals`، کلید UUID در `Idempotency-Key` و بررسی دوبارهٔ همهٔ permissionهای انتخاب‌شده انجام می‌شود. Gateway نشست/actor، branch فعال و trusted origin را کنترل می‌کند. سرویس Device Integration کد را با installation و branch ثبت‌شده تطبیق می‌دهد و approval را audit می‌کند.
+
+Windows با همان `x-edge-installation-id`، `x-edge-key-id` و امضای `x-edge-signature` درخواست `POST /internal/v2/edge/operator-pairings/poll` را می‌فرستد. Device Integration فقط یک‌بار pairing تأییدشده را claim می‌کند و Gateway پیش از تبادل، فعال‌بودن نشست مدیریت و branch را دوباره می‌سنجد. IAM توکن عادی Edge را با permissionهای انتخاب‌شده می‌دهد؛ Gateway انقضای آینده و سقف پنج دقیقه را هم بررسی می‌کند. پاسخ start/poll و exchange دارای `Cache-Control: no-store, private` است. توکن، کد و راز poll در log، فایل config یا دیتابیس Windows نوشته نمی‌شوند؛ token فقط تا انقضا یا خروج در حافظهٔ فرایند می‌ماند. خروج نشست مدیریت، توکن‌های متصل به همان نشست را در IAM revoke می‌کند.
+
+Secret سرویس بین Gateway و Device Integration باید یک مقدار تصادفی مشترک با حداقل ۳۲ کاراکتر باشد؛ در Gateway با نام `EDGE_OPERATOR_PAIRING_DEVICE_INTEGRATION_TOKEN` و در Device Integration با نام `DEVICE_INTEGRATION_EDGE_OPERATOR_PAIRING_TOKEN` تنظیم می‌شود. این دو مقدار فقط در secret manager/runtime هم‌محیط وارد می‌شوند و `.env.example` صرفاً نام خالی آن‌ها را نشان می‌دهد. manifest هر child فقط secret خودش را allow-list می‌کند.
+
+migration افزایشی `services/device-integration/prisma/migrations/0007_edge_operator_pairings` متعلق به schema سرویس Device Integration است و فقط با job مستقل همان مالک اجرا می‌شود. این migration در کار حاضر روی محیط واقعی اجرا نشده است. پیش از rollout باید نسخهٔ پشتیبان، دسترسی DDL محدود، اجرای آزمایشی staging، آزمون rollback کاربردی و تایید lock/زمان اجرا ثبت شود؛ هیچ migration یا backfill production انجام نشده است.
+
+پاسخ 401/403 pairing را مجاز نمی‌کند؛ 409 نیاز به pairing تازه دارد؛ 429 و خطای شبکه retry محدود با همان عملیات/کلید معتبر می‌خواهد. انقضا، نشست لغوشده، branch نامعتبر یا رد IAM باید در Windows وضعیت خطا بماند و cache فقط‌خواندنی stale را به‌عنوان موفقیت مرکزی نشان ندهد. قرارداد route و فیلدها در OpenAPI و [ADR-0032](decisions/0032-edge-operator-device-pairing.md) مرجع است.

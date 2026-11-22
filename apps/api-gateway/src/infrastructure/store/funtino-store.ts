@@ -97,6 +97,7 @@ export interface FuntinoStorePort {
   ): StoreResult<boolean>;
   consumeManagementLoginChallenge(tokenHash: string, now: number): StoreResult<boolean>;
   findSession(tokenHash: string): StoreResult<Session | undefined>;
+  findActiveSessionById(sessionId: string): StoreResult<Session | undefined>;
   touchSessionActivity(sessionId: string, at: number): StoreResult<void>;
   updateSessionMfa(
     sessionId: string,
@@ -547,6 +548,12 @@ export class InMemoryFuntinoStore implements FuntinoStorePort {
       (session) =>
         session.tokenHash === tokenHash && !session.revokedAt && session.expiresAt > Date.now(),
     );
+  }
+
+  findActiveSessionById(sessionId: string): Session | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.revokedAt !== null || session.expiresAt <= Date.now()) return undefined;
+    return session;
   }
 
   updateSessionMfa(

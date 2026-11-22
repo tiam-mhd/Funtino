@@ -223,6 +223,206 @@ paths:
       responses:
         '200': { description: Edge credential rotated with one previous key retained for overlap. }
         '409': { $ref: '#/components/responses/Conflict' }
+  /internal/v1/operations/edge-pairings/approve:
+    post:
+      operationId: approveEdgeOperatorPairing
+      summary: Approve an Edge pairing from the authenticated Operations Gateway
+      description: The Gateway has checked the active management session, branch and every selected permission with IAM. Device Integration stores only a hash of the one-time code and rate limits attempts per actor.
+      security:
+        - internalGatewayToken: []
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - $ref: '#/components/parameters/ActorUserId'
+        - $ref: '#/components/parameters/CorrelationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, organizationId, branchId, managementSessionId, permissionKeys]
+              properties:
+                code: { type: string, minLength: 10, maxLength: 16 }
+                organizationId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                managementSessionId: { type: string, format: uuid }
+                permissionKeys:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  uniqueItems: true
+                  items: { $ref: '#/components/schemas/EdgeOperatorPermission' }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Code approved for this branch and permission set until expiry.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, branchId, permissionKeys, expiresAt]
+                properties:
+                  status: { const: approved }
+                  branchId: { type: string, format: uuid }
+                  permissionKeys:
+                    { type: array, items: { $ref: '#/components/schemas/EdgeOperatorPermission' } }
+                  expiresAt: { type: string, format: date-time }
+                additionalProperties: false
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          {
+            description: Code is unknown,
+            expired,
+            already used,
+            or does not belong to the selected branch.,
+          }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Actor has exceeded the pairing approval attempt limit. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/operator-pairings:
+    post:
+      operationId: startEdgeOperatorPairing
+      summary: Start a short-lived operator pairing for this active installation
+      description: Requires exact raw-body HMAC and an active installation/key. The code and poll secret are returned once; only their SHA-256 hashes are stored. Pairing expires after five minutes.
+      security:
+        - edgeHmacSignature: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '201':
+          description: One-time pairing code and private polling secret. Do not log or persist either value.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pairingId, userCode, pollSecret, expiresAt, pollIntervalSeconds]
+                properties:
+                  pairingId: { type: string, format: uuid }
+                  userCode: { type: string, pattern: '^[A-HJ-NP-Z2-9]{5}-[A-HJ-NP-Z2-9]{5}$' }
+                  pollSecret: { type: string, minLength: 40, maxLength: 64 }
+                  expiresAt: { type: string, format: date-time }
+                  pollIntervalSeconds: { type: integer, const: 3 }
+                additionalProperties: false
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/operator-pairings/poll:
+    post:
+      operationId: pollEdgeOperatorPairing
+      summary: Poll the one-time pairing and redeem an approved operator token
+      description: HMAC, active installation, installation quota, pairing ID and private poll secret are required. An approved session is atomically claimed once. If the response is lost, start a new pairing; tokens are never persisted.
+      security:
+        - edgeHmacSignature: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+        - $ref: '#/components/parameters/OptionalCorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pairingId, pollSecret]
+              properties:
+                pairingId: { type: string, format: uuid }
+                pollSecret: { type: string, minLength: 32, maxLength: 128 }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Current pairing state or one-time token response. Cache-Control is no-store.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [status]
+                    properties:
+                      {
+                        status:
+                          {
+                            type: string,
+                            enum: [pending, approved, expired, cancelled, restart_required],
+                          },
+                      }
+                    additionalProperties: false
+                  - type: object
+                    required: [status, operatorToken]
+                    properties:
+                      status: { const: authorized }
+                      operatorToken:
+                        type: object
+                        required:
+                          [
+                            token,
+                            tokenId,
+                            organizationId,
+                            branchId,
+                            permissionKeys,
+                            expiresAt,
+                            policyVersion,
+                            catalogVersion,
+                          ]
+                        properties:
+                          token: { type: string, minLength: 32, maxLength: 256 }
+                          tokenId: { type: string, format: uuid }
+                          organizationId: { type: string, format: uuid }
+                          branchId: { type: string, format: uuid }
+                          permissionKeys:
+                            {
+                              type: array,
+                              items: { $ref: '#/components/schemas/EdgeOperatorPermission' },
+                            }
+                          expiresAt: { type: string, format: date-time }
+                          policyVersion: { type: integer, minimum: 1 }
+                          catalogVersion: { type: integer, minimum: 1 }
+                        additionalProperties: false
+                    additionalProperties: false
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { description: Installation request quota exceeded; retry later. }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /internal/v2/edge/operator-pairings/cancel:
+    post:
+      operationId: cancelEdgeOperatorPairing
+      summary: Cancel a pending or approved pairing from its originating installation
+      security:
+        - edgeHmacSignature: []
+      parameters:
+        - $ref: '#/components/parameters/EdgeInstallationId'
+        - $ref: '#/components/parameters/EdgeKeyId'
+        - $ref: '#/components/parameters/EdgeSignature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pairingId, pollSecret]
+              properties:
+                pairingId: { type: string, format: uuid }
+                pollSecret: { type: string, minLength: 32, maxLength: 128 }
+              additionalProperties: false
+      responses:
+        '200': { description: Pairing cancelled or already terminal. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { description: Installation request quota exceeded; retry later. }
   /internal/v2/edge/events:
     post:
       operationId: ingestEdgeTransactionBatch
@@ -920,6 +1120,21 @@ components:
       required: true
       schema: { type: string, format: uuid }
   schemas:
+    EdgeOperatorPermission:
+      type: string
+      enum:
+        [
+          card.inventory.read,
+          card.inventory.manage,
+          card.assign,
+          card.transfer,
+          card.unassign,
+          customer.lookup.limited,
+          customer.provisional.create,
+          customer.family.read,
+          customer.family.manage,
+          customer.profile.manage,
+        ]
     DeviceStatus:
       type: string
       enum: [active, suspended, retired]

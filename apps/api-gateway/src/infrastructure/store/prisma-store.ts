@@ -468,6 +468,13 @@ export class PrismaFuntinoStore implements FuntinoStorePort {
     return session ? mapSession(session) : undefined;
   }
 
+  async findActiveSessionById(sessionId: string): Promise<Session | undefined> {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, revokedAt: null, expiresAt: { gt: new Date() } },
+    });
+    return session ? mapSession(session) : undefined;
+  }
+
   async updateSessionMfa(
     sessionId: string,
     proof: { verifiedAt: string; factorVersion: number; method: 'totp' | 'recovery' },

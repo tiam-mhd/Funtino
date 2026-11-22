@@ -15,6 +15,8 @@ import { HealthController } from './interfaces/http/health.controller.js';
 import { OperationsAccessController } from './interfaces/http/operations-access.controller.js';
 import { OperationsDevicesController } from './interfaces/http/operations-devices.controller.js';
 import { OperationsEdgeTokenController } from './interfaces/http/operations-edge-token.controller.js';
+import { OperationsEdgePairingController } from './interfaces/http/operations-edge-pairing.controller.js';
+import { EdgeOperatorPairingRedemptionController } from './interfaces/http/edge-operator-pairing-redemption.controller.js';
 import { EdgeIdentityLookupController } from './interfaces/http/edge-identity-lookup.controller.js';
 import { OperationsMfaController } from './interfaces/http/operations-mfa.controller.js';
 import { OperationsReportsController } from './interfaces/http/operations-reports.controller.js';
@@ -59,6 +61,8 @@ import { SystemFormsController } from './interfaces/http/system-forms.controller
     OperationsCardsController,
     OperationsDevicesController,
     OperationsEdgeTokenController,
+    OperationsEdgePairingController,
+    EdgeOperatorPairingRedemptionController,
     EdgeIdentityLookupController,
     OperationsFormsController,
     OperationsMfaController,

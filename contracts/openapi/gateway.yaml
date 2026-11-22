@@ -1883,6 +1883,187 @@ paths:
         '404': { description: Active branch not found. }
         '503':
           { description: IAM or Organization & Branch owner is unavailable; no token is issued. }
+  /api/v1/operations/edge/pairing-permissions:
+    get:
+      operationId: listOperationsEdgePairingPermissions
+      description: Requires a live management session. Returns only Edge permissions IAM currently allows for the active branch scope; no permission is selected automatically.
+      security:
+        - managementSessionCookie: []
+      parameters:
+        - name: branchId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Current IAM-approved permission choices for the active branch.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'no-store, private' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, data, meta]
+                properties:
+                  status: { const: success }
+                  data:
+                    type: object
+                    required: [branchId, permissionKeys]
+                    properties:
+                      branchId: { type: string, format: uuid }
+                      permissionKeys:
+                        type: array
+                        items: { $ref: '#/components/schemas/EdgeOperatorPermission' }
+                    additionalProperties: false
+                  meta: { $ref: '#/components/schemas/ResponseMeta' }
+                additionalProperties: false
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: The active branch does not exist. }
+        '503':
+          { description: IAM or Organization & Branch is unavailable; the response fails closed. }
+  /api/v1/operations/edge/pairing-approvals:
+    post:
+      operationId: approveOperationsEdgePairing
+      description: Requires a live management session, active branch and permission for every selected item. Approval is bound to the actor and session. Device Integration stores only a hash of the one-time code.
+      security:
+        - managementSessionCookie: []
+      parameters:
+        - $ref: '#/components/parameters/SystemIdempotencyKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, branchId, permissionKeys]
+              properties:
+                code: { type: string, minLength: 10, maxLength: 16 }
+                branchId: { type: string, format: uuid }
+                permissionKeys:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  uniqueItems: true
+                  items: { $ref: '#/components/schemas/EdgeOperatorPermission' }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Pairing approval was recorded; token issuance occurs only when the originating Windows installation polls.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'no-store, private' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, data, meta]
+                properties:
+                  status: { const: success }
+                  data:
+                    type: object
+                    required: [status, branchId, permissionKeys, expiresAt]
+                    properties:
+                      status: { const: approved }
+                      branchId: { type: string, format: uuid }
+                      permissionKeys:
+                        type: array
+                        items: { $ref: '#/components/schemas/EdgeOperatorPermission' }
+                      expiresAt: { type: string, format: date-time }
+                    additionalProperties: false
+                  meta: { $ref: '#/components/schemas/ResponseMeta' }
+                additionalProperties: false
+        '400': { description: Pairing code, branch, or permission request is invalid. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          { description: Code is unknown, expired, already used, or belongs to another branch. }
+        '409': { description: Idempotency key conflicts with another request. }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          {
+            description: IAM,
+            Organization & Branch,
+            or Device Integration is unavailable; approval fails closed.,
+          }
+  /internal/v1/edge/operator-pairings/redeem:
+    post:
+      operationId: redeemEdgeOperatorPairing
+      description: Internal Device Integration callback using a dedicated service token. Gateway verifies the live management session and actor, active branch, and then asks IAM to issue the normal five-minute operator token.
+      security:
+        - edgeOperatorPairingServiceToken: []
+          deviceIntegrationServiceIdentity: []
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                [
+                  pairingId,
+                  actorUserId,
+                  managementSessionId,
+                  organizationId,
+                  branchId,
+                  permissionKeys,
+                ]
+              properties:
+                pairingId: { type: string, format: uuid }
+                actorUserId: { type: string, format: uuid }
+                managementSessionId: { type: string, format: uuid }
+                organizationId: { type: string, format: uuid }
+                branchId: { type: string, format: uuid }
+                permissionKeys:
+                  type: array
+                  minItems: 1
+                  maxItems: 10
+                  uniqueItems: true
+                  items: { $ref: '#/components/schemas/EdgeOperatorPermission' }
+              additionalProperties: false
+      responses:
+        '200':
+          description: Opaque operator token returned transiently to Device Integration. Never cache or log this response.
+          headers:
+            Cache-Control: { schema: { type: string, const: 'no-store, private' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  [
+                    token,
+                    tokenId,
+                    organizationId,
+                    branchId,
+                    permissionKeys,
+                    expiresAt,
+                    policyVersion,
+                    catalogVersion,
+                  ]
+                properties:
+                  token: { type: string, minLength: 32, maxLength: 256, writeOnly: true }
+                  tokenId: { type: string, format: uuid }
+                  organizationId: { type: string, format: uuid }
+                  branchId: { type: string, format: uuid }
+                  permissionKeys:
+                    { type: array, items: { $ref: '#/components/schemas/EdgeOperatorPermission' } }
+                  expiresAt: { type: string, format: date-time }
+                  policyVersion: { type: integer, minimum: 1 }
+                  catalogVersion: { type: integer, minimum: 1 }
+                additionalProperties: false
+        '400': { description: Request contract is invalid. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503':
+          {
+            description: IAM,
+            session store,
+            or Organization & Branch is unavailable; no token is issued.,
+          }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/edge-sync/dead-letters/{eventId}/replay:
     security:
       - managementSessionCookie: []
@@ -2801,6 +2982,11 @@ components:
       in: header
       name: x-funtino-service-id
       description: Must equal device-integration.
+    edgeOperatorPairingServiceToken:
+      type: apiKey
+      in: header
+      name: x-funtino-service-token
+      description: Dedicated runtime secret used only for Device Integration to Gateway pairing redemption; separate from the normal Gateway to Device Integration credential.
   parameters:
     CorrelationId:
       name: x-correlation-id

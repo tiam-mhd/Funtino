@@ -32,45 +32,90 @@ const commandResultSchema = z
     version: z.number().int().positive(),
   })
   .strict();
-const edgeSyncStatusSchema = z.object({
-  organizationId: uuid,
-  branchId: uuid,
-  installations: z.array(z.object({
-    sourceInstanceId: uuid,
-    status: z.enum(['active', 'suspended', 'revoked']),
-    installationVersion: z.number().int().positive(),
-    registeredAt: z.string().datetime({ offset: true }),
-    lastHeartbeatAt: z.string().datetime({ offset: true }).nullable(),
-    snapshot: z.object({
-      version: z.string().min(1).max(120),
-      generatedAt: z.string().datetime({ offset: true }),
-      validUntil: z.string().datetime({ offset: true }),
-    }).strict().nullable(),
-    lastEvent: z.object({
-      eventId: uuid,
-      receivedAt: z.string().datetime({ offset: true }),
-    }).strict().nullable(),
-    outbox: z.object({ pending: z.number().int().nonnegative(), deadLetter: z.number().int().nonnegative() }).strict(),
-  }).strict()),
-  pendingCount: z.number().int().nonnegative(),
-  deadLetterCount: z.number().int().nonnegative(),
-  deadLetters: z.array(z.object({
+const edgeSyncStatusSchema = z
+  .object({
+    organizationId: uuid,
+    branchId: uuid,
+    installations: z.array(
+      z
+        .object({
+          sourceInstanceId: uuid,
+          status: z.enum(['active', 'suspended', 'revoked']),
+          installationVersion: z.number().int().positive(),
+          registeredAt: z.string().datetime({ offset: true }),
+          lastHeartbeatAt: z.string().datetime({ offset: true }).nullable(),
+          snapshot: z
+            .object({
+              version: z.string().min(1).max(120),
+              generatedAt: z.string().datetime({ offset: true }),
+              validUntil: z.string().datetime({ offset: true }),
+            })
+            .strict()
+            .nullable(),
+          lastEvent: z
+            .object({
+              eventId: uuid,
+              receivedAt: z.string().datetime({ offset: true }),
+            })
+            .strict()
+            .nullable(),
+          outbox: z
+            .object({
+              pending: z.number().int().nonnegative(),
+              deadLetter: z.number().int().nonnegative(),
+            })
+            .strict(),
+        })
+        .strict(),
+    ),
+    pendingCount: z.number().int().nonnegative(),
+    deadLetterCount: z.number().int().nonnegative(),
+    deadLetters: z
+      .array(
+        z
+          .object({
+            outboxEventId: uuid,
+            eventId: uuid.nullable(),
+            sourceInstanceId: uuid.nullable(),
+            localTransactionId: z.string().max(160).nullable(),
+            errorCode: z.string().min(1).max(80),
+            attempts: z.number().int().nonnegative(),
+            deadLetteredAt: z.string().datetime({ offset: true }).nullable(),
+            createdAt: z.string().datetime({ offset: true }),
+          })
+          .strict(),
+      )
+      .max(100),
+    deadLettersTruncated: z.boolean(),
+  })
+  .strict();
+const edgeReplayResultSchema = z
+  .object({
+    eventId: uuid,
+    status: z.literal('queued_for_replay'),
     outboxEventId: uuid,
-    eventId: uuid.nullable(),
-    sourceInstanceId: uuid.nullable(),
-    localTransactionId: z.string().max(160).nullable(),
-    errorCode: z.string().min(1).max(80),
-    attempts: z.number().int().nonnegative(),
-    deadLetteredAt: z.string().datetime({ offset: true }).nullable(),
-    createdAt: z.string().datetime({ offset: true }),
-  }).strict()).max(100),
-  deadLettersTruncated: z.boolean(),
-}).strict();
-const edgeReplayResultSchema = z.object({
-  eventId: uuid,
-  status: z.literal('queued_for_replay'),
-  outboxEventId: uuid,
-}).strict();
+  })
+  .strict();
+const edgeOperatorPermissionSchema = z.enum([
+  'card.inventory.read',
+  'card.inventory.manage',
+  'card.assign',
+  'card.transfer',
+  'card.unassign',
+  'customer.lookup.limited',
+  'customer.provisional.create',
+  'customer.family.read',
+  'customer.family.manage',
+  'customer.profile.manage',
+]);
+const edgePairingApprovalSchema = z
+  .object({
+    status: z.literal('approved'),
+    branchId: uuid,
+    permissionKeys: z.array(edgeOperatorPermissionSchema).min(1).max(10),
+    expiresAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
 
 export type DeviceView = z.infer<typeof deviceSchema>;
 export type DevicePage = z.infer<typeof devicePageSchema>;
@@ -150,25 +195,65 @@ export class DeviceIntegrationClient {
   }
 
   async getEdgeSyncStatus(organizationId: string, branchId: string): Promise<DeviceEdgeSyncStatus> {
-    const result = edgeSyncStatusSchema.safeParse(await this.request(
-      `/internal/v1/operations/edge-sync/organizations/${encodeURIComponent(organizationId)}/branches/${encodeURIComponent(branchId)}`,
-    ));
-    if (!result.success || result.data.organizationId.toLowerCase() !== organizationId.toLowerCase() ||
-      result.data.branchId.toLowerCase() !== branchId.toLowerCase()) throw this.contractError();
+    const result = edgeSyncStatusSchema.safeParse(
+      await this.request(
+        `/internal/v1/operations/edge-sync/organizations/${encodeURIComponent(organizationId)}/branches/${encodeURIComponent(branchId)}`,
+      ),
+    );
+    if (
+      !result.success ||
+      result.data.organizationId.toLowerCase() !== organizationId.toLowerCase() ||
+      result.data.branchId.toLowerCase() !== branchId.toLowerCase()
+    )
+      throw this.contractError();
     return result.data;
   }
 
-  async replayEdgeDeadLetter(input: {
-    organizationId: string;
-    branchId: string;
-    eventId: string;
-    reason: string;
-  }, meta: DeviceCommandMeta): Promise<DeviceEdgeReplayResult> {
-    const result = edgeReplayResultSchema.safeParse(await this.request(
-      `/internal/v1/operations/edge-sync/organizations/${encodeURIComponent(input.organizationId)}/branches/${encodeURIComponent(input.branchId)}/dead-letters/${encodeURIComponent(input.eventId)}/replay`,
-      { method: 'POST', body: { reason: input.reason }, command: meta },
-    ));
+  async replayEdgeDeadLetter(
+    input: {
+      organizationId: string;
+      branchId: string;
+      eventId: string;
+      reason: string;
+    },
+    meta: DeviceCommandMeta,
+  ): Promise<DeviceEdgeReplayResult> {
+    const result = edgeReplayResultSchema.safeParse(
+      await this.request(
+        `/internal/v1/operations/edge-sync/organizations/${encodeURIComponent(input.organizationId)}/branches/${encodeURIComponent(input.branchId)}/dead-letters/${encodeURIComponent(input.eventId)}/replay`,
+        { method: 'POST', body: { reason: input.reason }, command: meta },
+      ),
+    );
     if (!result.success || result.data.eventId.toLowerCase() !== input.eventId.toLowerCase())
+      throw this.contractError();
+    return result.data;
+  }
+
+  async approveEdgeOperatorPairing(
+    input: {
+      code: string;
+      organizationId: string;
+      branchId: string;
+      managementSessionId: string;
+      permissionKeys: string[];
+    },
+    meta: DeviceCommandMeta,
+  ) {
+    const result = edgePairingApprovalSchema.safeParse(
+      await this.request('/internal/v1/operations/edge-pairings/approve', {
+        method: 'POST',
+        body: input,
+        command: meta,
+      }),
+    );
+    if (
+      !result.success ||
+      result.data.branchId.toLowerCase() !== input.branchId.toLowerCase() ||
+      result.data.permissionKeys.length !== input.permissionKeys.length ||
+      result.data.permissionKeys.some(
+        (permissionKey) => !input.permissionKeys.includes(permissionKey),
+      )
+    )
       throw this.contractError();
     return result.data;
   }

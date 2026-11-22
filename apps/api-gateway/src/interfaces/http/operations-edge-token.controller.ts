@@ -17,6 +17,7 @@ import { TrustedOriginGuard } from './trusted-origin.guard.js';
 import { ZodValidationPipe } from './zod-validation.pipe.js';
 import { OrganizationBranchClient } from '../../infrastructure/organization-branch/organization-branch.client.js';
 import {
+  EDGE_OPERATOR_PERMISSION_KEYS,
   IdentityAccessClient,
   type EdgeOperatorPermission,
 } from '../../infrastructure/identity-access/identity-access.client.js';
@@ -24,23 +25,7 @@ import {
 const issueSchema = z
   .object({
     branchId: z.string().uuid(),
-    permissionKeys: z
-      .array(
-        z.enum([
-          'card.inventory.read',
-          'card.inventory.manage',
-          'card.assign',
-          'card.transfer',
-          'card.unassign',
-          'customer.lookup.limited',
-          'customer.provisional.create',
-          'customer.family.read',
-          'customer.family.manage',
-          'customer.profile.manage',
-        ]),
-      )
-      .min(1)
-      .max(10),
+    permissionKeys: z.array(z.enum(EDGE_OPERATOR_PERMISSION_KEYS)).min(1).max(10),
   })
   .strict()
   .refine((value) => new Set(value.permissionKeys).size === value.permissionKeys.length);

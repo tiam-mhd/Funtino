@@ -7,16 +7,19 @@ import {
 } from './application/device-registry.service.js';
 import { EdgeSnapshotService } from './application/edge-snapshot.service.js';
 import { EdgeSyncOperationsService } from './application/edge-sync-operations.service.js';
+import { EdgeOperatorPairingService } from './application/edge-operator-pairing.service.js';
 import type { DeviceHealthPolicy } from './domain/device/device.js';
 import { BRANCH_SCOPE_VALIDATOR } from './application/ports/branch-scope-validator.port.js';
 import { DEVICE_REGISTRY_REPOSITORY } from './application/ports/device-registry.repository.js';
 import { DEVICE_SIGNATURE_VERIFIER } from './application/ports/device-signature-verifier.port.js';
+import { EDGE_OPERATOR_PAIRING_REPOSITORY } from './application/ports/edge-operator-pairing.repository.js';
 import {
   DeviceOutboxRelayService,
   DEVICE_EVENT_BUS,
   DEVICE_RABBIT_URL,
 } from './infrastructure/messaging/outbox/device-outbox-relay.service.js';
 import { PrismaDeviceRegistryRepository } from './infrastructure/persistence/prisma/prisma-device-registry.repository.js';
+import { PrismaEdgeOperatorPairingRepository } from './infrastructure/persistence/prisma/prisma-edge-operator-pairing.repository.js';
 import { PrismaService } from './infrastructure/persistence/prisma/prisma.service.js';
 import { OrganizationBranchScopeClient } from './infrastructure/organization-branch/organization-branch-scope.client.js';
 import { WalletEdgeMappingClient } from './infrastructure/wallet/wallet-edge-mapping.client.js';
@@ -26,6 +29,7 @@ import { EdgeOperatorTokenClient } from './infrastructure/identity-access/edge-o
 import { EdgeProvisionalCustomerClient } from './infrastructure/customer-household/edge-provisional-customer.client.js';
 import { EdgeHouseholdOperationsClient } from './infrastructure/customer-household/edge-household-operations.client.js';
 import { EdgeIdentityLookupClient } from './infrastructure/gateway/edge-identity-lookup.client.js';
+import { EdgeOperatorPairingGatewayClient } from './infrastructure/gateway/edge-operator-pairing.client.js';
 import { HmacDeviceSignatureService } from './infrastructure/security/hmac-device-signature.service.js';
 import { DeviceController, DeviceWebhookController } from './interfaces/http/device.controller.js';
 import { EdgeController } from './interfaces/http/edge.controller.js';
@@ -33,6 +37,8 @@ import { EdgeCustomerOperationsController } from './interfaces/http/edge-custome
 import { EdgeInstallationController } from './interfaces/http/edge-installation.controller.js';
 import { EdgeSnapshotController } from './interfaces/http/edge-snapshot.controller.js';
 import { EdgeSyncOperationsController } from './interfaces/http/edge-sync-operations.controller.js';
+import { EdgeOperatorPairingController } from './interfaces/http/edge-operator-pairing.controller.js';
+import { EdgeOperatorPairingApprovalController } from './interfaces/http/edge-operator-pairing-approval.controller.js';
 import { HealthController } from './interfaces/http/health.controller.js';
 import { DeviceIntegrationServiceTokenGuard } from './interfaces/http/service-token.guard.js';
 
@@ -63,6 +69,8 @@ function configuredHealthPolicy(): DeviceHealthPolicy {
     EdgeInstallationController,
     EdgeSnapshotController,
     EdgeSyncOperationsController,
+    EdgeOperatorPairingController,
+    EdgeOperatorPairingApprovalController,
     HealthController,
   ],
   providers: [
@@ -70,6 +78,7 @@ function configuredHealthPolicy(): DeviceHealthPolicy {
     DeviceRegistryService,
     EdgeSnapshotService,
     EdgeSyncOperationsService,
+    EdgeOperatorPairingService,
     WalletEdgeMappingClient,
     EdgeCardOperationsClient,
     PricingSnapshotClient,
@@ -77,12 +86,15 @@ function configuredHealthPolicy(): DeviceHealthPolicy {
     EdgeProvisionalCustomerClient,
     EdgeHouseholdOperationsClient,
     EdgeIdentityLookupClient,
+    EdgeOperatorPairingGatewayClient,
     DeviceIntegrationServiceTokenGuard,
     DeviceOutboxRelayService,
     PrismaDeviceRegistryRepository,
+    PrismaEdgeOperatorPairingRepository,
     OrganizationBranchScopeClient,
     HmacDeviceSignatureService,
     { provide: DEVICE_REGISTRY_REPOSITORY, useExisting: PrismaDeviceRegistryRepository },
+    { provide: EDGE_OPERATOR_PAIRING_REPOSITORY, useExisting: PrismaEdgeOperatorPairingRepository },
     { provide: BRANCH_SCOPE_VALIDATOR, useExisting: OrganizationBranchScopeClient },
     { provide: DEVICE_SIGNATURE_VERIFIER, useExisting: HmacDeviceSignatureService },
     {
