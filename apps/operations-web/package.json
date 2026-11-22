@@ -7,13 +7,14 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint .",
-    "test": "tsx --test src/tests/operations-staff.api.spec.ts src/tests/operations-devices.api.spec.ts src/tests/operations-cards.api.spec.ts src/tests/operations-reports.api.spec.ts src/tests/operations-forms.api.spec.ts",
+    "test": "tsx --test src/tests/operations-staff.api.spec.ts src/tests/operations-devices.api.spec.ts src/tests/operations-cards.api.spec.ts src/tests/operations-reports.api.spec.ts src/tests/operations-forms.api.spec.ts src/tests/card-balance-scan.spec.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@fontsource/vazirmatn": "5.3.0",
     "@fontsource/estedad": "5.3.0",
     "@funtino/design-system": "workspace:*",
+    "@funtino/nfc-reader": "workspace:*",
     "@funtino/forms-renderer": "workspace:*",
     "@funtino/forms-schema": "workspace:*",
     "next": "15.5.2",

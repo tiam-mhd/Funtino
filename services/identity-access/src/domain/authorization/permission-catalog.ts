@@ -1,4 +1,4 @@
-export const permissionCatalogVersion = 8;
+export const permissionCatalogVersion = 9;
 
 export const permissionCatalog = [
   { key: 'organization.create', scopes: ['global'], delegable: false, stepUp: true },
@@ -90,6 +90,12 @@ export const permissionCatalog = [
   },
   {
     key: 'card.inventory.read',
+    scopes: ['branch', 'organization', 'global'],
+    delegable: true,
+    stepUp: false,
+  },
+  {
+    key: 'card.balance.read',
     scopes: ['branch', 'organization', 'global'],
     delegable: true,
     stepUp: false,

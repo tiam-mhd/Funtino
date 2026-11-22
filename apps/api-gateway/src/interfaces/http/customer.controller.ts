@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Headers,
@@ -22,6 +23,7 @@ import { CustomerService } from '../../application/customer/customer.service.js'
 import { CurrentUser, requestCorrelationId, success } from './current-user.decorator.js';
 import type { AuthenticatedRequest } from './current-user.decorator.js';
 import { SessionGuard } from './session.guard.js';
+import { TrustedOriginGuard } from './trusted-origin.guard.js';
 import { ZodValidationPipe } from './zod-validation.pipe.js';
 
 const householdSchema = z.object({ name: z.string().min(2).max(80) });
@@ -51,17 +53,28 @@ const profileSchema = z.object({
 });
 const claimSchema = z.object({ householdId: z.string().uuid() });
 const branchQuerySchema = z.object({ branchId: z.string().uuid().optional() });
-const cardTransactionQuerySchema = z.object({
-  cursor: z.string().max(512).optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(25),
-  kind: z.enum(['top_up', 'spend', 'refund', 'adjustment', 'issuance', 'card_replacement']).optional(),
-  from: z.string().datetime({ offset: true }).optional(),
-  to: z.string().datetime({ offset: true }).optional(),
-}).strict();
-const cardLifecycleRequestSchema = z.object({
-  action: z.enum(['lost', 'replacement']),
-  reason: z.string().trim().min(8).max(500),
-}).strict();
+const cardTransactionQuerySchema = z
+  .object({
+    cursor: z.string().max(512).optional(),
+    pageSize: z.coerce.number().int().min(1).max(100).default(25),
+    kind: z
+      .enum(['top_up', 'spend', 'refund', 'adjustment', 'issuance', 'card_replacement'])
+      .optional(),
+    from: z.string().datetime({ offset: true }).optional(),
+    to: z.string().datetime({ offset: true }).optional(),
+  })
+  .strict();
+const cardLifecycleRequestSchema = z
+  .object({
+    action: z.enum(['lost', 'replacement']),
+    reason: z.string().trim().min(8).max(500),
+  })
+  .strict();
+const cardBalanceLookupSchema = z
+  .object({
+    cardUidHash: z.string().regex(/^[a-fA-F0-9]{64}$/),
+  })
+  .strict();
 type HouseholdBody = z.infer<typeof householdSchema>;
 type MemberBody = z.infer<typeof memberSchema>;
 type CardLinkBody = z.infer<typeof cardLinkSchema>;
@@ -69,6 +82,7 @@ type ProfileBody = z.infer<typeof profileSchema>;
 type ClaimBody = z.infer<typeof claimSchema>;
 type BranchQuery = z.infer<typeof branchQuerySchema>;
 type CardTransactionQuery = z.infer<typeof cardTransactionQuerySchema>;
+type CardBalanceLookupBody = z.infer<typeof cardBalanceLookupSchema>;
 
 @Controller('api/v1/customer')
 export class CustomerController {
@@ -199,6 +213,22 @@ export class CustomerController {
     return success(await this.customerService.listCards(user.id), request);
   }
 
+  @Post('cards/balance-lookup')
+  @UseGuards(SessionGuard, TrustedOriginGuard)
+  @HttpCode(HttpStatus.OK)
+  @Header('cache-control', 'private, no-store')
+  @Header('pragma', 'no-cache')
+  async lookupCardBalance(
+    @CurrentUser() user: { id: string },
+    @Body(new ZodValidationPipe(cardBalanceLookupSchema)) body: CardBalanceLookupBody,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return success(
+      await this.customerService.lookupCardBalance(user.id, body.cardUidHash.toLowerCase()),
+      request,
+    );
+  }
+
   @Get('households/:householdId/cards/:cardId/transactions')
   @UseGuards(SessionGuard)
   async cardTransactions(
@@ -235,7 +265,8 @@ export class CustomerController {
     @CurrentUser() user: { id: string },
     @Param('householdId') householdId: string,
     @Param('cardId') cardId: string,
-    @Body(new ZodValidationPipe(cardLifecycleRequestSchema)) body: z.infer<typeof cardLifecycleRequestSchema>,
+    @Body(new ZodValidationPipe(cardLifecycleRequestSchema))
+    body: z.infer<typeof cardLifecycleRequestSchema>,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {

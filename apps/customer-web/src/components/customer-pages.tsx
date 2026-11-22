@@ -9,6 +9,7 @@ import {
 
 import { branches, customerDashboard } from '../lib/demo-data';
 import { CustomerCardsList } from './customer-cards';
+import { CustomerCardBalanceScan } from './customer-card-balance-scan';
 import { CustomerIcon, type CustomerIconName } from './customer-icons';
 
 function DemoNote({ children }: { children: string }) {
@@ -23,6 +24,7 @@ function DemoNote({ children }: { children: string }) {
 export function CardsPage() {
   return (
     <main className="customer-page">
+      <CustomerCardBalanceScan />
       <CustomerCardsList />
     </main>
   );

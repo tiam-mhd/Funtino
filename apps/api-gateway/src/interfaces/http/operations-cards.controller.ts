@@ -67,6 +67,11 @@ const statusSchema = z
   .strict();
 const phoneSchema = z.string().trim().min(8).max(20);
 const householdLookupSchema = z.object({ phone: phoneSchema }).strict();
+const cardBalanceLookupSchema = z
+  .object({
+    cardUidHash: z.string().regex(/^[a-fA-F0-9]{64}$/),
+  })
+  .strict();
 const assignmentSchema = z
   .object({ phone: phoneSchema, householdId: uuid, memberId: uuid.nullable().optional(), reason })
   .strict();
@@ -77,17 +82,23 @@ const assignmentPageSchema = z
     pageSize: z.coerce.number().int().min(1).max(100).default(25),
   })
   .strict();
-const lifecycleRequestPageSchema = z.object({
-  status: z.enum(['requested', 'in_review', 'approved', 'rejected', 'completed']).optional(),
-  cursor: uuid.optional(),
-  pageSize: z.coerce.number().int().min(1).max(100).default(50),
-}).strict();
-const lifecycleRequestTransitionSchema = z.object({
-  status: z.enum(['in_review', 'approved', 'rejected', 'completed']),
-  reason,
-}).strict();
+const lifecycleRequestPageSchema = z
+  .object({
+    status: z.enum(['requested', 'in_review', 'approved', 'rejected', 'completed']).optional(),
+    cursor: uuid.optional(),
+    pageSize: z.coerce.number().int().min(1).max(100).default(50),
+  })
+  .strict();
+const lifecycleRequestTransitionSchema = z
+  .object({
+    status: z.enum(['in_review', 'approved', 'rejected', 'completed']),
+    reason,
+  })
+  .strict();
 const customerLookupWindowMs = 15 * 60 * 1000;
 const customerLookupMaxRequests = 30;
+const cardBalanceLookupWindowMs = 15 * 60 * 1000;
+const cardBalanceLookupMaxRequests = 10;
 
 type CardPageQuery = z.infer<typeof pageSchema>;
 
@@ -126,22 +137,30 @@ export class OperationsCardsController {
     );
     await this.assertActiveScope(organizationId, branchId);
 
-    const [page, canManage, canAssign, canTransfer, canUnassign, canLookupCustomer] =
-      await Promise.all([
-        this.wallet.listCards({ organizationId, branchId, ...query }),
-        this.capability(user.id, request, 'card.inventory.manage', scope, undefined, correlationId),
-        this.capability(user.id, request, 'card.assign', scope, undefined, correlationId),
-        this.capability(user.id, request, 'card.transfer', scope, undefined, correlationId),
-        this.capability(user.id, request, 'card.unassign', scope, undefined, correlationId),
-        this.capability(
-          user.id,
-          request,
-          'customer.lookup.limited',
-          scope,
-          undefined,
-          correlationId,
-        ),
-      ]);
+    const [
+      page,
+      canManage,
+      canAssign,
+      canTransfer,
+      canUnassign,
+      canLookupCustomer,
+      canReadBalance,
+    ] = await Promise.all([
+      this.wallet.listCards({ organizationId, branchId, ...query }),
+      this.capability(user.id, request, 'card.inventory.manage', scope, undefined, correlationId),
+      this.capability(user.id, request, 'card.assign', scope, undefined, correlationId),
+      this.capability(user.id, request, 'card.transfer', scope, undefined, correlationId),
+      this.capability(user.id, request, 'card.unassign', scope, undefined, correlationId),
+      this.capability(user.id, request, 'customer.lookup.limited', scope, undefined, correlationId),
+      this.capability(
+        user.id,
+        request,
+        'card.balance.read',
+        scope,
+        { type: 'branch', id: branchId },
+        correlationId,
+      ),
+    ]);
     return {
       ...success(
         {
@@ -152,12 +171,96 @@ export class OperationsCardsController {
             canTransfer,
             canUnassign,
             canLookupCustomer,
+            canReadBalance,
           },
         },
         request,
       ),
       nextCursor: page.nextCursor,
     };
+  }
+
+  @Post('organizations/:organizationId/branches/:branchId/cards/balance-lookup')
+  @UseGuards(TrustedOriginGuard)
+  @HttpCode(HttpStatus.OK)
+  @Header('cache-control', 'no-store, private')
+  @Header('pragma', 'no-cache')
+  async lookupCardBalance(
+    @CurrentUser() user: { id: string },
+    @Param('organizationId') rawOrganizationId: string,
+    @Param('branchId') rawBranchId: string,
+    @Body(new ZodValidationPipe(cardBalanceLookupSchema))
+    body: z.infer<typeof cardBalanceLookupSchema>,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    const organizationId = this.parseUuid(rawOrganizationId, 'شناسه مجموعه معتبر نیست.');
+    const branchId = this.parseUuid(rawBranchId, 'شناسه شعبه معتبر نیست.');
+    const correlationId = requestCorrelationId(request);
+    const scope: AccessScopeDto = { type: 'branch', organizationId, branchId };
+    await this.authorize(
+      user.id,
+      request,
+      'card.balance.read',
+      scope,
+      { type: 'branch', id: branchId },
+      correlationId,
+    );
+    await this.assertActiveScope(organizationId, branchId);
+
+    const now = Date.now();
+    const lookupCount = await this.store.consumeOperationsCustomerLookupQuota({
+      actorUserId: user.id,
+      branchId,
+      windowStartedAt: Math.floor(now / cardBalanceLookupWindowMs) * cardBalanceLookupWindowMs,
+      maxRequests: cardBalanceLookupMaxRequests,
+    });
+    if (lookupCount > cardBalanceLookupMaxRequests) {
+      if (lookupCount === cardBalanceLookupMaxRequests + 1) {
+        await this.store.recordAudit(
+          user.id,
+          'operations.card.balance_read',
+          'branch',
+          branchId,
+          correlationId,
+          'rate_limited',
+          scope,
+        );
+      }
+      throw new HttpException(
+        'تعداد بررسی‌های موجودی در این شعبه از حد مجاز گذشت؛ کمی بعد دوباره تلاش کنید.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    let result: Awaited<ReturnType<WalletClient['lookupCardBalanceByHash']>>;
+    try {
+      result = await this.wallet.lookupCardBalanceByHash({
+        cardUidHash: body.cardUidHash.toLowerCase(),
+        audience: { type: 'operations', organizationId, branchId },
+      });
+    } catch (error) {
+      await this.store.recordAudit(
+        user.id,
+        'operations.card.balance_read',
+        'branch',
+        branchId,
+        correlationId,
+        'dependency_unavailable',
+        scope,
+      );
+      throw error;
+    }
+
+    await this.store.recordAudit(
+      user.id,
+      'operations.card.balance_read',
+      'branch',
+      branchId,
+      correlationId,
+      result.status,
+      scope,
+    );
+    return success(result, request);
   }
 
   @Post('organizations/:organizationId/branches/:branchId/cards')
@@ -267,16 +370,28 @@ export class OperationsCardsController {
     @CurrentUser() user: { id: string },
     @Param('organizationId') rawOrganizationId: string,
     @Param('branchId') rawBranchId: string,
-    @Query(new ZodValidationPipe(lifecycleRequestPageSchema)) query: z.infer<typeof lifecycleRequestPageSchema>,
+    @Query(new ZodValidationPipe(lifecycleRequestPageSchema))
+    query: z.infer<typeof lifecycleRequestPageSchema>,
     @Req() request: AuthenticatedRequest,
   ) {
     const organizationId = this.parseUuid(rawOrganizationId, 'Invalid organization id.');
     const branchId = this.parseUuid(rawBranchId, 'Invalid branch id.');
     const correlationId = requestCorrelationId(request);
     const scope: AccessScopeDto = { type: 'branch', organizationId, branchId };
-    await this.authorize(user.id, request, 'card.inventory.read', scope, { type: 'branch', id: branchId }, correlationId);
+    await this.authorize(
+      user.id,
+      request,
+      'card.inventory.read',
+      scope,
+      { type: 'branch', id: branchId },
+      correlationId,
+    );
     await this.assertActiveScope(organizationId, branchId);
-    const page = await this.wallet.listBranchCardLifecycleRequests({ organizationId, branchId, ...query });
+    const page = await this.wallet.listBranchCardLifecycleRequests({
+      organizationId,
+      branchId,
+      ...query,
+    });
     return { ...success({ items: page.items }, request), nextCursor: page.nextCursor };
   }
 
@@ -288,7 +403,8 @@ export class OperationsCardsController {
     @Param('organizationId') rawOrganizationId: string,
     @Param('branchId') rawBranchId: string,
     @Param('requestId') rawRequestId: string,
-    @Body(new ZodValidationPipe(lifecycleRequestTransitionSchema)) body: z.infer<typeof lifecycleRequestTransitionSchema>,
+    @Body(new ZodValidationPipe(lifecycleRequestTransitionSchema))
+    body: z.infer<typeof lifecycleRequestTransitionSchema>,
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Req() request: AuthenticatedRequest,
   ) {
@@ -297,7 +413,14 @@ export class OperationsCardsController {
     const requestId = this.parseUuid(rawRequestId, 'Invalid lifecycle request id.');
     const correlationId = requestCorrelationId(request);
     const scope: AccessScopeDto = { type: 'branch', organizationId, branchId };
-    await this.authorize(user.id, request, 'card.inventory.manage', scope, { type: 'branch', id: branchId }, correlationId);
+    await this.authorize(
+      user.id,
+      request,
+      'card.inventory.manage',
+      scope,
+      { type: 'branch', id: branchId },
+      correlationId,
+    );
     await this.assertActiveScope(organizationId, branchId);
     return success(
       await this.wallet.transitionCardLifecycleRequest(

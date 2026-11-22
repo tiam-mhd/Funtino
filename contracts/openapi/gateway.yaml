@@ -1290,6 +1290,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CustomerCardsSuccess'
+  /api/v1/customer/cards/balance-lookup:
+    post:
+      x-funtino-availability: implemented
+      operationId: lookupCustomerCardBalance
+      description: Resolves a browser-visible NFC identifier only within active, verified assignments of households owned by the current customer session. Returns a fresh Wallet snapshot or a generic non-display status; it never reads a physical block.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CardBalanceLookupRequest' }
+      responses:
+        '200':
+          description: Minimal scan result. Balance is present only for a fresh, confirmed Wallet projection.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerCardBalanceLookupSuccess' }
+        '400': { description: Invalid lookup body. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { description: Household owner or Wallet is unavailable; lookup fails closed. }
   /api/v1/customer/households/{householdId}/cards/{cardId}/transactions:
     get:
       operationId: listCustomerCardTransactions
@@ -2159,6 +2182,38 @@ paths:
         '409': { description: Inactive branch, duplicate identifier, or idempotency conflict. }
         '503':
           { description: IAM, Organization & Branch, or Wallet is unavailable; write fails closed. }
+  /api/v1/operations/organizations/{organizationId}/branches/{branchId}/cards/balance-lookup:
+    security:
+      - managementSessionCookie: []
+    parameters:
+      - $ref: '#/components/parameters/SystemOrganizationId'
+      - $ref: '#/components/parameters/SystemBranchId'
+    post:
+      x-funtino-availability: implemented
+      operationId: lookupOperationsCardBalance
+      description: Resolves a browser-visible NFC identifier only within an active, verified assignment in the requested active branch. Requires card.balance.read for this exact branch and writes only a minimal audit event; it never reads a physical block.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CardBalanceLookupRequest' }
+      responses:
+        '200':
+          description: Minimal scan result. Balance is present only for a fresh, confirmed Wallet projection.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'no-store, private' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationsCardBalanceLookupSuccess' }
+        '400': { description: Invalid scope or lookup body. }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { description: Missing card.balance.read for this exact branch. }
+        '404': { description: Organization or branch not found. }
+        '409': { description: The organization or branch is not active. }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503':
+          { description: IAM, Organization & Branch or Wallet is unavailable; lookup fails closed. }
   /api/v1/operations/organizations/{organizationId}/branches/{branchId}/cards/{cardId}:
     security:
       - managementSessionCookie: []
@@ -4209,6 +4264,37 @@ components:
             $ref: '#/components/schemas/CustomerCardSummary'
         meta:
           $ref: '#/components/schemas/ResponseMeta'
+    CardBalanceLookupRequest:
+      type: object
+      additionalProperties: false
+      required: [cardUidHash]
+      properties:
+        cardUidHash:
+          type: string
+          pattern: '^[a-fA-F0-9]{64}$'
+          writeOnly: true
+          description: Transient lookup value in the POST body. Never a credential, URL parameter, display value, or audit field.
+    CardBalanceLookupResult:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [status, balanceRial]
+          properties:
+            status: { type: string, enum: [available] }
+            balanceRial: { type: integer, minimum: 0 }
+        - type: object
+          additionalProperties: false
+          required: [status]
+          properties:
+            status: { type: string, enum: [pending, unavailable] }
+    CustomerCardBalanceLookupSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, enum: [success] }
+        data: { $ref: '#/components/schemas/CardBalanceLookupResult' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
     CustomerHouseholdsSuccess:
       type: object
       required: [status, data, meta]
@@ -5006,13 +5092,15 @@ components:
             capabilities:
               type: object
               additionalProperties: false
-              required: [canManage, canAssign, canTransfer, canUnassign, canLookupCustomer]
+              required:
+                [canManage, canAssign, canTransfer, canUnassign, canLookupCustomer, canReadBalance]
               properties:
                 canManage: { type: boolean }
                 canAssign: { type: boolean }
                 canTransfer: { type: boolean }
                 canUnassign: { type: boolean }
                 canLookupCustomer: { type: boolean }
+                canReadBalance: { type: boolean }
         nextCursor: { type: [string, 'null'], format: uuid }
         meta: { $ref: '#/components/schemas/ResponseMeta' }
     OperationsCardCommandSuccess:
@@ -5021,6 +5109,14 @@ components:
       properties:
         status: { type: string, enum: [success] }
         data: { $ref: '#/components/schemas/OperationsCardInventory' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    OperationsCardBalanceLookupSuccess:
+      type: object
+      additionalProperties: false
+      required: [status, data, meta]
+      properties:
+        status: { type: string, enum: [success] }
+        data: { $ref: '#/components/schemas/CardBalanceLookupResult' }
         meta: { $ref: '#/components/schemas/ResponseMeta' }
     OperationsCardRegistrationRequest:
       type: object

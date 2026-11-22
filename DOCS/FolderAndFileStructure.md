@@ -71,9 +71,9 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 
 نگاشت اجرایی دو runtime در [CommitPushAndDeploymentWorkflow.md](CommitPushAndDeploymentWorkflow.md) canonical است. cloneهای deployment sibling زیر `D:\Tiam\Projects\Mohammadiig\Funtino-deployments` هستند و فقط دو خروجی زیر را نگه می‌دارند:
 
-| runtime bundle | source scope                                                                  | deployment repository      | پردازه‌ها                                                                                                                                  |
-| -------------- | ----------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Frontend       | سه web app و `packages/design-system`                                         | `funtino-frontend-runtime` | Customer :3000، Operations :3001، System :3002                                                                                             |
+| runtime bundle | source scope                                                                 | deployment repository      | پردازه‌ها                                                                                                                                                              |
+| -------------- | ---------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Frontend       | سه web app، `packages/design-system` و `packages/nfc-reader`                 | `funtino-frontend-runtime` | Customer :3000، Operations :3001، System :3002                                                                                                                         |
 | Backend        | دو gateway، نه service، `backend-core`، `event-contracts` و runner migration | `funtino-backend-runtime`  | API :4000، Realtime :4010، Device :4020، Notifications :4030، IAM :4040، Organization :4050، Analytics :4060، Wallet :4070، Customer :4080، Forms :4090، Pricing :4100 |
 
 `Funtino-platform.code-workspace` فقط نمای source و همین دو sibling deployment است. بازبودن چند folder در VS Code به‌معنای sync، commit مشترک یا push خودکار نیست. برای تشخیص repository مقصد و کنترل divergence از [قانون canonical انتشار](CommitPushAndDeploymentWorkflow.md) استفاده کن.
@@ -116,6 +116,7 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
       apps/operations-web/
       apps/system-web/
       packages/design-system/
+      packages/nfc-reader/
       scripts/runtime-bundle/
       Dockerfile
       .dockerignore
@@ -616,3 +617,10 @@ deployment repositoryها در GitHub repositoryهای مستقل و هم‌سط
 - Gateway controller در `apps/api-gateway/src/interfaces/http/` و client داخلی Forms در `apps/api-gateway/src/infrastructure/forms/` است. هیچ app یا service دیگری Prisma client/schema مربوط به Forms را import نمی‌کند.
 
 برای جای‌گذاری routeهای Edge، زمان‌بندی migrationهای مالکانه، دسترسی محیطی، اجرای dry-run و rollback امن به [راهنمای عملیات Windows Edge و Wallet](WindowsEdgeWalletOperations.md) مراجعه کنید.
+
+## ۱۵. آداپتور خواندن NFC در مرورگر
+
+- ابزار کم‌سطح و مشترک Web NFC در `packages/nfc-reader/` قرار می‌گیرد و فقط `NDEFReader.scan()` را فراخوانی می‌کند؛ هیچ کلید، فرمان خام، نوشتن روی کارت یا اتصال مستقیم به Wallet ندارد.
+- این package فقط شناسه‌ی NDEF قابل‌دسترسی را در حافظه به شکل سازگار با mapping مستند Windows نرمال و هش می‌کند؛ UID خام یا هش از package به UI بازگردانده نمی‌شود. هش فقط در body درخواست مجاز به Gateway می‌رود و مجوز یا اثبات مالکیت نیست.
+- Customer و Operations مصرف‌کنندگان رابط مستقل خود هستند. مبلغ فقط از پاسخ lookup سمت سرور و snapshot معتبر Wallet می‌آید؛ Web NFC هرگز منبع مبلغ یا خواندن بلوک فیزیکی معرفی نمی‌شود.
+- package در snapshot کامل Frontend bundle بسته‌بندی می‌شود. تغییر API Gateway، Wallet، IAM یا قرارداد OpenAPI نیز Backend bundle را اثرپذیر می‌کند.

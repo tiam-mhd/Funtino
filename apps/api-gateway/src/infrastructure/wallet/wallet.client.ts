@@ -42,75 +42,119 @@ const assignmentPageSchema = z
   .strict();
 const householdAssignmentPageSchema = assignmentPageSchema;
 const freshnessSchema = z.enum(['fresh', 'pending_sync', 'stale', 'unknown']);
-const cardSummarySchema = z.object({
-  householdId: uuid,
-  cardId: uuid,
-  memberId: uuid.nullable(),
-  balanceRial: z.number().int().safe().nullable(),
-  lastConfirmedSnapshotAt: z.string().datetime({ offset: true }).nullable(),
-  lastAppliedEventId: uuid.nullable(),
-  freshness: freshnessSchema,
-  pendingTransactionCount: z.number().int().nonnegative(),
-  reconciliationDifferenceRial: z.number().int().safe().nullable(),
-}).strict();
-const ledgerTransactionSchema = z.object({
-  id: uuid,
-  eventId: uuid,
-  cardId: uuid,
-  householdId: uuid,
-  memberId: uuid.nullable(),
-  deviceId: uuid.nullable(),
-  transactionKind: z.enum(['top_up', 'spend', 'refund', 'adjustment', 'issuance', 'card_replacement']),
-  amountRial: z.number().int().safe().nullable(),
-  grossAmountRial: z.number().int().safe().nullable(),
-  discountAmountRial: z.number().int().safe().nullable(),
-  netAmountRial: z.number().int().safe().nullable(),
-  currencyCode: z.literal('IRR'),
-  promotionId: z.string().nullable(),
-  ruleId: z.string().nullable(),
-  pricingVersion: z.string().nullable(),
-  reversalOfEntryId: uuid.nullable(),
-  occurredAt: z.string().datetime({ offset: true }),
-  status: z.literal('confirmed'),
-}).strict();
-const ledgerTransactionPageSchema = z.object({
-  items: z.array(ledgerTransactionSchema).max(100),
-  nextCursor: z.string().max(512).nullable(),
-}).strict();
+const cardSummarySchema = z
+  .object({
+    householdId: uuid,
+    cardId: uuid,
+    memberId: uuid.nullable(),
+    balanceRial: z.number().int().safe().nullable(),
+    lastConfirmedSnapshotAt: z.string().datetime({ offset: true }).nullable(),
+    lastAppliedEventId: uuid.nullable(),
+    freshness: freshnessSchema,
+    pendingTransactionCount: z.number().int().nonnegative(),
+    reconciliationDifferenceRial: z.number().int().safe().nullable(),
+  })
+  .strict();
+const cardBalanceLookupResultSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('available'),
+      balanceRial: z.number().int().safe().nonnegative(),
+    })
+    .strict(),
+  z.object({ status: z.enum(['pending', 'unavailable']) }).strict(),
+]);
+const ledgerTransactionSchema = z
+  .object({
+    id: uuid,
+    eventId: uuid,
+    cardId: uuid,
+    householdId: uuid,
+    memberId: uuid.nullable(),
+    deviceId: uuid.nullable(),
+    transactionKind: z.enum([
+      'top_up',
+      'spend',
+      'refund',
+      'adjustment',
+      'issuance',
+      'card_replacement',
+    ]),
+    amountRial: z.number().int().safe().nullable(),
+    grossAmountRial: z.number().int().safe().nullable(),
+    discountAmountRial: z.number().int().safe().nullable(),
+    netAmountRial: z.number().int().safe().nullable(),
+    currencyCode: z.literal('IRR'),
+    promotionId: z.string().nullable(),
+    ruleId: z.string().nullable(),
+    pricingVersion: z.string().nullable(),
+    reversalOfEntryId: uuid.nullable(),
+    occurredAt: z.string().datetime({ offset: true }),
+    status: z.literal('confirmed'),
+  })
+  .strict();
+const ledgerTransactionPageSchema = z
+  .object({
+    items: z.array(ledgerTransactionSchema).max(100),
+    nextCursor: z.string().max(512).nullable(),
+  })
+  .strict();
 const lifecycleActionSchema = z.enum(['lost', 'replacement']);
-const lifecycleStatusSchema = z.enum(['requested', 'in_review', 'approved', 'rejected', 'completed']);
-const lifecycleRequestSchema = z.object({
-  id: uuid,
-  cardId: uuid,
-  replacementCardId: uuid.nullable(),
-  householdId: uuid,
-  memberId: uuid.nullable(),
-  action: lifecycleActionSchema,
-  status: lifecycleStatusSchema,
-  reason: z.string().max(500),
-  createdAt: z.string().datetime({ offset: true }),
-}).strict();
-const lifecycleRequestCommandResultSchema = lifecycleRequestSchema.extend({ duplicate: z.boolean() }).strict();
-const branchLifecycleRequestSchema = lifecycleRequestSchema.extend({
-  organizationId: uuid,
-  branchId: uuid,
-  maskedIdentifier: z.string().min(1).max(32),
-}).strict();
-const branchLifecycleRequestPageSchema = z.object({
-  items: z.array(branchLifecycleRequestSchema).max(100),
-  nextCursor: uuid.nullable(),
-}).strict();
-const edgeReviewSummarySchema = z.object({
-  organizationId: uuid,
-  branchId: uuid,
-  reviewCount: z.number().int().nonnegative(),
-  rejectedCount: z.number().int().nonnegative(),
-  latestReviewAt: z.string().datetime({ offset: true }).nullable(),
-  errorsByCode: z.array(z.object({
-    errorCode: z.string().min(1).max(80),
-    count: z.number().int().positive(),
-  }).strict()).max(100),
-}).strict();
+const lifecycleStatusSchema = z.enum([
+  'requested',
+  'in_review',
+  'approved',
+  'rejected',
+  'completed',
+]);
+const lifecycleRequestSchema = z
+  .object({
+    id: uuid,
+    cardId: uuid,
+    replacementCardId: uuid.nullable(),
+    householdId: uuid,
+    memberId: uuid.nullable(),
+    action: lifecycleActionSchema,
+    status: lifecycleStatusSchema,
+    reason: z.string().max(500),
+    createdAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+const lifecycleRequestCommandResultSchema = lifecycleRequestSchema
+  .extend({ duplicate: z.boolean() })
+  .strict();
+const branchLifecycleRequestSchema = lifecycleRequestSchema
+  .extend({
+    organizationId: uuid,
+    branchId: uuid,
+    maskedIdentifier: z.string().min(1).max(32),
+  })
+  .strict();
+const branchLifecycleRequestPageSchema = z
+  .object({
+    items: z.array(branchLifecycleRequestSchema).max(100),
+    nextCursor: uuid.nullable(),
+  })
+  .strict();
+const edgeReviewSummarySchema = z
+  .object({
+    organizationId: uuid,
+    branchId: uuid,
+    reviewCount: z.number().int().nonnegative(),
+    rejectedCount: z.number().int().nonnegative(),
+    latestReviewAt: z.string().datetime({ offset: true }).nullable(),
+    errorsByCode: z
+      .array(
+        z
+          .object({
+            errorCode: z.string().min(1).max(80),
+            count: z.number().int().positive(),
+          })
+          .strict(),
+      )
+      .max(100),
+  })
+  .strict();
 
 export type WalletCardInventory = z.infer<typeof cardSchema>;
 export type WalletCardPage = z.infer<typeof cardPageSchema>;
@@ -119,6 +163,10 @@ export type WalletManualCardStatus = Exclude<WalletCardStatus, 'assigned'>;
 export type WalletCardAssignment = z.infer<typeof assignmentSchema>;
 export type WalletCardAssignmentPage = z.infer<typeof assignmentPageSchema>;
 export type WalletCardLedgerSummary = z.infer<typeof cardSummarySchema>;
+export type WalletCardBalanceLookupResult = z.infer<typeof cardBalanceLookupResultSchema>;
+export type WalletCardBalanceLookupAudience =
+  | { type: 'customer'; householdIds: string[] }
+  | { type: 'operations'; organizationId: string; branchId: string };
 export type WalletCardLedgerTransaction = z.infer<typeof ledgerTransactionSchema>;
 export type WalletCardLifecycleRequest = z.infer<typeof lifecycleRequestSchema>;
 export type WalletCardLifecycleAction = z.infer<typeof lifecycleActionSchema>;
@@ -266,65 +314,133 @@ export class WalletClient {
     throw this.contractError();
   }
 
-  async getCardLedgerSummary(householdId: string, cardId: string): Promise<WalletCardLedgerSummary> {
-    const result = cardSummarySchema.safeParse(await this.request(
-      `/internal/v1/households/${encodeURIComponent(householdId)}/cards/${encodeURIComponent(cardId)}/summary`,
-    ));
-    if (!result.success || result.data.householdId.toLowerCase() !== householdId.toLowerCase() ||
-      result.data.cardId.toLowerCase() !== cardId.toLowerCase()) throw this.contractError();
+  async getCardLedgerSummary(
+    householdId: string,
+    cardId: string,
+  ): Promise<WalletCardLedgerSummary> {
+    const result = cardSummarySchema.safeParse(
+      await this.request(
+        `/internal/v1/households/${encodeURIComponent(householdId)}/cards/${encodeURIComponent(cardId)}/summary`,
+      ),
+    );
+    if (
+      !result.success ||
+      result.data.householdId.toLowerCase() !== householdId.toLowerCase() ||
+      result.data.cardId.toLowerCase() !== cardId.toLowerCase()
+    )
+      throw this.contractError();
+    return result.data;
+  }
+
+  async lookupCardBalanceByHash(input: {
+    cardUidHash: string;
+    audience: WalletCardBalanceLookupAudience;
+  }): Promise<WalletCardBalanceLookupResult> {
+    const result = cardBalanceLookupResultSchema.safeParse(
+      await this.request('/internal/v1/cards/balance-lookup', {
+        method: 'POST',
+        body: input,
+      }),
+    );
+    if (!result.success) throw this.contractError();
     return result.data;
   }
 
   async listCardLedgerTransactions(input: {
-    householdId: string; cardId: string; cursor?: string; pageSize?: number;
-    kind?: WalletCardLedgerTransaction['transactionKind']; from?: string; to?: string;
+    householdId: string;
+    cardId: string;
+    cursor?: string;
+    pageSize?: number;
+    kind?: WalletCardLedgerTransaction['transactionKind'];
+    from?: string;
+    to?: string;
   }): Promise<{ items: WalletCardLedgerTransaction[]; nextCursor: string | null }> {
     const query = new URLSearchParams({ pageSize: String(input.pageSize ?? 25) });
     if (input.cursor) query.set('cursor', input.cursor);
     if (input.kind) query.set('kind', input.kind);
     if (input.from) query.set('from', input.from);
     if (input.to) query.set('to', input.to);
-    const result = ledgerTransactionPageSchema.safeParse(await this.request(
-      `/internal/v1/households/${encodeURIComponent(input.householdId)}/cards/${encodeURIComponent(input.cardId)}/transactions?${query}`,
-    ));
-    if (!result.success || result.data.items.some((item) =>
-      item.householdId.toLowerCase() !== input.householdId.toLowerCase() || item.cardId.toLowerCase() !== input.cardId.toLowerCase()))
+    const result = ledgerTransactionPageSchema.safeParse(
+      await this.request(
+        `/internal/v1/households/${encodeURIComponent(input.householdId)}/cards/${encodeURIComponent(input.cardId)}/transactions?${query}`,
+      ),
+    );
+    if (
+      !result.success ||
+      result.data.items.some(
+        (item) =>
+          item.householdId.toLowerCase() !== input.householdId.toLowerCase() ||
+          item.cardId.toLowerCase() !== input.cardId.toLowerCase(),
+      )
+    )
       throw this.contractError();
     return result.data;
   }
 
-  async listCardLifecycleRequests(householdId: string, cardId: string): Promise<WalletCardLifecycleRequest[]> {
-    const result = z.array(lifecycleRequestSchema).max(100).safeParse(await this.request(
-      `/internal/v1/households/${encodeURIComponent(householdId)}/cards/${encodeURIComponent(cardId)}/lifecycle-requests`,
-    ));
-    if (!result.success || result.data.some((item) =>
-      item.householdId.toLowerCase() !== householdId.toLowerCase() || item.cardId.toLowerCase() !== cardId.toLowerCase()))
+  async listCardLifecycleRequests(
+    householdId: string,
+    cardId: string,
+  ): Promise<WalletCardLifecycleRequest[]> {
+    const result = z
+      .array(lifecycleRequestSchema)
+      .max(100)
+      .safeParse(
+        await this.request(
+          `/internal/v1/households/${encodeURIComponent(householdId)}/cards/${encodeURIComponent(cardId)}/lifecycle-requests`,
+        ),
+      );
+    if (
+      !result.success ||
+      result.data.some(
+        (item) =>
+          item.householdId.toLowerCase() !== householdId.toLowerCase() ||
+          item.cardId.toLowerCase() !== cardId.toLowerCase(),
+      )
+    )
       throw this.contractError();
     return result.data;
   }
 
-  async createCardLifecycleRequest(input: {
-    householdId: string;
-    cardId: string;
-    action: WalletCardLifecycleAction;
-    reason: string;
-  }, meta: WalletCommandMeta) {
-    const result = lifecycleRequestCommandResultSchema.safeParse(await this.request(
-      `/internal/v1/households/${encodeURIComponent(input.householdId)}/cards/${encodeURIComponent(input.cardId)}/lifecycle-requests`,
-      { method: 'POST', body: { action: input.action, reason: input.reason }, command: meta },
-    ));
-    if (!result.success || result.data.householdId.toLowerCase() !== input.householdId.toLowerCase() ||
-      result.data.cardId.toLowerCase() !== input.cardId.toLowerCase() || result.data.action !== input.action)
+  async createCardLifecycleRequest(
+    input: {
+      householdId: string;
+      cardId: string;
+      action: WalletCardLifecycleAction;
+      reason: string;
+    },
+    meta: WalletCommandMeta,
+  ) {
+    const result = lifecycleRequestCommandResultSchema.safeParse(
+      await this.request(
+        `/internal/v1/households/${encodeURIComponent(input.householdId)}/cards/${encodeURIComponent(input.cardId)}/lifecycle-requests`,
+        { method: 'POST', body: { action: input.action, reason: input.reason }, command: meta },
+      ),
+    );
+    if (
+      !result.success ||
+      result.data.householdId.toLowerCase() !== input.householdId.toLowerCase() ||
+      result.data.cardId.toLowerCase() !== input.cardId.toLowerCase() ||
+      result.data.action !== input.action
+    )
       throw this.contractError();
     return result.data;
   }
 
-  async getBranchEdgeReviewSummary(organizationId: string, branchId: string): Promise<WalletEdgeReviewSummary> {
-    const result = edgeReviewSummarySchema.safeParse(await this.request(
-      `/internal/v1/edge/operations/organizations/${encodeURIComponent(organizationId)}/branches/${encodeURIComponent(branchId)}/review-summary`,
-    ));
-    if (!result.success || result.data.organizationId.toLowerCase() !== organizationId.toLowerCase() ||
-      result.data.branchId.toLowerCase() !== branchId.toLowerCase()) throw this.contractError();
+  async getBranchEdgeReviewSummary(
+    organizationId: string,
+    branchId: string,
+  ): Promise<WalletEdgeReviewSummary> {
+    const result = edgeReviewSummarySchema.safeParse(
+      await this.request(
+        `/internal/v1/edge/operations/organizations/${encodeURIComponent(organizationId)}/branches/${encodeURIComponent(branchId)}/review-summary`,
+      ),
+    );
+    if (
+      !result.success ||
+      result.data.organizationId.toLowerCase() !== organizationId.toLowerCase() ||
+      result.data.branchId.toLowerCase() !== branchId.toLowerCase()
+    )
+      throw this.contractError();
     return result.data;
   }
 
@@ -338,35 +454,59 @@ export class WalletClient {
     const query = new URLSearchParams({ pageSize: String(input.pageSize) });
     if (input.status) query.set('status', input.status);
     if (input.cursor) query.set('cursor', input.cursor);
-    const result = branchLifecycleRequestPageSchema.safeParse(await this.request(
-      `/internal/v1/organizations/${encodeURIComponent(input.organizationId)}/branches/${encodeURIComponent(input.branchId)}/card-lifecycle-requests?${query}`,
-    ));
-    if (!result.success || result.data.items.some((item) =>
-      item.organizationId.toLowerCase() !== input.organizationId.toLowerCase() ||
-      item.branchId.toLowerCase() !== input.branchId.toLowerCase())) throw this.contractError();
+    const result = branchLifecycleRequestPageSchema.safeParse(
+      await this.request(
+        `/internal/v1/organizations/${encodeURIComponent(input.organizationId)}/branches/${encodeURIComponent(input.branchId)}/card-lifecycle-requests?${query}`,
+      ),
+    );
+    if (
+      !result.success ||
+      result.data.items.some(
+        (item) =>
+          item.organizationId.toLowerCase() !== input.organizationId.toLowerCase() ||
+          item.branchId.toLowerCase() !== input.branchId.toLowerCase(),
+      )
+    )
+      throw this.contractError();
     return result.data;
   }
 
-  async transitionCardLifecycleRequest(input: {
+  async transitionCardLifecycleRequest(
+    input: {
+      organizationId: string;
+      branchId: string;
+      requestId: string;
+      status: Exclude<WalletCardLifecycleStatus, 'requested'>;
+      reason: string;
+    },
+    meta: WalletCommandMeta,
+  ) {
+    const result = lifecycleRequestCommandResultSchema.safeParse(
+      await this.request(
+        `/internal/v1/organizations/${encodeURIComponent(input.organizationId)}/branches/${encodeURIComponent(input.branchId)}/card-lifecycle-requests/${encodeURIComponent(input.requestId)}`,
+        { method: 'PATCH', body: { status: input.status, reason: input.reason }, command: meta },
+      ),
+    );
+    if (
+      !result.success ||
+      result.data.id.toLowerCase() !== input.requestId.toLowerCase() ||
+      result.data.status !== input.status
+    )
+      throw this.contractError();
+    return result.data;
+  }
+
+  async importLegacyDeviceEvent(input: {
     organizationId: string;
     branchId: string;
-    requestId: string;
-    status: Exclude<WalletCardLifecycleStatus, 'requested'>;
-    reason: string;
-  }, meta: WalletCommandMeta) {
-    const result = lifecycleRequestCommandResultSchema.safeParse(await this.request(
-      `/internal/v1/organizations/${encodeURIComponent(input.organizationId)}/branches/${encodeURIComponent(input.branchId)}/card-lifecycle-requests/${encodeURIComponent(input.requestId)}`,
-      { method: 'PATCH', body: { status: input.status, reason: input.reason }, command: meta },
-    ));
-    if (!result.success || result.data.id.toLowerCase() !== input.requestId.toLowerCase() ||
-      result.data.status !== input.status) throw this.contractError();
-    return result.data;
-  }
-
-  async importLegacyDeviceEvent(input: { organizationId: string; branchId: string; payload: unknown }) {
-    const result = z.object({ accepted: z.literal(true), duplicate: z.boolean() }).strict().safeParse(
-      await this.request('/internal/v1/legacy-device-events', { method: 'POST', body: input }),
-    );
+    payload: unknown;
+  }) {
+    const result = z
+      .object({ accepted: z.literal(true), duplicate: z.boolean() })
+      .strict()
+      .safeParse(
+        await this.request('/internal/v1/legacy-device-events', { method: 'POST', body: input }),
+      );
     if (!result.success) throw this.contractError();
     return result.data;
   }

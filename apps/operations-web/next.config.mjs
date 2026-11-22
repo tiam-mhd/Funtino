@@ -7,7 +7,7 @@ if (accessibilityDistDir && !/^\.next-a11y-[a-z0-9-]+$/.test(accessibilityDistDi
 const nextConfig = {
   ...(accessibilityDistDir ? { distDir: accessibilityDistDir } : {}),
   poweredByHeader: false,
-  transpilePackages: ['@funtino/design-system'],
+  transpilePackages: ['@funtino/design-system', '@funtino/nfc-reader'],
 };
 
 export default nextConfig;

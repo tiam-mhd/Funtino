@@ -35,6 +35,7 @@ async function requestApiData<T>(
     method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
     body?: unknown;
     headers?: Record<string, string>;
+    signal?: AbortSignal;
   } = {},
 ): Promise<{ data: T; nextCursor?: string | null }> {
   let response: Response;
@@ -48,6 +49,7 @@ async function requestApiData<T>(
         ...options.headers,
       },
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      ...(options.signal ? { signal: options.signal } : {}),
     });
   } catch {
     throw new ApiRequestError('ارتباط با سرویس برقرار نشد. اتصال را بررسی و دوباره تلاش کنید.', 0);
@@ -75,6 +77,7 @@ export async function apiRequest<T>(
     method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
     body?: unknown;
     headers?: Record<string, string>;
+    signal?: AbortSignal;
   } = {},
 ): Promise<T> {
   return (await requestApiData<T>(path, options)).data;

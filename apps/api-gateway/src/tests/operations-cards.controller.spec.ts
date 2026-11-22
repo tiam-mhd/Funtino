@@ -108,6 +108,7 @@ test('card listing requires exact branch permission and returns owner data with 
     canTransfer: false,
     canUnassign: false,
     canLookupCustomer: false,
+    canReadBalance: false,
   });
   assert.equal(result.nextCursor, null);
   assert.deepEqual(permissions, [
@@ -117,6 +118,7 @@ test('card listing requires exact branch permission and returns owner data with 
     'card.transfer',
     'card.unassign',
     'customer.lookup.limited',
+    'card.balance.read',
   ]);
 });
 
@@ -502,4 +504,140 @@ test('assignment rejects a household not returned by the phone owner before Wall
     (error: unknown) => error instanceof DomainError && error.code === 'FORBIDDEN',
   );
   assert.equal(walletCalled, false);
+});
+
+test('card balance read requires its own branch permission and audits only scope and outcome', async () => {
+  const cardUidHash = '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517';
+  const authorizationInputs: Array<Record<string, unknown>> = [];
+  const audits: unknown[][] = [];
+  let quotaInput: Record<string, unknown> | undefined;
+  let walletInput: Record<string, unknown> | undefined;
+  const result = await controller(
+    {
+      evaluateAuthorization: async (_user, _session, input) => {
+        authorizationInputs.push(input as unknown as Record<string, unknown>);
+        return {
+          allowed: input.permission === 'card.balance.read',
+          policyVersion: 1,
+          catalogVersion: 9,
+        };
+      },
+    },
+    activeOwner(),
+    {
+      lookupCardBalanceByHash: async (input) => {
+        walletInput = input as unknown as Record<string, unknown>;
+        return { status: 'available', balanceRial: 1_250_000 };
+      },
+    },
+    {},
+    {
+      consumeOperationsCustomerLookupQuota: async (input) => {
+        quotaInput = input;
+        return 1;
+      },
+      recordAudit: async (...args) => {
+        audits.push(args);
+      },
+    },
+  ).lookupCardBalance({ id: userId }, organizationId, branchId, { cardUidHash }, request());
+
+  assert.deepEqual(result.data, { status: 'available', balanceRial: 1_250_000 });
+  assert.equal(authorizationInputs[0]?.permission, 'card.balance.read');
+  assert.deepEqual(authorizationInputs[0]?.scope, {
+    type: 'branch',
+    organizationId,
+    branchId,
+  });
+  assert.equal(quotaInput?.actorUserId, userId);
+  assert.equal(quotaInput?.branchId, branchId);
+  assert.equal(quotaInput?.maxRequests, 10);
+  assert.deepEqual(walletInput, {
+    cardUidHash,
+    audience: { type: 'operations', organizationId, branchId },
+  });
+  assert.equal(audits.length, 1);
+  assert.equal(audits[0]?.[0], userId);
+  assert.equal(audits[0]?.[1], 'operations.card.balance_read');
+  assert.equal(audits[0]?.[2], 'branch');
+  assert.equal(audits[0]?.[3], branchId);
+  assert.equal(audits[0]?.[4], correlationId);
+  assert.equal(audits[0]?.[5], 'available');
+  assert.equal(JSON.stringify(audits).includes(cardUidHash), false);
+  assert.equal('cardId' in (result.data as Record<string, unknown>), false);
+});
+
+test('card balance read fails closed without card.balance.read', async () => {
+  let ownerRead = false;
+  let walletRead = false;
+  await assert.rejects(
+    controller(
+      {
+        evaluateAuthorization: async () => ({
+          allowed: false,
+          policyVersion: 1,
+          catalogVersion: 9,
+        }),
+      },
+      {
+        ...activeOwner(),
+        getOrganization: async () => {
+          ownerRead = true;
+          return { status: 'active' } as never;
+        },
+      },
+      {
+        lookupCardBalanceByHash: async () => {
+          walletRead = true;
+          return { status: 'unavailable' };
+        },
+      },
+    ).lookupCardBalance(
+      { id: userId },
+      organizationId,
+      branchId,
+      { cardUidHash: '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517' },
+      request(),
+    ),
+    (error: unknown) => error instanceof DomainError && error.code === 'FORBIDDEN',
+  );
+  assert.equal(ownerRead, false);
+  assert.equal(walletRead, false);
+});
+
+test('card balance rate limit audits without the card hash and does not query Wallet', async () => {
+  const cardUidHash = '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517';
+  let walletRead = false;
+  let auditArguments: unknown[] = [];
+  await assert.rejects(
+    controller(
+      {
+        evaluateAuthorization: async () => ({ allowed: true, policyVersion: 1, catalogVersion: 9 }),
+      },
+      activeOwner(),
+      {
+        lookupCardBalanceByHash: async () => {
+          walletRead = true;
+          return { status: 'unavailable' };
+        },
+      },
+      {},
+      {
+        consumeOperationsCustomerLookupQuota: async () => 11,
+        recordAudit: async (...args) => {
+          auditArguments = args;
+        },
+      },
+    ).lookupCardBalance({ id: userId }, organizationId, branchId, { cardUidHash }, request()),
+    (error: unknown) =>
+      typeof error === 'object' &&
+      error !== null &&
+      'getStatus' in error &&
+      typeof (error as { getStatus?: unknown }).getStatus === 'function' &&
+      (error as { getStatus: () => number }).getStatus() === 429,
+  );
+  assert.equal(walletRead, false);
+  assert.equal(auditArguments[1], 'operations.card.balance_read');
+  assert.equal(auditArguments[5], 'rate_limited');
+  assert.equal(JSON.stringify(auditArguments).includes(cardUidHash), false);
 });

@@ -1,4 +1,4 @@
-import { apiRequest, apiRequestPage } from './client';
+import { ApiRequestError, apiRequest, apiRequestPage } from './client';
 
 export type OperationsCardStatus = 'in_stock' | 'assigned' | 'blocked' | 'retired';
 export type OperationsCardVerificationStatus = 'unknown' | 'verified' | 'rejected';
@@ -21,7 +21,11 @@ export type OperationsCardCapabilities = {
   canTransfer: boolean;
   canUnassign: boolean;
   canLookupCustomer: boolean;
+  canReadBalance: boolean;
 };
+export type OperationsCardBalanceLookupResult =
+  | { status: 'available'; balanceRial: number }
+  | { status: 'pending' | 'unavailable' };
 export type OperationsCardPage = {
   data: OperationsCard[];
   nextCursor: string | null;
@@ -86,6 +90,43 @@ export async function listOperationsCards(
     nextCursor: page.nextCursor,
     capabilities: page.data.capabilities,
   };
+}
+
+export function lookupOperationsCardBalance(
+  organizationId: string,
+  branchId: string,
+  cardUidHash: string,
+  signal: AbortSignal,
+): Promise<OperationsCardBalanceLookupResult> {
+  if (!/^[a-fA-F0-9]{64}$/.test(cardUidHash)) {
+    throw new ApiRequestError('درخواست بررسی موجودی معتبر نیست.', 400);
+  }
+  return apiRequest<unknown>(`${cardsPath(organizationId, branchId)}/balance-lookup`, {
+    method: 'POST',
+    body: { cardUidHash },
+    signal,
+  }).then(parseCardBalanceLookupResult);
+}
+
+function parseCardBalanceLookupResult(value: unknown): OperationsCardBalanceLookupResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ApiRequestError('پاسخ بررسی موجودی معتبر نیست.', 0);
+  }
+  const result = value as Record<string, unknown>;
+  const keys = Object.keys(result).sort().join(',');
+  if (
+    result.status === 'available' &&
+    keys === 'balanceRial,status' &&
+    typeof result.balanceRial === 'number' &&
+    Number.isSafeInteger(result.balanceRial) &&
+    result.balanceRial >= 0
+  ) {
+    return { status: 'available', balanceRial: result.balanceRial };
+  }
+  if ((result.status === 'pending' || result.status === 'unavailable') && keys === 'status') {
+    return { status: result.status };
+  }
+  throw new ApiRequestError('پاسخ بررسی موجودی معتبر نیست.', 0);
 }
 
 export async function registerOperationsCard(
@@ -199,7 +240,11 @@ export function transitionOperationsCardLifecycleRequest(input: {
   status: Exclude<OperationsCardLifecycleRequest['status'], 'requested'>;
   reason: string;
   idempotencyKey: string;
-}): Promise<Omit<OperationsCardLifecycleRequest, 'organizationId' | 'branchId' | 'maskedIdentifier'> & { duplicate: boolean }> {
+}): Promise<
+  Omit<OperationsCardLifecycleRequest, 'organizationId' | 'branchId' | 'maskedIdentifier'> & {
+    duplicate: boolean;
+  }
+> {
   return apiRequest(
     `/api/v1/operations/organizations/${encodeURIComponent(input.organizationId)}/branches/${encodeURIComponent(input.branchId)}/card-lifecycle-requests/${encodeURIComponent(input.requestId)}`,
     {

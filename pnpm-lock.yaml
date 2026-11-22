@@ -120,6 +120,9 @@ importers:
       '@funtino/forms-schema':
         specifier: workspace:*
         version: link:../../packages/forms-schema
+      '@funtino/nfc-reader':
+        specifier: workspace:*
+        version: link:../../packages/nfc-reader
       next:
         specifier: 15.5.2
         version: 15.5.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -151,6 +154,9 @@ importers:
       '@funtino/forms-schema':
         specifier: workspace:*
         version: link:../../packages/forms-schema
+      '@funtino/nfc-reader':
+        specifier: workspace:*
+        version: link:../../packages/nfc-reader
       next:
         specifier: 15.5.2
         version: 15.5.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -294,6 +300,18 @@ importers:
         specifier: 3.25.76
         version: 3.25.76
     devDependencies:
+      tsx:
+        specifier: 4.19.3
+        version: 4.19.3
+      typescript:
+        specifier: 5.8.2
+        version: 5.8.2
+
+  packages/nfc-reader:
+    devDependencies:
+      '@types/node':
+        specifier: 22.13.10
+        version: 22.13.10
       tsx:
         specifier: 4.19.3
         version: 4.19.3

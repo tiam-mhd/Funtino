@@ -51,6 +51,10 @@ export type CustomerCard = {
   pendingTransactionCount: number;
 };
 
+export type CustomerCardBalanceLookupResult =
+  | { status: 'available'; balanceRial: number }
+  | { status: 'pending' | 'unavailable' };
+
 export type CustomerCardTransaction = {
   id: string;
   cardId: string;
@@ -247,16 +251,37 @@ export function getCustomerCards(): Promise<CustomerCard[]> {
   return apiFetch<unknown>('/api/v1/customer/cards').then(parseCustomerCards);
 }
 
+export async function lookupCustomerCardBalance(
+  cardUidHash: string,
+  signal: AbortSignal,
+): Promise<CustomerCardBalanceLookupResult> {
+  if (!/^[a-fA-F0-9]{64}$/.test(cardUidHash)) throw invalidCustomerResponse();
+  const result = await apiFetch<unknown>('/api/v1/customer/cards/balance-lookup', {
+    method: 'POST',
+    cache: 'no-store',
+    signal,
+    body: JSON.stringify({ cardUidHash }),
+  });
+  return parseCustomerCardBalanceLookupResult(result);
+}
+
 export async function getCustomerCardTransactions(input: {
-  householdId: string; cardId: string; cursor?: string; pageSize?: number;
+  householdId: string;
+  cardId: string;
+  cursor?: string;
+  pageSize?: number;
 }): Promise<{ items: CustomerCardTransaction[]; nextCursor: string | null }> {
   const query = new URLSearchParams({ pageSize: String(input.pageSize ?? 25) });
   if (input.cursor) query.set('cursor', input.cursor);
   const value = await apiFetch<unknown>(
     `/api/v1/customer/households/${encodeURIComponent(input.householdId)}/cards/${encodeURIComponent(input.cardId)}/transactions?${query}`,
   );
-  if (!isRecord(value) || !Array.isArray(value.items) ||
-    !(value.nextCursor === null || typeof value.nextCursor === 'string')) throw invalidCustomerResponse();
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.items) ||
+    !(value.nextCursor === null || typeof value.nextCursor === 'string')
+  )
+    throw invalidCustomerResponse();
   const items = value.items.map(parseCustomerCardTransaction);
   if (items.some((item) => item.cardId !== input.cardId || item.householdId !== input.householdId))
     throw invalidCustomerResponse();
@@ -294,7 +319,11 @@ export async function createCustomerCardLifecycleRequest(input: {
   );
   if (!isRecord(value) || typeof value.duplicate !== 'boolean') throw invalidCustomerResponse();
   const request = parseCustomerCardLifecycleRequest(value);
-  if (request.cardId !== input.cardId || request.householdId !== input.householdId || request.action !== input.action)
+  if (
+    request.cardId !== input.cardId ||
+    request.householdId !== input.householdId ||
+    request.action !== input.action
+  )
     throw invalidCustomerResponse();
   return { ...request, duplicate: value.duplicate };
 }
@@ -487,9 +516,17 @@ function parseCustomerCards(value: unknown): CustomerCard[] {
       !isNullableDateTime(item.lastSyncedAt) ||
       !isNullableUuid(item.walletId) ||
       typeof item.isStale !== 'boolean' ||
-      (item.freshness !== 'fresh' && item.freshness !== 'pending_sync' && item.freshness !== 'stale' && item.freshness !== 'unknown') ||
-      !(item.balanceRial === null || (typeof item.balanceRial === 'number' && Number.isSafeInteger(item.balanceRial))) ||
-      typeof item.pendingTransactionCount !== 'number' || !Number.isSafeInteger(item.pendingTransactionCount) || item.pendingTransactionCount < 0
+      (item.freshness !== 'fresh' &&
+        item.freshness !== 'pending_sync' &&
+        item.freshness !== 'stale' &&
+        item.freshness !== 'unknown') ||
+      !(
+        item.balanceRial === null ||
+        (typeof item.balanceRial === 'number' && Number.isSafeInteger(item.balanceRial))
+      ) ||
+      typeof item.pendingTransactionCount !== 'number' ||
+      !Number.isSafeInteger(item.pendingTransactionCount) ||
+      item.pendingTransactionCount < 0
     ) {
       throw invalidCustomerResponse();
     }
@@ -517,22 +554,66 @@ function parseCustomerCards(value: unknown): CustomerCard[] {
 }
 
 function parseCustomerCardTransaction(item: unknown): CustomerCardTransaction {
-  if (!isRecord(item) || !isUuid(item.id) || !isUuid(item.cardId) || !isNullableUuid(item.replacementCardId) || !isUuid(item.householdId) ||
-    !isNullableUuid(item.memberId) || !isNullableUuid(item.deviceId) || !isNullableUuid(item.reversalOfEntryId) || !(item.deviceName === null || isNonEmptyString(item.deviceName)) ||
-    !['top_up', 'spend', 'refund', 'adjustment', 'issuance', 'card_replacement'].includes(String(item.transactionKind)) ||
-    ![item.amountRial, item.grossAmountRial, item.discountAmountRial, item.netAmountRial].every((amount) =>
-      amount === null || (typeof amount === 'number' && Number.isSafeInteger(amount))) ||
-    item.currencyCode !== 'IRR' || !isNullableDateTime(item.occurredAt) || item.occurredAt === null || item.status !== 'confirmed') {
+  if (
+    !isRecord(item) ||
+    !isUuid(item.id) ||
+    !isUuid(item.cardId) ||
+    !isNullableUuid(item.replacementCardId) ||
+    !isUuid(item.householdId) ||
+    !isNullableUuid(item.memberId) ||
+    !isNullableUuid(item.deviceId) ||
+    !isNullableUuid(item.reversalOfEntryId) ||
+    !(item.deviceName === null || isNonEmptyString(item.deviceName)) ||
+    !['top_up', 'spend', 'refund', 'adjustment', 'issuance', 'card_replacement'].includes(
+      String(item.transactionKind),
+    ) ||
+    ![item.amountRial, item.grossAmountRial, item.discountAmountRial, item.netAmountRial].every(
+      (amount) => amount === null || (typeof amount === 'number' && Number.isSafeInteger(amount)),
+    ) ||
+    item.currencyCode !== 'IRR' ||
+    !isNullableDateTime(item.occurredAt) ||
+    item.occurredAt === null ||
+    item.status !== 'confirmed'
+  ) {
     throw invalidCustomerResponse();
   }
   return item as unknown as CustomerCardTransaction;
 }
 
+function parseCustomerCardBalanceLookupResult(value: unknown): CustomerCardBalanceLookupResult {
+  if (!isRecord(value)) throw invalidCustomerResponse();
+  const keys = Object.keys(value).sort().join(',');
+  if (
+    value.status === 'available' &&
+    keys === 'balanceRial,status' &&
+    typeof value.balanceRial === 'number' &&
+    Number.isSafeInteger(value.balanceRial) &&
+    value.balanceRial >= 0
+  ) {
+    return { status: 'available', balanceRial: value.balanceRial };
+  }
+  if ((value.status === 'pending' || value.status === 'unavailable') && keys === 'status') {
+    return { status: value.status };
+  }
+  throw invalidCustomerResponse();
+}
+
 function parseCustomerCardLifecycleRequest(item: unknown): CustomerCardLifecycleRequest {
-  if (!isRecord(item) || !isUuid(item.id) || !isUuid(item.cardId) || !isUuid(item.householdId) ||
-    !isNullableUuid(item.memberId) || (item.action !== 'lost' && item.action !== 'replacement') ||
-    !['requested', 'in_review', 'approved', 'rejected', 'completed'].includes(String(item.status)) ||
-    typeof item.reason !== 'string' || item.reason.length > 500 || !isNullableDateTime(item.createdAt) || item.createdAt === null)
+  if (
+    !isRecord(item) ||
+    !isUuid(item.id) ||
+    !isUuid(item.cardId) ||
+    !isUuid(item.householdId) ||
+    !isNullableUuid(item.memberId) ||
+    (item.action !== 'lost' && item.action !== 'replacement') ||
+    !['requested', 'in_review', 'approved', 'rejected', 'completed'].includes(
+      String(item.status),
+    ) ||
+    typeof item.reason !== 'string' ||
+    item.reason.length > 500 ||
+    !isNullableDateTime(item.createdAt) ||
+    item.createdAt === null
+  )
     throw invalidCustomerResponse();
   return item as unknown as CustomerCardLifecycleRequest;
 }

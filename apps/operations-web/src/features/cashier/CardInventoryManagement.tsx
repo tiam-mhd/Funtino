@@ -19,6 +19,7 @@ import {
 } from '../../lib/auth/operations-access';
 import { HouseholdCardAssignments } from './HouseholdCardAssignments';
 import { CardLifecycleRequests } from './CardLifecycleRequests';
+import { CardBalanceScan } from './CardBalanceScan';
 import styles from './CardInventoryManagement.module.css';
 
 type Props = {
@@ -59,6 +60,7 @@ const noCardCapabilities: OperationsCardCapabilities = {
   canTransfer: false,
   canUnassign: false,
   canLookupCustomer: false,
+  canReadBalance: false,
 };
 
 export function CardInventoryManagement({
@@ -423,6 +425,15 @@ export function CardInventoryManagement({
             {scopeOption.branch?.city ? ` · ${scopeOption.branch.city}` : ''}
           </p>
         </Surface>
+      )}
+
+      {showInventory && selectedBranchId && capabilities.canReadBalance && (
+        <CardBalanceScan
+          key={`${currentScopeKey}:${selectedBranchId}`}
+          organizationId={scope.organizationId}
+          branchId={selectedBranchId}
+          onSessionExpired={onSessionExpired}
+        />
       )}
 
       {notice && (

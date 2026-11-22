@@ -4,6 +4,107 @@
   margin-top: 20px;
 }
 
+.balanceScan {
+  display: grid;
+  gap: 14px;
+  padding: clamp(16px, 2.8vw, 22px);
+  border: 1px solid color-mix(in srgb, var(--ft-teal-dark) 18%, transparent);
+  box-shadow: none;
+}
+
+.balanceScan :global(.nfc-balance-scan__header) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.balanceScan :global(.nfc-balance-scan__header h3) {
+  margin: 0;
+  color: var(--ft-ink);
+  font-size: clamp(16px, 2.7vw, 20px);
+  line-height: 1.6;
+}
+
+.balanceScan :global(.nfc-balance-scan__header p) {
+  margin: 3px 0 0;
+  color: var(--ft-ink-soft);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.balanceScan :global(.nfc-balance-scan__mark) {
+  position: relative;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--ft-teal-dark);
+  border-radius: 50%;
+}
+
+.balanceScan :global(.nfc-balance-scan__mark)::before,
+.balanceScan :global(.nfc-balance-scan__mark)::after {
+  position: absolute;
+  inset: 7px;
+  border: 1px solid var(--ft-teal-dark);
+  border-radius: 50%;
+  content: '';
+}
+
+.balanceScan :global(.nfc-balance-scan__mark)::after {
+  inset: 14px;
+}
+
+.balanceScan[data-state='scanning'] :global(.nfc-balance-scan__mark) {
+  animation: nfc-ring 1.2s ease-out 3;
+}
+
+.balanceScan :global(.nfc-balance-scan__message) {
+  margin: 0;
+  color: var(--ft-ink-soft);
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+.balanceScan :global(.nfc-balance-scan__amount) {
+  margin: 0;
+  color: var(--ft-teal-dark);
+  font-size: clamp(26px, 6vw, 38px);
+  font-weight: 900;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  animation: amount-in 240ms ease-out both;
+}
+
+.balanceScan :global(.nfc-balance-scan__actions) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@keyframes nfc-ring {
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes amount-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .balanceScan[data-state='scanning'] :global(.nfc-balance-scan__mark),
+  .balanceScan :global(.nfc-balance-scan__amount) {
+    animation: none;
+  }
+}
+
 .header,
 .cardHeader,
 .headerActions,

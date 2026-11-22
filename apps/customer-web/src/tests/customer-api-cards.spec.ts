@@ -5,6 +5,7 @@ import {
   getCustomerCards,
   getCustomerBranches,
   getCustomerHouseholds,
+  lookupCustomerCardBalance,
 } from '../lib/customer-api.js';
 
 const cardId = '11111111-1111-4111-8111-111111111111';
@@ -108,4 +109,57 @@ test('household and branch APIs expose only validated minimum display fields', a
   } finally {
     restoreBranches();
   }
+});
+
+test('customer balance lookup sends the transient hash only in a no-store POST body', async (context) => {
+  const cardUidHash = '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517';
+  const controller = new AbortController();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    assert.equal(url.pathname.endsWith('/api/v1/customer/cards/balance-lookup'), true);
+    assert.equal(url.href.includes(cardUidHash), false);
+    assert.equal(init?.method, 'POST');
+    assert.equal(init?.cache, 'no-store');
+    assert.equal(init?.credentials, 'include');
+    assert.equal(init?.signal, controller.signal);
+    assert.deepEqual(JSON.parse(String(init?.body)), { cardUidHash });
+    return new Response(
+      JSON.stringify({
+        status: 'success',
+        data: { status: 'available', balanceRial: 1_250_000 },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  }) as typeof fetch;
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  assert.deepEqual(await lookupCustomerCardBalance(cardUidHash, controller.signal), {
+    status: 'available',
+    balanceRial: 1_250_000,
+  });
+});
+
+test('customer balance lookup rejects IDs and balances on non-display responses', async (context) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        status: 'success',
+        data: { status: 'pending', cardId, balanceRial: 125_000 },
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    )) as typeof fetch;
+  context.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  await assert.rejects(
+    lookupCustomerCardBalance(
+      '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517',
+      new AbortController().signal,
+    ),
+  );
 });

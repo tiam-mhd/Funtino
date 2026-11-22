@@ -111,6 +111,49 @@ test('branch Edge review summary is read through the private Wallet owner contra
   });
 });
 
+test('card balance lookup is service-token protected, body scoped, and strictly minimal', async () => {
+  await withWalletEnvironment(async () => {
+    const cardUidHash = '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517';
+    const client = new TestClient(async (url, init) => {
+      assert.equal(url.pathname, '/internal/v1/cards/balance-lookup');
+      assert.equal(init.method, 'POST');
+      assert.equal(init.redirect, 'error');
+      assert.deepEqual(JSON.parse(String(init.body)), {
+        cardUidHash,
+        audience: { type: 'operations', organizationId, branchId },
+      });
+      const headers = new Headers(init.headers);
+      assert.equal(headers.get('x-funtino-service-id'), 'api-gateway');
+      assert.equal(headers.get('x-funtino-service-token'), token);
+      assert.equal(headers.get('cache-control'), 'no-store');
+      return Response.json({ status: 'available', balanceRial: 1_250_000 });
+    });
+
+    assert.deepEqual(
+      await client.lookupCardBalanceByHash({
+        cardUidHash,
+        audience: { type: 'operations', organizationId, branchId },
+      }),
+      { status: 'available', balanceRial: 1_250_000 },
+    );
+  });
+});
+
+test('Wallet balance lookup rejects internal identifiers in its response contract', async () => {
+  await withWalletEnvironment(async () => {
+    const client = new TestClient(async () =>
+      Response.json({ status: 'pending', balanceRial: 1_250_000, cardId }),
+    );
+    await assert.rejects(
+      client.lookupCardBalanceByHash({
+        cardUidHash: '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517',
+        audience: { type: 'customer', householdIds: [organizationId] },
+      }),
+      (error: unknown) => error instanceof DomainError && error.code === 'DEPENDENCY_UNAVAILABLE',
+    );
+  });
+});
+
 test('register and status commands forward actor/correlation/idempotency and version without exposing raw ids', async () => {
   await withWalletEnvironment(async () => {
     let calls = 0;

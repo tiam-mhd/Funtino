@@ -17,6 +17,10 @@ import { OrganizationBranchClient } from '../../infrastructure/organization-bran
 import { DeviceIntegrationClient } from '../../infrastructure/device-integration/device-integration.client.js';
 import { isCustomerProfileOwnerEnabled } from './customer-profile-ownership.js';
 
+const customerBalanceLookupBucketId = '00000000-0000-4000-8000-000000000001';
+const customerBalanceLookupWindowMs = 15 * 60 * 1000;
+const customerBalanceLookupMaxRequests = 10;
+
 @Injectable()
 export class CustomerService {
   constructor(
@@ -221,6 +225,30 @@ export class CustomerService {
         }),
       ),
     );
+  }
+
+  async lookupCardBalance(userId: string, cardUidHash: string) {
+    const now = Date.now();
+    const lookupCount = await this.store.consumeOperationsCustomerLookupQuota({
+      actorUserId: userId,
+      branchId: customerBalanceLookupBucketId,
+      windowStartedAt:
+        Math.floor(now / customerBalanceLookupWindowMs) * customerBalanceLookupWindowMs,
+      maxRequests: customerBalanceLookupMaxRequests,
+    });
+    if (lookupCount > customerBalanceLookupMaxRequests) {
+      throw new DomainError(
+        'RATE_LIMITED',
+        'درخواست‌های بررسی موجودی زیاد شده است؛ کمی بعد دوباره تلاش کن.',
+      );
+    }
+
+    const households = await this.householdOwner.listHouseholdsForUser(userId);
+    if (households.length === 0) return { status: 'unavailable' as const };
+    return this.wallet.lookupCardBalanceByHash({
+      cardUidHash,
+      audience: { type: 'customer', householdIds: households.map((household) => household.id) },
+    });
   }
 
   async listCardTransactions(

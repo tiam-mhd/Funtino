@@ -35,7 +35,7 @@
 | Wallet                | موجودی فیزیکی کارت، تخصیص فعال خانواده/شعبه، history و ledger        | `wallet.card-assignment-changed.v1`, Wallet ledger events                 |
 | Payment & Orders      | سفارش، پرداخت، برگشت و تطبیق                                         | PaymentConfirmed، RefundCompleted                                         |
 | Device Integration    | کارت فیزیکی، دستگاه و sync                                           | DeviceTransactionImported، SyncFailed                                     |
-| Pricing & Promotions  | نسخه‌ی قیمت، rule، promotion، سقف مصرف و محاسبه‌ی قیمت               | `pricing.rule-changed.v1`, `pricing.rules-published.v1`                    |
+| Pricing & Promotions  | نسخه‌ی قیمت، rule، promotion، سقف مصرف و محاسبه‌ی قیمت               | `pricing.rule-changed.v1`, `pricing.rules-published.v1`                   |
 | Loyalty & CRM         | مأموریت، کمپین، کوپن و امتیاز                                        | MissionCompleted، RewardGranted                                           |
 | Notifications         | ارسال و وضعیت پیام                                                   | NotificationSent، DeliveryFailed                                          |
 | Realtime Gateway      | کانال‌های زنده و roomهای مجاز                                        | RealtimeProjectionUpdated                                                 |
@@ -106,6 +106,8 @@ Commandها در سرویس مالک و تراکنش اصلی اجرا می‌ش
 ### ۵.۵ Anti-Corruption Layer و Adapter
 
 سامانه‌ی کارت، پرداخت، پیامک و هر سرویس بیرونی مستقیماً وارد Domain نشود. برای هر provider یک adapter با mapping، timeout، retry، خطا و شناسه‌ی منبع ساخته شود. تعویض provider نباید مدل داخلی را بشکند.
+
+آداپتور Web NFC فقط `NDEFReader.scan()` را استفاده می‌کند و شناسه‌ی قابل‌دسترسی مرورگر را برای lookup مجاز سمت Gateway نرمال می‌کند. این مسیر فقط snapshot تازه و تأییدشده‌ی Wallet را نمایش می‌دهد و خواندن بلوک فیزیکی کارت نیست؛ کلید، فرمان خام و عملیات نوشتن در وب ممنوع است.
 
 ### ۵.۶ State Machine
 
@@ -238,7 +240,7 @@ permissionهای مجاز از اجتماع grantهای membershipهای فعا�
 | سازمان و شعبه    | Organization & Branch                                                    |
 | خانواده و رضایت  | Customer & Household                                                     |
 | موجودی و ledger  | Wallet؛ مبلغ مالی مشتری فقط با قرارداد منبع/واحد معتبر                   |
-| قیمت و promotion | Pricing & Promotions؛ نسخه‌ی منتشرشده‌ی rule و snapshot آفلاین          |
+| قیمت و promotion | Pricing & Promotions؛ نسخه‌ی منتشرشده‌ی rule و snapshot آفلاین           |
 | پرداخت           | Payment & Orders و provider تطبیق‌شده                                    |
 | مصرف فیزیکی کارت | سامانه‌ی RFID؛ گزارش خانوادگی فقط پس از resolve معتبر رخداد به کارت/شعبه |
 | پیشرفت و پاداش   | Loyalty & CRM                                                            |

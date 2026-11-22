@@ -7,6 +7,7 @@ import {
   listOperationsCardAssignments,
   listOperationsCards,
   lookupOperationsHouseholds,
+  lookupOperationsCardBalance,
   registerOperationsCard,
   transferOperationsCard,
   type OperationsCard,
@@ -92,6 +93,7 @@ test('card inventory query uses selected branch, server status filter, and curso
             canTransfer: true,
             canUnassign: true,
             canLookupCustomer: true,
+            canReadBalance: true,
           },
         },
         { nextCursor: null },
@@ -108,8 +110,52 @@ test('card inventory query uses selected branch, server status filter, and curso
           canTransfer: true,
           canUnassign: true,
           canLookupCustomer: true,
+          canReadBalance: true,
         },
       });
+    },
+  );
+});
+
+test('balance lookup sends the transient hash only in a no-store POST body and validates the minimal result', async () => {
+  const cardUidHash = '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517';
+  const controller = new AbortController();
+  await withFetchStub(
+    (input, init) => {
+      const url = new URL(String(input));
+      assert.equal(
+        url.pathname,
+        `/api/v1/operations/organizations/${organizationId}/branches/${branchId}/cards/balance-lookup`,
+      );
+      assert.equal(url.href.includes(cardUidHash), false);
+      assert.equal(init?.method, 'POST');
+      assert.equal(init?.credentials, 'include');
+      assert.equal(init?.cache, 'no-store');
+      assert.equal(init?.signal, controller.signal);
+      assert.deepEqual(JSON.parse(String(init?.body)), { cardUidHash });
+      return successResponse({ status: 'available', balanceRial: 1_250_000 });
+    },
+    async () => {
+      assert.deepEqual(
+        await lookupOperationsCardBalance(organizationId, branchId, cardUidHash, controller.signal),
+        { status: 'available', balanceRial: 1_250_000 },
+      );
+    },
+  );
+});
+
+test('balance lookup rejects extra identifier fields and never returns a stale amount', async () => {
+  await withFetchStub(
+    () => successResponse({ status: 'pending', cardId, balanceRial: 999_999 }),
+    async () => {
+      await assert.rejects(
+        lookupOperationsCardBalance(
+          organizationId,
+          branchId,
+          '34b8d380d481b933d5238d945a16ee6c0be176960926735bce473b829e4bd517',
+          new AbortController().signal,
+        ),
+      );
     },
   );
 });

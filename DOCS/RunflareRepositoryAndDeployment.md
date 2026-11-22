@@ -4,12 +4,12 @@
 
 ADR-0016 نگاشت ۱۲ application deployment قبلی را با دو runtime bundle جایگزین کرده است. این تصمیم تعداد imageهای برنامه را تغییر می‌دهد؛ سه frontend، دو gateway و نه service همچنان processها و مرزهای منطقی جدا دارند.
 
-| لایه             | repository / item                 | محتوا                                                                               |
-| ---------------- | --------------------------------- | ----------------------------------------------------------------------------------- |
-| Source           | ریشه‌ی Funtino در Git محلی        | monorepo کامل؛ منبع تغییر و ورودی GitNexus                                          |
-| Frontend runtime | funtino-frontend-runtime          | customer-web، operations-web، system-web و design-system؛ سه process                |
+| لایه             | repository / item                 | محتوا                                                                                 |
+| ---------------- | --------------------------------- | ------------------------------------------------------------------------------------- |
+| Source           | ریشه‌ی Funtino در Git محلی        | monorepo کامل؛ منبع تغییر و ورودی GitNexus                                            |
+| Frontend runtime | funtino-frontend-runtime          | customer-web، operations-web، system-web، design-system و nfc-reader؛ سه process      |
 | Backend runtime  | funtino-backend-runtime           | دو gateway، نه service، backend-core، event-contracts و startup runner؛ یازده process |
-| Data             | itemهای جدا در Runflare، بدون Git | PostgreSQL، RabbitMQ و Redis                                                        |
+| Data             | itemهای جدا در Runflare، بدون Git | PostgreSQL، RabbitMQ و Redis                                                          |
 
 دو deployment repository کنار source و به‌صورت Git repository مستقل قرار می‌گیرند؛ داخل source submodule یا nested repository نیستند. Snapshot از source ساخته می‌شود و محل توسعه‌ی feature نیست. وجود Git محلی یا snapshot به‌تنهایی remote، GitHub، Auto Pull یا اتصال Runflare را ایجاد نمی‌کند.
 
